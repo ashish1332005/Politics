@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
+const { uploadFilePath, uploadPublicPath } = require('./uploadPath');
 
 const run = (command, args) => new Promise((resolve, reject) => {
   const child = spawn(command, args, { windowsHide: true });
@@ -161,7 +162,8 @@ const cropVoterPage = async (page, pageIndex, outputDir) => {
 
 exports.ocrPdf = async (pdfPath, importFileName, pageRange = {}) => {
   const safeBase = path.basename(importFileName, path.extname(importFileName)).replace(/[^a-z0-9_-]/gi, '-');
-  const workDir = path.join(__dirname, '../../uploads/ocr', `${Date.now()}-${safeBase}`);
+  const workId = `${Date.now()}-${safeBase}`;
+  const workDir = uploadFilePath('ocr', workId);
   fs.mkdirSync(workDir, { recursive: true });
   const pages = await renderPages(pdfPath, workDir, pageRange);
   if (!pages.length) throw new Error('OCR page rendering produced no images.');
@@ -176,9 +178,9 @@ exports.ocrPdf = async (pdfPath, importFileName, pageRange = {}) => {
           words: [],
           voterRecords: records.map((record) => ({
             ...record,
-            photo: `/uploads/ocr/${path.basename(workDir)}/${path.basename(record.photo)}`,
+            photo: uploadPublicPath('ocr', workId, path.basename(record.photo)),
           })),
-          images: records.map((record) => `/uploads/ocr/${path.basename(workDir)}/${path.basename(record.photo)}`),
+          images: records.map((record) => uploadPublicPath('ocr', workId, path.basename(record.photo))),
           header: pythonResult.header || {},
           status: `Python OCR processed ${pages.length} page(s), detected page header and accepted ${records.length} confidence-checked voter record(s).`,
         };
@@ -264,9 +266,9 @@ exports.ocrPdf = async (pdfPath, importFileName, pageRange = {}) => {
     words: pageResults.flatMap((page) => page.words),
     voterRecords: voterCells.map((cell) => ({
       text: cell.text,
-      photo: `/uploads/ocr/${path.basename(workDir)}/${path.basename(cell.photo)}`,
+      photo: uploadPublicPath('ocr', workId, path.basename(cell.photo)),
     })),
-    images: photoFiles.map((file) => `/uploads/ocr/${path.basename(workDir)}/${path.basename(file)}`),
+    images: photoFiles.map((file) => uploadPublicPath('ocr', workId, path.basename(file))),
     status: `OCR processed ${pages.length} page(s). ${photoStatus}`,
   };
 };

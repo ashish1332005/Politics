@@ -7,6 +7,7 @@ const { requestLogger } = require('./src/middleware/activityLogger');
 const errorHandler = require('./src/middleware/errorHandler');
 const { startMessageWorker } = require('./src/services/messageQueue');
 const { restoreWebSessions } = require('./src/services/whatsappWeb');
+const { uploadRoot } = require('./src/utils/uploadPath');
 
 const app = express();
 const configuredOrigins = (process.env.CORS_ORIGIN || '*')
@@ -32,7 +33,7 @@ app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
-app.use('/uploads', express.static(path.join(__dirname, process.env.UPLOAD_PATH || 'uploads')));
+app.use('/uploads', express.static(uploadRoot()));
 app.use('/party-logos', express.static(path.join(__dirname, 'src/public/party-logos')));
 
 app.get('/', (req, res) => res.json({ name: 'Political Booth Management CRM API', status: 'ok' }));
@@ -72,6 +73,7 @@ connectDB()
     console.error('API not started because MongoDB is unavailable.');
     process.exit(1);
   });
+
 
 
 

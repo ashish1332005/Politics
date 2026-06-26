@@ -1,7 +1,9 @@
-﻿const PDFDocument = require('pdfkit');
+﻿const fs = require('fs');
+const PDFDocument = require('pdfkit');
 const XLSX = require('xlsx');
 const path = require('path');
 const Member = require('../models/Member');
+const { resolveUploadPublicPath } = require('../utils/uploadPath');
 const Activity = require('../models/Activity');
 const Family = require('../models/Family');
 const { applyMemberScope, assertBoothAccess } = require('../utils/boothAccess');
@@ -39,7 +41,7 @@ const drawMemberProfile = (doc, member, index = 0) => {
     doc.font('Hindi').fontSize(9).fillColor(member.party?.color || '#111827').text(member.party?.code || member.party?.name || '-', 485, 45, { align: 'right' });
   }
   if (member.photo) {
-    try { doc.image(`.${member.photo}`, 45, 95, { width: 90, height: 100, fit: [90, 100] }); } catch (e) { doc.rect(45, 95, 90, 100).stroke(); }
+    try { const image = resolveUploadPublicPath(member.photo); if (fs.existsSync(image)) doc.image(image, 45, 95, { width: 90, height: 100, fit: [90, 100] }); else doc.rect(45, 95, 90, 100).stroke(); } catch (e) { doc.rect(45, 95, 90, 100).stroke(); }
   } else {
     doc.rect(45, 95, 90, 100).stroke().font('Hindi').fontSize(9).fillColor('#6b7280').text('à¤«à¥‹à¤Ÿà¥‹', 77, 140);
   }

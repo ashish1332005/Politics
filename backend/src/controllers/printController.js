@@ -3,6 +3,7 @@ const path = require('path');
 const PDFDocument = require('pdfkit');
 const Member = require('../models/Member');
 const { applyMemberScope } = require('../utils/boothAccess');
+const { resolveUploadPublicPath } = require('../utils/uploadPath');
 
 const regularFont = path.join(__dirname, '../assets/fonts/Nirmala.ttf');
 const boldFont = path.join(__dirname, '../assets/fonts/Nirmala-Bold.ttf');
@@ -86,6 +87,7 @@ function photoPath(member) {
   if (!member.photo || /^https?:/i.test(member.photo)) return null;
   const relative = String(member.photo).replace(/^[/\\]+/, '');
   const candidates = [
+    resolveUploadPublicPath(member.photo),
     path.resolve(process.cwd(), relative),
     path.resolve(__dirname, '../../', relative),
   ];

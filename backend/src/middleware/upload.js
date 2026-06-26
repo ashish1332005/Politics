@@ -1,12 +1,12 @@
 ﻿const fs = require('fs');
-const path = require('path');
 const multer = require('multer');
+const { uploadRoot } = require('../utils/uploadPath');
 
-const uploadRoot = path.join(__dirname, '../../', process.env.UPLOAD_PATH || 'uploads');
-fs.mkdirSync(uploadRoot, { recursive: true });
+const root = uploadRoot();
+fs.mkdirSync(root, { recursive: true });
 
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, uploadRoot),
+  destination: (req, file, cb) => cb(null, root),
   filename: (req, file, cb) => {
     const originalName = String(file?.originalname || file?.filename || 'upload');
     const safeName = originalName.replace(/[^a-z0-9.]/gi, '-').toLowerCase();
@@ -31,4 +31,3 @@ module.exports = multer({
     cb(null, true);
   },
 });
-

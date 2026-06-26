@@ -751,7 +751,8 @@ const parsePdfMembers = async (filePath, importFileName) => {
 const extractPdfImages = async (filePath, importFileName) => {
   const pdfimages = process.env.PDFIMAGES_PATH || 'pdfimages';
   const safeBase = path.basename(importFileName, path.extname(importFileName)).replace(/[^a-z0-9_-]/gi, '-');
-  const imageDir = path.join(__dirname, '../../uploads/pdf-images', `${Date.now()}-${safeBase}`);
+  const imageId = `${Date.now()}-${safeBase}`;
+  const imageDir = uploadFilePath('pdf-images', imageId);
   fs.mkdirSync(imageDir, { recursive: true });
   const prefix = path.join(imageDir, 'photo');
 
@@ -773,7 +774,7 @@ const extractPdfImages = async (filePath, importFileName) => {
   const files = fs.readdirSync(imageDir)
     .filter((file) => /\.(png|jpg|jpeg)$/i.test(file))
     .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
-    .map((file) => `/uploads/pdf-images/${path.basename(imageDir)}/${file}`);
+    .map((file) => uploadPublicPath('pdf-images', imageId, file));
 
   return {
     images: files,
@@ -1171,6 +1172,7 @@ exports.importPdfMembers = async (req, res, next) => {
     next(e);
   }
 };
+
 
 
 
