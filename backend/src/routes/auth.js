@@ -1,0 +1,23 @@
+const router = require('express').Router();
+const { body } = require('express-validator');
+const auth = require('../middleware/auth');
+const role = require('../middleware/role');
+const controller = require('../controllers/authController');
+
+router.post('/login', controller.login);
+router.post('/register', (req, res, next) => {
+  if (process.env.ALLOW_PUBLIC_REGISTER !== 'true') {
+    return res.status(403).json({ message: 'Public registration is disabled. Use admin user management.' });
+  }
+  next();
+}, [
+  body('name').notEmpty(),
+  body('email').isEmail(),
+  body('password').isLength({ min: 6 }),
+], controller.register);
+router.get('/me', auth, controller.me);
+router.get('/users', auth, role('admin'), controller.listUsers);
+router.post('/users', auth, role('admin'), controller.register);
+router.put('/users/:id', auth, role('admin'), controller.updateUser);
+
+module.exports = router;
