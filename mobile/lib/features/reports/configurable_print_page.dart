@@ -45,31 +45,31 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
   static const pageSize = 50;
 
   static const availableFields = <String, String>{
-    'name': 'à¤¨à¤¾à¤®',
+    'name': 'Name',
     'voterId': 'EPIC',
-    'mobile': 'à¤®à¥‹à¤¬à¤¾à¤‡à¤²',
-    'altMobile': 'à¤µà¥ˆà¤•à¤²à¥à¤ªà¤¿à¤• à¤®à¥‹à¤¬à¤¾à¤‡à¤²',
-    'guardianName': 'à¤ªà¤¿à¤¤à¤¾ / à¤ªà¤¤à¤¿',
-    'relationType': 'à¤¸à¤‚à¤¬à¤‚à¤§',
-    'age': 'à¤‰à¤®à¥à¤°',
-    'gender': 'à¤²à¤¿à¤‚à¤—',
-    'houseNumber': 'à¤˜à¤° à¤¸à¤‚à¤–à¥à¤¯à¤¾',
-    'address': 'à¤ªà¥‚à¤°à¤¾ à¤ªà¤¤à¤¾',
-    'village': 'à¤—à¤¾à¤à¤µ',
-    'gramPanchayat': 'à¤—à¥à¤°à¤¾à¤® à¤ªà¤‚à¤šà¤¾à¤¯à¤¤',
-    'tehsil': 'à¤¤à¤¹à¤¸à¥€à¤²',
-    'municipality': 'à¤¨à¤—à¤° à¤ªà¤¾à¤²à¤¿à¤•à¤¾',
-    'caste': 'à¤œà¤¾à¤¤à¤¿',
-    'subCaste': 'à¤‰à¤ªà¤œà¤¾à¤¤à¤¿',
-    'occupation': 'à¤µà¥à¤¯à¤µà¤¸à¤¾à¤¯',
-    'education': 'à¤¶à¤¿à¤•à¥à¤·à¤¾',
-    'organizationPost': 'à¤¸à¤‚à¤—à¤ à¤¨ à¤ªà¤¦',
-    'supportLevel': 'à¤¸à¤®à¤°à¥à¤¥à¤¨ à¤¸à¥à¤¤à¤°',
-    'assembly': 'à¤µà¤¿à¤§à¤¾à¤¨à¤¸à¤­à¤¾',
-    'partNumber': 'à¤­à¤¾à¤— à¤¸à¤‚à¤–à¥à¤¯à¤¾',
-    'section': 'à¤…à¤¨à¥à¤­à¤¾à¤—',
-    'booth': 'à¤¬à¥‚à¤¥',
-    'ward': 'à¤µà¤¾à¤°à¥à¤¡',
+    'mobile': 'Mobile',
+    'altMobile': 'Alt mobile',
+    'guardianName': 'Father / Husband',
+    'relationType': 'Relation',
+    'age': 'Age',
+    'gender': 'Gender',
+    'houseNumber': 'House No.',
+    'address': 'Address',
+    'village': 'Village',
+    'gramPanchayat': 'Gram Panchayat',
+    'tehsil': 'Tehsil',
+    'municipality': 'Municipality',
+    'caste': 'Caste',
+    'subCaste': 'Sub caste',
+    'occupation': 'Occupation',
+    'education': 'Education',
+    'organizationPost': 'Org Post',
+    'supportLevel': 'Support',
+    'assembly': 'Assembly',
+    'partNumber': 'Part / Booth',
+    'section': 'Section',
+    'booth': 'Booth',
+    'ward': 'Ward',
   };
 
   Map<String, String?> get filters {
@@ -249,7 +249,7 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
     await printApiPdf(
       context,
       path: '/api/print/members.pdf',
-      jobName: 'à¤šà¤¯à¤¨à¤¿à¤¤ à¤®à¤¤à¤¦à¤¾à¤¤à¤¾ à¤¸à¥‚à¤šà¥€',
+      jobName: 'Selected voter list',
       query: {
         ...filters,
         if (selectAllFiltered) 'selectAll': 'true',
@@ -261,7 +261,7 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
         'orientation': orientation,
         'columns': '$columns',
         'photo': '$photo',
-        'title': 'à¤šà¤¯à¤¨à¤¿à¤¤ à¤®à¤¤à¤¦à¤¾à¤¤à¤¾ à¤¸à¥‚à¤šà¥€ ($count)',
+        'title': 'Selected voter list ($count)',
       },
     );
   }
@@ -472,7 +472,7 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
                                     }),
                           ),
                           Expanded(
-                            child: Text('à¤®à¤¤à¤¦à¤¾à¤¤à¤¾ ($total)',
+                            child: Text('Voters ($total)',
                                 style: const TextStyle(
                                     color: navy, fontWeight: FontWeight.w900)),
                           ),
@@ -492,8 +492,8 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
                                     }),
                             icon: const Icon(Icons.library_add_check_rounded),
                             label: Text(allPageSelected
-                                ? 'à¤‡à¤¸ à¤ªà¥‡à¤œ à¤•à¤¾ à¤šà¤¯à¤¨ à¤¹à¤Ÿà¤¾à¤à¤'
-                                : 'à¤‡à¤¸ à¤ªà¥‡à¤œ à¤•à¥‡ à¤¸à¤­à¥€ à¤šà¥à¤¨à¥‡à¤‚'),
+                                ? 'Unselect this page'
+                                : 'Select this page'),
                           ),
                         ]),
                         if (loading)
@@ -508,8 +508,7 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
                         else if (items.isEmpty)
                           const Padding(
                               padding: EdgeInsets.all(28),
-                              child: Text(
-                                  'à¤‡à¤¨ filters à¤®à¥‡à¤‚ à¤•à¥‹à¤ˆ à¤®à¤¤à¤¦à¤¾à¤¤à¤¾ à¤¨à¤¹à¥€à¤‚ à¤®à¤¿à¤²à¤¾à¥¤'))
+                              child: Text('No voters found for these filters.'))
                         else
                           ...items.map((voter) => _VoterChoice(
                                 voter: voter,
@@ -535,7 +534,7 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
                                   Padding(
                                       padding: const EdgeInsets.symmetric(
                                           horizontal: 14),
-                                      child: Text('à¤ªà¥‡à¤œ $page / $pages',
+                                      child: Text('Page $page / $pages',
                                           style: const TextStyle(
                                               color: navy,
                                               fontWeight: FontWeight.w800))),
@@ -716,8 +715,8 @@ class _SelectionBadge extends StatelessWidget {
           const SizedBox(width: 7),
           Text(
               count > 0
-                  ? '$count à¤šà¤¯à¤¨à¤¿à¤¤${allFiltered ? ' (filtered)' : ''}'
-                  : 'à¤®à¤¤à¤¦à¤¾à¤¤à¤¾ à¤šà¥à¤¨à¥‡à¤‚',
+                  ? '$count selected${allFiltered ? ' (filtered)' : ''}'
+                  : 'Select voters',
               style: TextStyle(
                   color: count > 0 ? green : muted,
                   fontWeight: FontWeight.w800)),
@@ -1010,7 +1009,7 @@ class _FilterOptionDialogState extends State<_FilterOptionDialog> {
         contentPadding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
         title: Row(children: [
           Expanded(
-              child: Text('${widget.title} à¤šà¥à¤¨à¥‡à¤‚',
+              child: Text('${widget.title} select',
                   style: const TextStyle(
                       color: navy, fontWeight: FontWeight.w900))),
           IconButton(
@@ -1027,7 +1026,7 @@ class _FilterOptionDialogState extends State<_FilterOptionDialog> {
               onChanged: (_) => setState(() {}),
               decoration: InputDecoration(
                 prefixIcon: const Icon(Icons.search_rounded),
-                hintText: '${widget.title} à¤–à¥‹à¤œà¥‡à¤‚...',
+                hintText: '${widget.title} search...',
                 suffixIcon: search.text.isEmpty
                     ? null
                     : IconButton(
@@ -1063,8 +1062,7 @@ class _FilterOptionDialogState extends State<_FilterOptionDialog> {
                   ).map(_FilterOption.fromMap).toList();
                   if (options.isEmpty) {
                     return const Center(
-                        child: Text(
-                            'Database à¤®à¥‡à¤‚ matching option à¤¨à¤¹à¥€à¤‚ à¤®à¤¿à¤²à¤¾à¥¤',
+                        child: Text('No matching option found in database.',
                             style: TextStyle(color: muted)));
                   }
                   return ListView.separated(
@@ -1080,7 +1078,7 @@ class _FilterOptionDialogState extends State<_FilterOptionDialog> {
                         title: Text(option.label,
                             style: const TextStyle(
                                 color: navy, fontWeight: FontWeight.w800)),
-                        subtitle: Text('${option.count} à¤®à¤¤à¤¦à¤¾à¤¤à¤¾'),
+                        subtitle: Text('${option.count} voters'),
                         trailing: const Icon(Icons.chevron_right_rounded),
                         onTap: () => Navigator.pop(context, option),
                       );
@@ -1134,7 +1132,7 @@ class _DatabaseFilterPicker extends StatelessWidget {
                     Text(label,
                         style: const TextStyle(color: muted, fontSize: 10)),
                     const SizedBox(height: 2),
-                    Text(selected ? value! : 'Database à¤¸à¥‡ à¤šà¥à¤¨à¥‡à¤‚',
+                    Text(selected ? value! : 'Select from database',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -1144,7 +1142,7 @@ class _DatabaseFilterPicker extends StatelessWidget {
                   ])),
               if (selected)
                 IconButton(
-                    tooltip: 'à¤¹à¤Ÿà¤¾à¤à¤',
+                    tooltip: 'Remove',
                     visualDensity: VisualDensity.compact,
                     onPressed: onClear,
                     icon: const Icon(Icons.close_rounded, size: 18))
@@ -1260,7 +1258,7 @@ class _VoterChoice extends StatelessWidget {
           title: Text('${voter['name'] ?? '-'}',
               style: const TextStyle(color: navy, fontWeight: FontWeight.w800)),
           subtitle: Text(
-            '${voter['voterId'] ?? '-'}  Â·  à¤˜à¤° ${voter['houseNumber'] ?? '-'}  Â·  ${voter['village'] ?? voter['location'] ?? '-'}',
+            '${voter['voterId'] ?? '-'} - House ${voter['houseNumber'] ?? '-'} - ${voter['village'] ?? voter['location'] ?? '-'}',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -1295,7 +1293,7 @@ class _PrintPreviewMock extends StatelessWidget {
                 ]),
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('à¤®à¤¤à¤¦à¤¾à¤¤à¤¾ à¤¸à¥‚à¤šà¥€',
+              const Text('Voter list',
                   style: TextStyle(
                       color: navy, fontSize: 8, fontWeight: FontWeight.w900)),
               const Divider(height: 8),
@@ -1330,7 +1328,7 @@ class _PrintPreviewMock extends StatelessWidget {
                                       .map((field) => Padding(
                                           padding:
                                               const EdgeInsets.only(bottom: 2),
-                                          child: Text('$field: â€”',
+                                          child: Text('$field: -',
                                               maxLines: 1,
                                               style: const TextStyle(
                                                   fontSize: 4, color: navy))))
