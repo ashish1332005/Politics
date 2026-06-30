@@ -1,6 +1,7 @@
-﻿const QRCode = require('qrcode');
+const QRCode = require('qrcode');
 const Member = require('../models/Member');
 const Family = require('../models/Family');
+const Booth = require('../models/Booth');
 const { applyMemberScope, assertBoothAccess, assertWardAccess } = require('../utils/boothAccess');
 const { writeActivity } = require('../middleware/activityLogger');
 const { requireValidEpic } = require('../utils/epic');
@@ -19,6 +20,20 @@ const maskMemberMobile = (member, user) => {
   return value;
 };
 
+const searchRegex = (value) => new RegExp(String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const hindiEnglishCollator = new Intl.Collator(['en', 'hi'], {
+  numeric: true,
+  sensitivity: 'base',
+  ignorePunctuation: true,
+});
+
+function compareLabels(a, b) {
+  const left = String(a?.label ?? a?.value ?? '').trim();
+  const right = String(b?.label ?? b?.value ?? '').trim();
+  return hindiEnglishCollator.compare(left, right);
+}
+
 const duplicateWarnings = async (data, excludeId) => {
   const or = [];
   if (data.mobile) or.push({ mobile: data.mobile });
@@ -35,13 +50,31 @@ const duplicateWarnings = async (data, excludeId) => {
   });
 };
 
+const attachBoothWard = async (data, user) => {
+  if (user.role === 'booth') {
+    data.booth = user.assignedBooth?._id || user.assignedBooth;
+  }
+  if (user.role === 'ward_head') {
+    data.ward = user.assignedWard?._id || user.assignedWard;
+  }
+  if (data.booth) {
+    const booth = await Booth.findById(data.booth).select('ward');
+    if (!booth) {
+      const err = new Error('Valid booth is required');
+      err.status = 400;
+      throw err;
+    }
+    data.ward = booth.ward;
+  }
+  return data;
+};
+
 exports.create = async (req, res, next) => {
   try {
     const data = { ...req.body };
     data.voterId = requireValidEpic(data.voterId);
     if (req.file) data.photo = `/uploads/${req.file.filename}`;
-    if (req.currentUser.role === 'booth') data.booth = req.currentUser.assignedBooth?._id || req.currentUser.assignedBooth;
-    if (req.currentUser.role === 'ward_head') data.ward = req.currentUser.assignedWard?._id || req.currentUser.assignedWard;
+    await attachBoothWard(data, req.currentUser);
     assertBoothAccess(req.currentUser, data.booth);
     assertWardAccess(req.currentUser, data.ward);
     data.createdBy = req.currentUser._id;
@@ -61,29 +94,37 @@ exports.create = async (req, res, next) => {
 
 exports.list = async (req, res, next) => {
   try {
-    const { q, party, supportLevel, gender, booth, ward, area, verificationStatus, location, village, gramPanchayat, tehsil, municipality, caste, organizationPost, sectionNumber, sectionName, assemblyNumber, assemblyName, partNumber } = req.query;
+    const { q, qMode, party, supportLevel, gender, booth, ward, area, verificationStatus, location, village, gramPanchayat, tehsil, municipality, caste, organizationPost, sectionNumber, sectionName, assemblyNumber, assemblyName, partNumber, letter } = req.query;
     const limit = Math.min(Number(req.query.limit) || 100, 500);
     const page = Math.max(Number(req.query.page) || 1, 1);
     const paged = String(req.query.paged || '').toLowerCase() === 'true' || req.query.page !== undefined;
     const filter = applyMemberScope(req.currentUser, {});
-    if (q) filter.$or = [
-      { name: new RegExp(q, 'i') },
-      { surname: new RegExp(q, 'i') },
-      { mobile: new RegExp(q, 'i') },
-      { voterId: new RegExp(q, 'i') },
-      { guardianName: new RegExp(q, 'i') },
-      { houseNumber: new RegExp(q, 'i') },
-      { address: new RegExp(q, 'i') },
-      { location: new RegExp(q, 'i') },
-      { village: new RegExp(q, 'i') },
-      { gramPanchayat: new RegExp(q, 'i') },
-      { tehsil: new RegExp(q, 'i') },
-      { caste: new RegExp(q, 'i') },
-      { organizationPost: new RegExp(q, 'i') },
-      { sectionName: new RegExp(q, 'i') },
-      { assemblyName: new RegExp(q, 'i') },
-      { partNumber: new RegExp(q, 'i') },
-    ];
+    if (q) {
+      const regex = searchRegex(q);
+      filter.$or = qMode === 'name'
+        ? [
+            { name: regex },
+            { surname: regex },
+          ]
+        : [
+            { name: regex },
+            { surname: regex },
+            { mobile: regex },
+            { voterId: regex },
+            { guardianName: regex },
+            { houseNumber: regex },
+            { address: regex },
+            { location: regex },
+            { village: regex },
+            { gramPanchayat: regex },
+            { tehsil: regex },
+            { caste: regex },
+            { organizationPost: regex },
+            { sectionName: regex },
+            { assemblyName: regex },
+            { partNumber: regex },
+          ];
+    }
     if (party) filter.party = party;
     if (supportLevel) filter.supportLevel = supportLevel;
     if (gender) filter.gender = gender;
@@ -102,13 +143,18 @@ exports.list = async (req, res, next) => {
     if (assemblyName) filter.assemblyName = new RegExp(assemblyName, 'i');
     if (partNumber) filter.partNumber = partNumber;
     if (verificationStatus) filter.verificationStatus = verificationStatus;
+    if (letter) {
+      const escapedLetter = escapeRegex(String(letter).trim());
+      filter.name = new RegExp(`^${escapedLetter}`, 'i');
+    }
     if (req.query.missingMobile === 'true') filter.$and = [...(filter.$and || []), { $or: [{ mobile: '' }, { mobile: null }, { mobile: { $exists: false } }] }];
     if (req.query.missingHouse === 'true') filter.$and = [...(filter.$and || []), { $or: [{ houseNumber: '' }, { houseNumber: null }, { houseNumber: { $exists: false } }] }];
     if (booth && req.currentUser.role === 'admin') filter.booth = booth;
     const members = await Member.find(filter)
       .select('photo name surname mobile altMobile voterId guardianName houseNumber address location area tehsil gramPanchayat village municipality caste subCaste organizationPost organizationLevel influenceLevel occupation education extraDetails supportLevel ward booth updatedAt age gender sectionNumber sectionName assemblyNumber assemblyName partNumber')
       .populate(populate)
-      .sort({ updatedAt: -1 })
+      .sort(req.query.sort === 'recent' ? { updatedAt: -1 } : { name: 1, surname: 1, houseNumber: 1 })
+      .collation({ locale: 'en', numericOrdering: true, strength: 1 })
       .skip(paged ? (page - 1) * limit : 0)
       .limit(limit)
       .lean();
@@ -199,6 +245,13 @@ exports.filterOptions = async (req, res, next) => {
       ? definition.option(row._id || {}, row.count)
       : ({ value: String(row._id), label: String(row._id), count: row.count, filters: { [definition.field]: String(row._id) } }))
       .filter((item) => item.value && (!normalizedSearch || item.label.toLocaleLowerCase('hi-IN').includes(normalizedSearch)))
+      .sort((a, b) => {
+        if (!normalizedSearch) return compareLabels(a, b);
+        const aStarts = a.label.toLocaleLowerCase('hi-IN').startsWith(normalizedSearch);
+        const bStarts = b.label.toLocaleLowerCase('hi-IN').startsWith(normalizedSearch);
+        if (aStarts !== bStarts) return aStarts ? -1 : 1;
+        return compareLabels(a, b);
+      })
       .slice(0, Math.min(Math.max(Number(req.query.limit) || 80, 1), 200));
     res.json({ items });
   } catch (error) { next(error); }
@@ -245,6 +298,9 @@ exports.update = async (req, res, next) => {
     if (req.body.ward) assertWardAccess(req.currentUser, req.body.ward);
     const before = member.toObject();
     const updates = { ...req.body };
+    await attachBoothWard(updates, req.currentUser);
+    if (updates.booth) assertBoothAccess(req.currentUser, updates.booth);
+    if (updates.ward) assertWardAccess(req.currentUser, updates.ward);
     if (updates.voterId && requireValidEpic(updates.voterId) !== member.voterId) {
       return res.status(409).json({ message: 'EPIC नंबर स्थायी है और बदला नहीं जा सकता।' });
     }
@@ -334,16 +390,5 @@ exports.duplicates = async (req, res, next) => {
     next(error);
   }
 };
-
-
-
-
-
-
-
-
-
-
-
 
 
