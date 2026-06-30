@@ -40,6 +40,7 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
   bool selectAllFiltered = false;
   bool missingMobile = false;
   bool missingHouse = false;
+  String fieldCategory = 'identity';
   int refreshKey = 0;
   late Future<Map<String, dynamic>> votersFuture;
   static const pageSize = 50;
@@ -70,6 +71,44 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
     'section': 'Section',
     'booth': 'Booth',
     'ward': 'Ward',
+  };
+
+  static const fieldCategories = <String, List<String>>{
+    'identity': [
+      'name',
+      'voterId',
+      'guardianName',
+      'relationType',
+      'age',
+      'gender'
+    ],
+    'contact': ['mobile', 'altMobile', 'address', 'houseNumber'],
+    'location': [
+      'village',
+      'gramPanchayat',
+      'tehsil',
+      'municipality',
+      'assembly',
+      'partNumber',
+      'section',
+      'booth',
+      'ward'
+    ],
+    'profile': [
+      'caste',
+      'subCaste',
+      'occupation',
+      'education',
+      'organizationPost',
+      'supportLevel'
+    ],
+  };
+
+  static const fieldCategoryLabels = <String, String>{
+    'identity': 'Identity',
+    'contact': 'Contact',
+    'location': 'Location',
+    'profile': 'Profile',
   };
 
   Map<String, String?> get filters {
@@ -555,54 +594,40 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
             ),
             SectionCard(
               title: '2. Choose Printed Details',
-              subtitle: 'Pick a preset first, then adjust individual fields.',
+              subtitle: 'Use presets, then open only the category you need.',
               icon: Icons.fact_check_rounded,
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Wrap(spacing: 8, runSpacing: 8, children: [
-                      ActionChip(
-                          avatar: const Icon(Icons.badge_outlined, size: 18),
-                          label: const Text('Basic'),
-                          onPressed: () => applyFieldPreset('basic')),
-                      ActionChip(
-                          avatar: const Icon(Icons.call_outlined, size: 18),
-                          label: const Text('Contact'),
-                          onPressed: () => applyFieldPreset('contact')),
-                      ActionChip(
-                          avatar: const Icon(Icons.map_outlined, size: 18),
-                          label: const Text('Location'),
-                          onPressed: () => applyFieldPreset('location')),
-                      ActionChip(
-                          avatar: const Icon(Icons.groups_outlined, size: 18),
-                          label: const Text('Political'),
-                          onPressed: () => applyFieldPreset('political')),
-                      ActionChip(
-                          avatar: const Icon(Icons.done_all_rounded, size: 18),
-                          label: const Text('All fields'),
-                          onPressed: () => applyFieldPreset('all')),
-                      ActionChip(
-                          avatar: const Icon(Icons.clear_all_rounded, size: 18),
-                          label: const Text('Clear'),
-                          onPressed: () => setState(selectedFields.clear)),
-                    ]),
-                    const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 7,
-                      runSpacing: 7,
-                      children: availableFields.entries
-                          .map((entry) => FilterChip(
-                                label: Text(entry.value),
-                                selected: selectedFields.contains(entry.key),
-                                onSelected: (value) => setState(() => value
-                                    ? selectedFields.add(entry.key)
-                                    : selectedFields.remove(entry.key)),
-                              ))
-                          .toList(),
+                    _PresetBar(
+                      onPreset: applyFieldPreset,
+                      onClear: () => setState(selectedFields.clear),
                     ),
                     const SizedBox(height: 8),
-                    Text('${selectedFields.length} fields selected',
-                        style: const TextStyle(color: muted, fontSize: 12)),
+                    _FieldCategoryBar(
+                      selected: fieldCategory,
+                      labels: fieldCategoryLabels,
+                      onChanged: (value) =>
+                          setState(() => fieldCategory = value),
+                    ),
+                    const SizedBox(height: 10),
+                    _FieldCategoryPanel(
+                      title: fieldCategoryLabels[fieldCategory] ?? 'Fields',
+                      fields: fieldCategories[fieldCategory] ?? const [],
+                      labels: availableFields,
+                      selectedFields: selectedFields,
+                      onChanged: (field, selected) => setState(() => selected
+                          ? selectedFields.add(field)
+                          : selectedFields.remove(field)),
+                    ),
+                    const SizedBox(height: 10),
+                    _SelectedFieldSummary(
+                      count: selectedFields.length,
+                      fields: selectedFields,
+                      labels: availableFields,
+                      onRemove: (field) =>
+                          setState(() => selectedFields.remove(field)),
+                    ),
                   ]),
             ),
             SectionCard(
@@ -722,6 +747,163 @@ class _SelectionBadge extends StatelessWidget {
                   fontWeight: FontWeight.w800)),
         ]),
       );
+}
+
+class _PresetBar extends StatelessWidget {
+  const _PresetBar({required this.onPreset, required this.onClear});
+
+  final ValueChanged<String> onPreset;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) => SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(children: [
+          _PresetButton(Icons.badge_outlined, 'Basic', () => onPreset('basic')),
+          _PresetButton(
+              Icons.call_outlined, 'Contact', () => onPreset('contact')),
+          _PresetButton(
+              Icons.map_outlined, 'Location', () => onPreset('location')),
+          _PresetButton(
+              Icons.groups_outlined, 'Political', () => onPreset('political')),
+          _PresetButton(Icons.done_all_rounded, 'All', () => onPreset('all')),
+          _PresetButton(Icons.clear_all_rounded, 'Clear', onClear),
+        ]),
+      );
+}
+
+class _PresetButton extends StatelessWidget {
+  const _PresetButton(this.icon, this.label, this.onTap);
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(right: 7),
+        child: ActionChip(
+          avatar: Icon(icon, size: 17),
+          label: Text(label),
+          visualDensity: VisualDensity.compact,
+          onPressed: onTap,
+        ),
+      );
+}
+
+class _FieldCategoryBar extends StatelessWidget {
+  const _FieldCategoryBar({
+    required this.selected,
+    required this.labels,
+    required this.onChanged,
+  });
+
+  final String selected;
+  final Map<String, String> labels;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) => SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: labels.entries
+              .map((entry) => Padding(
+                    padding: const EdgeInsets.only(right: 7),
+                    child: ChoiceChip(
+                      label: Text(entry.value),
+                      selected: selected == entry.key,
+                      visualDensity: VisualDensity.compact,
+                      onSelected: (_) => onChanged(entry.key),
+                    ),
+                  ))
+              .toList(),
+        ),
+      );
+}
+
+class _FieldCategoryPanel extends StatelessWidget {
+  const _FieldCategoryPanel({
+    required this.title,
+    required this.fields,
+    required this.labels,
+    required this.selectedFields,
+    required this.onChanged,
+  });
+
+  final String title;
+  final List<String> fields;
+  final Map<String, String> labels;
+  final Set<String> selectedFields;
+  final void Function(String field, bool selected) onChanged;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: const Color(0xfff7f9fd),
+          border: Border.all(color: border),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(title,
+              style: const TextStyle(color: navy, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: fields
+                .map((field) => FilterChip(
+                      label: Text(labels[field] ?? field),
+                      selected: selectedFields.contains(field),
+                      visualDensity: VisualDensity.compact,
+                      onSelected: (value) => onChanged(field, value),
+                    ))
+                .toList(),
+          ),
+        ]),
+      );
+}
+
+class _SelectedFieldSummary extends StatelessWidget {
+  const _SelectedFieldSummary({
+    required this.count,
+    required this.fields,
+    required this.labels,
+    required this.onRemove,
+  });
+
+  final int count;
+  final Set<String> fields;
+  final Map<String, String> labels;
+  final ValueChanged<String> onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final preview = fields.take(6).toList();
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text('$count fields selected',
+          style: const TextStyle(color: muted, fontSize: 12)),
+      if (preview.isNotEmpty) ...[
+        const SizedBox(height: 6),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: preview
+                .map((field) => Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: InputChip(
+                        label: Text(labels[field] ?? field),
+                        visualDensity: VisualDensity.compact,
+                        onDeleted: () => onRemove(field),
+                      ),
+                    ))
+                .toList(),
+          ),
+        ),
+      ],
+    ]);
+  }
 }
 
 class _PrintSetupSummary extends StatelessWidget {

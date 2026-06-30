@@ -777,71 +777,73 @@ class _AlphabetFilterBar extends StatelessWidget {
     'Y',
     'Z',
   ];
+
   static const hindi = <String>[
-    'अ',
-    'आ',
-    'इ',
-    'ई',
-    'उ',
-    'ऊ',
-    'ए',
-    'ऐ',
-    'ओ',
-    'औ',
-    'क',
-    'ख',
-    'ग',
-    'घ',
-    'च',
-    'छ',
-    'ज',
-    'झ',
-    'ट',
-    'ठ',
-    'ड',
-    'ढ',
-    'त',
-    'थ',
-    'द',
-    'ध',
-    'न',
-    'प',
-    'फ',
-    'ब',
-    'भ',
-    'म',
-    'य',
-    'र',
-    'ल',
-    'व',
-    'श',
-    'ष',
-    'स',
-    'ह',
+    '?',
+    '?',
+    '?',
+    '?',
+    '?',
+    '?',
+    '?',
+    '?',
+    '?',
+    '?',
+    '?',
+    '?',
+    '?',
+    '?',
+    '?',
+    '?',
+    '?',
+    '?',
+    '?',
+    '?',
+    '?',
+    '?',
+    '?',
+    '?',
+    '?',
+    '?',
+    '?',
+    '?',
+    '?',
+    '?',
+    '?',
+    '?',
+    '?',
+    '?',
+    '?',
+    '?',
+    '?',
+    '?',
+    '?',
+    '?',
   ];
 
   @override
-  Widget build(BuildContext context) => SectionCard(
-        title: 'नाम के अक्षर से खोज',
-        subtitle:
-            'A, B, C या हिंदी अक्षर चुनते ही उसी अक्षर से शुरू होने वाले मतदाता दिखेंगे',
-        icon: Icons.sort_by_alpha_rounded,
-        action: selected.isEmpty
-            ? null
-            : TextButton.icon(
-                onPressed: () => onChanged(''),
-                icon: const Icon(Icons.close_rounded),
-                label: const Text('सभी दिखाएं'),
-              ),
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border.all(color: border),
+          borderRadius: BorderRadius.circular(8),
+        ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          _LetterWrap(
-            letters: english,
-            selected: selected,
-            onChanged: onChanged,
-          ),
-          const SizedBox(height: 10),
-          _LetterWrap(
-            letters: hindi,
+          Row(children: [
+            const Icon(Icons.sort_by_alpha_rounded, color: blue, size: 20),
+            const SizedBox(width: 8),
+            const Expanded(
+              child: Text('Name starts with',
+                  style: TextStyle(color: navy, fontWeight: FontWeight.w900)),
+            ),
+            if (selected.isNotEmpty)
+              TextButton(
+                  onPressed: () => onChanged(''), child: const Text('All')),
+          ]),
+          const SizedBox(height: 6),
+          _LetterScroller(
+            letters: const ['', ...english, ...hindi],
             selected: selected,
             onChanged: onChanged,
           ),
@@ -849,8 +851,8 @@ class _AlphabetFilterBar extends StatelessWidget {
       );
 }
 
-class _LetterWrap extends StatelessWidget {
-  const _LetterWrap({
+class _LetterScroller extends StatelessWidget {
+  const _LetterScroller({
     required this.letters,
     required this.selected,
     required this.onChanged,
@@ -861,24 +863,22 @@ class _LetterWrap extends StatelessWidget {
   final ValueChanged<String> onChanged;
 
   @override
-  Widget build(BuildContext context) => Wrap(
-        spacing: 6,
-        runSpacing: 6,
-        children: letters
-            .map((letter) => ChoiceChip(
-                  label: Text(letter),
-                  selected: selected == letter,
-                  onSelected: (_) =>
-                      onChanged(selected == letter ? '' : letter),
-                  labelStyle: TextStyle(
-                    color: selected == letter ? Colors.white : navy,
-                    fontWeight: FontWeight.w800,
-                  ),
-                  selectedColor: blue,
-                  backgroundColor: Colors.white,
-                  side: BorderSide(color: selected == letter ? blue : border),
-                ))
-            .toList(),
+  Widget build(BuildContext context) => SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: letters
+              .map((letter) => Padding(
+                    padding: const EdgeInsets.only(right: 5),
+                    child: ChoiceChip(
+                      label: Text(letter.isEmpty ? 'All' : letter),
+                      selected: selected == letter,
+                      visualDensity: VisualDensity.compact,
+                      onSelected: (_) =>
+                          onChanged(selected == letter ? '' : letter),
+                    ),
+                  ))
+              .toList(),
+        ),
       );
 }
 
@@ -1193,31 +1193,69 @@ class _PrintOptionsDialog extends StatefulWidget {
 
 class _PrintOptionsDialogState extends State<_PrintOptionsDialog> {
   static const availableFields = <String, String>{
-    'name': 'नाम',
+    'name': 'Name',
     'voterId': 'EPIC',
-    'mobile': 'मोबाइल',
-    'altMobile': 'वैकल्पिक मोबाइल',
-    'guardianName': 'पिता / पति',
-    'relationType': 'संबंध',
-    'age': 'उम्र',
-    'gender': 'लिंग',
-    'houseNumber': 'घर संख्या',
-    'address': 'पता',
-    'village': 'गाँव',
-    'gramPanchayat': 'ग्राम पंचायत',
-    'tehsil': 'तहसील',
-    'municipality': 'नगर पालिका',
-    'caste': 'जाति',
-    'subCaste': 'उपजाति',
-    'occupation': 'व्यवसाय',
-    'education': 'शिक्षा',
-    'organizationPost': 'राजनीतिक पद',
-    'supportLevel': 'समर्थन स्तर',
-    'assembly': 'विधानसभा',
-    'partNumber': 'भाग संख्या',
-    'section': 'अनुभाग',
-    'booth': 'बूथ',
-    'ward': 'वार्ड',
+    'mobile': 'Mobile',
+    'altMobile': 'Alt mobile',
+    'guardianName': 'Father / Husband',
+    'relationType': 'Relation',
+    'age': 'Age',
+    'gender': 'Gender',
+    'houseNumber': 'House No.',
+    'address': 'Address',
+    'village': 'Village',
+    'gramPanchayat': 'Gram Panchayat',
+    'tehsil': 'Tehsil',
+    'municipality': 'Municipality',
+    'caste': 'Caste',
+    'subCaste': 'Sub caste',
+    'occupation': 'Occupation',
+    'education': 'Education',
+    'organizationPost': 'Org Post',
+    'supportLevel': 'Support',
+    'assembly': 'Assembly',
+    'partNumber': 'Part / Booth',
+    'section': 'Section',
+    'booth': 'Booth',
+    'ward': 'Ward',
+  };
+
+  static const fieldCategories = <String, List<String>>{
+    'identity': [
+      'name',
+      'voterId',
+      'guardianName',
+      'relationType',
+      'age',
+      'gender'
+    ],
+    'contact': ['mobile', 'altMobile', 'address', 'houseNumber'],
+    'location': [
+      'village',
+      'gramPanchayat',
+      'tehsil',
+      'municipality',
+      'assembly',
+      'partNumber',
+      'section',
+      'booth',
+      'ward'
+    ],
+    'profile': [
+      'caste',
+      'subCaste',
+      'occupation',
+      'education',
+      'organizationPost',
+      'supportLevel'
+    ],
+  };
+
+  static const fieldCategoryLabels = <String, String>{
+    'identity': 'Identity',
+    'contact': 'Contact',
+    'location': 'Location',
+    'profile': 'Profile',
   };
 
   final selectedFields = <String>{
@@ -1234,36 +1272,86 @@ class _PrintOptionsDialogState extends State<_PrintOptionsDialog> {
   bool photo = true;
   String paperSize = 'A4';
   String orientation = 'portrait';
+  String fieldCategory = 'identity';
 
   @override
   Widget build(BuildContext context) => AlertDialog(
         title: Text(widget.selectedCount > 0
-            ? '${widget.selectedCount} चयनित मतदाता प्रिंट करें'
-            : 'फ़िल्टर किए मतदाता Bulk Print'),
+            ? 'Print ${widget.selectedCount} selected voters'
+            : 'Print filtered voters'),
         content: SizedBox(
           width: 650,
           child: SingleChildScrollView(
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('प्रिंट में दिखाई देने वाली जानकारी चुनें',
-                  style: TextStyle(fontWeight: FontWeight.w800)),
+              const Text('Printed details',
+                  style: TextStyle(fontWeight: FontWeight.w900, color: navy)),
               const SizedBox(height: 8),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: availableFields.entries
-                    .map((entry) => FilterChip(
-                          label: Text(entry.value),
-                          selected: selectedFields.contains(entry.key),
-                          onSelected: (selected) => setState(() {
-                            if (selected) {
-                              selectedFields.add(entry.key);
-                            } else {
-                              selectedFields.remove(entry.key);
-                            }
-                          }),
-                        ))
-                    .toList(),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: fieldCategoryLabels.entries
+                      .map((entry) => Padding(
+                            padding: const EdgeInsets.only(right: 7),
+                            child: ChoiceChip(
+                              label: Text(entry.value),
+                              selected: fieldCategory == entry.key,
+                              visualDensity: VisualDensity.compact,
+                              onSelected: (_) =>
+                                  setState(() => fieldCategory = entry.key),
+                            ),
+                          ))
+                      .toList(),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xfff7f9fd),
+                  border: Border.all(color: border),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: (fieldCategories[fieldCategory] ?? const <String>[])
+                      .map((field) => FilterChip(
+                            label: Text(availableFields[field] ?? field),
+                            selected: selectedFields.contains(field),
+                            visualDensity: VisualDensity.compact,
+                            onSelected: (selected) => setState(() {
+                              if (selected) {
+                                selectedFields.add(field);
+                              } else {
+                                selectedFields.remove(field);
+                              }
+                            }),
+                          ))
+                      .toList(),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text('${selectedFields.length} fields selected',
+                  style: const TextStyle(color: muted, fontSize: 12)),
+              const SizedBox(height: 8),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: selectedFields
+                      .take(6)
+                      .map((field) => Padding(
+                            padding: const EdgeInsets.only(right: 6),
+                            child: InputChip(
+                              label: Text(availableFields[field] ?? field),
+                              visualDensity: VisualDensity.compact,
+                              onDeleted: () =>
+                                  setState(() => selectedFields.remove(field)),
+                            ),
+                          ))
+                      .toList(),
+                ),
               ),
               const Divider(height: 28),
               Wrap(spacing: 12, runSpacing: 12, children: [
@@ -1271,12 +1359,11 @@ class _PrintOptionsDialogState extends State<_PrintOptionsDialog> {
                   width: 150,
                   child: DropdownButtonFormField<int>(
                     initialValue: columns,
-                    decoration:
-                        const InputDecoration(labelText: 'प्रति पंक्ति कार्ड'),
+                    decoration: const InputDecoration(labelText: 'Cards / row'),
                     items: const [
-                      DropdownMenuItem(value: 1, child: Text('1 कार्ड')),
-                      DropdownMenuItem(value: 2, child: Text('2 कार्ड')),
-                      DropdownMenuItem(value: 3, child: Text('3 कार्ड')),
+                      DropdownMenuItem(value: 1, child: Text('1 card')),
+                      DropdownMenuItem(value: 2, child: Text('2 cards')),
+                      DropdownMenuItem(value: 3, child: Text('3 cards')),
                     ],
                     onChanged: (value) => setState(() => columns = value ?? 2),
                   ),
@@ -1285,7 +1372,7 @@ class _PrintOptionsDialogState extends State<_PrintOptionsDialog> {
                   width: 140,
                   child: DropdownButtonFormField<String>(
                     initialValue: paperSize,
-                    decoration: const InputDecoration(labelText: 'पेपर'),
+                    decoration: const InputDecoration(labelText: 'Paper'),
                     items: const [
                       DropdownMenuItem(value: 'A4', child: Text('A4')),
                       DropdownMenuItem(value: 'A3', child: Text('A3')),
@@ -1299,7 +1386,7 @@ class _PrintOptionsDialogState extends State<_PrintOptionsDialog> {
                   width: 160,
                   child: DropdownButtonFormField<String>(
                     initialValue: orientation,
-                    decoration: const InputDecoration(labelText: 'दिशा'),
+                    decoration: const InputDecoration(labelText: 'Direction'),
                     items: const [
                       DropdownMenuItem(
                           value: 'portrait', child: Text('Portrait')),
@@ -1312,7 +1399,7 @@ class _PrintOptionsDialogState extends State<_PrintOptionsDialog> {
                 ),
                 FilterChip(
                   avatar: const Icon(Icons.photo_outlined, size: 18),
-                  label: const Text('फोटो'),
+                  label: const Text('Photo'),
                   selected: photo,
                   onSelected: (value) => setState(() => photo = value),
                 ),
@@ -1323,7 +1410,7 @@ class _PrintOptionsDialogState extends State<_PrintOptionsDialog> {
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('रद्द करें')),
+              child: const Text('Cancel')),
           FilledButton.icon(
             onPressed: selectedFields.isEmpty
                 ? null
@@ -1338,7 +1425,7 @@ class _PrintOptionsDialogState extends State<_PrintOptionsDialog> {
                       ),
                     ),
             icon: const Icon(Icons.print),
-            label: const Text('प्रिंट करें'),
+            label: const Text('Print'),
           ),
         ],
       );
