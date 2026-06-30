@@ -19,6 +19,9 @@ class DashboardPage extends StatelessWidget {
   Widget build(BuildContext context) => FutureBlock<Map<String, dynamic>>(
         load: () => api.get('/api/reports/dashboard'),
         builder: (data) {
+          if (api.user?['role'] == 'booth') {
+            return _BoothManagerHome(data: data, onNavigate: onNavigate);
+          }
           final total = _number(data['members']);
           final families = _number(data['families']);
           final booths = _number(data['booths']);
@@ -183,6 +186,219 @@ class _MetricData {
   final IconData icon;
   final Color color;
   final String caption;
+}
+
+class _BoothManagerHome extends StatelessWidget {
+  const _BoothManagerHome({required this.data, required this.onNavigate});
+
+  final Map<String, dynamic> data;
+  final ValueChanged<int> onNavigate;
+
+  @override
+  Widget build(BuildContext context) {
+    final user = api.user ?? const <String, dynamic>{};
+    final booth = Map<String, dynamic>.from(user['assignedBooth'] ?? {});
+    final total = _number(data['members']);
+    final families = _number(data['families']);
+    final today = _number(data['createdToday']);
+    final missingMobile = _number(data['missingMobile']);
+    final missingHouse = _number(data['missingHouseNumber']);
+    final review = _group(data, 'verification', 'needs_review') +
+        _group(data, 'verification', 'duplicate');
+    final supporter = _group(data, 'support', 'supporter');
+    final opposite = _group(data, 'support', 'opposite');
+    final neutral = (total - supporter - opposite).clamp(0, total);
+
+    return AppPage(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+      children: [
+        Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: royalBlue,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: const [
+              BoxShadow(
+                  color: Color(0x1f071b4b),
+                  blurRadius: 18,
+                  offset: Offset(0, 8)),
+            ],
+          ),
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              const CircleAvatar(
+                backgroundColor: Colors.white,
+                foregroundColor: blue,
+                child: Icon(Icons.admin_panel_settings_rounded),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Welcome, ${user['name'] ?? 'Booth manager'}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w900)),
+                      Text(
+                          'Booth ${booth['number'] ?? '-'} · ${booth['name'] ?? 'Assigned booth'}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              color: Colors.white70, fontSize: 12)),
+                    ]),
+              ),
+            ]),
+            const SizedBox(height: 14),
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              _LightPill(Icons.how_to_vote_rounded, '$total voters'),
+              _LightPill(Icons.home_work_rounded, '$families families'),
+              _LightPill(Icons.person_add_alt_rounded, '$today added today'),
+            ]),
+          ]),
+        ),
+        LayoutBuilder(builder: (context, constraints) {
+          final columns = constraints.maxWidth >= 760 ? 4 : 2;
+          final width = (constraints.maxWidth - (columns - 1) * 10) / columns;
+          return Wrap(spacing: 10, runSpacing: 10, children: [
+            SizedBox(
+                width: width,
+                child: MetricCard(
+                    label: 'Voters',
+                    value: '$total',
+                    icon: Icons.groups_rounded,
+                    color: blue,
+                    caption: 'Your booth')),
+            SizedBox(
+                width: width,
+                child: MetricCard(
+                    label: 'Supporters',
+                    value: '$supporter',
+                    icon: Icons.thumb_up_alt_rounded,
+                    color: green,
+                    caption: 'Marked support')),
+            SizedBox(
+                width: width,
+                child: MetricCard(
+                    label: 'Review',
+                    value: '$review',
+                    icon: Icons.fact_check_rounded,
+                    color: review > 0 ? orange : green,
+                    caption: 'Needs attention')),
+            SizedBox(
+                width: width,
+                child: MetricCard(
+                    label: 'Missing',
+                    value: '${missingMobile + missingHouse}',
+                    icon: Icons.error_outline_rounded,
+                    color: rose,
+                    caption: 'Mobile/house')),
+          ]);
+        }),
+        _SectionHeading(
+            title: 'Quick work',
+            subtitle: 'Open the task you need without hunting through menus'),
+        _ActionGrid(actions: [
+          _ActionData(Icons.search_rounded, 'Search voters',
+              'Find by name, EPIC, mobile or house', blue, () => onNavigate(1)),
+          _ActionData(Icons.person_add_alt_1_rounded, 'Add voter',
+              'Create a voter in your booth', green, () => onNavigate(1)),
+          _ActionData(Icons.print_rounded, 'Print list',
+              'Bulk print selected voter data', orange, () {
+            Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => const ConfigurablePrintPage()));
+          }),
+          _ActionData(Icons.family_restroom_rounded, 'Families',
+              'Review family records', purple, () => onNavigate(2)),
+        ]),
+        LayoutBuilder(builder: (context, constraints) {
+          final wide = constraints.maxWidth >= 780;
+          final width =
+              wide ? (constraints.maxWidth - 12) / 2 : constraints.maxWidth;
+          return Wrap(spacing: 12, runSpacing: 12, children: [
+            SizedBox(
+              width: width,
+              child: SectionCard(
+                title: 'Support status',
+                subtitle: 'Current political marking in this booth',
+                icon: Icons.pie_chart_rounded,
+                child: Row(children: [
+                  DonutChart(
+                    values: [
+                      supporter.toDouble(),
+                      opposite.toDouble(),
+                      neutral.toDouble(),
+                    ],
+                    colors: const [blue, orange, purple],
+                    center: '$total',
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(children: [
+                      _LegendRow('Supporter', supporter, blue),
+                      _LegendRow('Opposite', opposite, orange),
+                      _LegendRow('Neutral', neutral, purple),
+                    ]),
+                  ),
+                ]),
+              ),
+            ),
+            SizedBox(
+              width: width,
+              child: SectionCard(
+                title: 'Data tasks',
+                subtitle: 'Keep booth voter data usable',
+                icon: Icons.checklist_rounded,
+                action: TextButton(
+                    onPressed: () => onNavigate(1),
+                    child: const Text('Open voters')),
+                child: Column(children: [
+                  _QualityRow(Icons.phone_rounded, 'Missing mobile',
+                      missingMobile, total, rose),
+                  _QualityRow(Icons.home_rounded, 'Missing house number',
+                      missingHouse, total, orange),
+                  _QualityRow(Icons.fact_check_rounded, 'Needs review', review,
+                      total, purple),
+                ]),
+              ),
+            ),
+          ]);
+        }),
+      ],
+    );
+  }
+}
+
+class _LightPill extends StatelessWidget {
+  const _LightPill(this.icon, this.text);
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: .14),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.white24),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, color: Colors.white, size: 15),
+          const SizedBox(width: 5),
+          Text(text,
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800)),
+        ]),
+      );
 }
 
 class _MetricGrid extends StatelessWidget {
