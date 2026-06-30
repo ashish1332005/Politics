@@ -36,33 +36,33 @@ const drawMemberProfile = (doc, member, index = 0) => {
   if (index > 0) doc.addPage();
   doc.rect(28, 28, 539, 785).stroke('#d1d5db');
   doc.font('HindiBold').fontSize(18).fillColor('#111827').text('Political Booth Management CRM', 45, 42);
-  doc.font('Hindi').fontSize(10).fillColor('#6b7280').text('à¤®à¤¤à¤¦à¤¾à¤¤à¤¾ à¤¸à¤¦à¤¸à¥à¤¯ à¤ªà¥à¤°à¥‹à¤«à¤¾à¤‡à¤²', 45, 66);
+  doc.font('Hindi').fontSize(10).fillColor('#6b7280').text('मतदाता सदस्य प्रोफाइल', 45, 66);
   if (member.party?.logo?.endsWith('.svg')) {
     doc.font('Hindi').fontSize(9).fillColor(member.party?.color || '#111827').text(member.party?.code || member.party?.name || '-', 485, 45, { align: 'right' });
   }
   if (member.photo) {
     try { const image = resolveUploadPublicPath(member.photo); if (fs.existsSync(image)) doc.image(image, 45, 95, { width: 90, height: 100, fit: [90, 100] }); else doc.rect(45, 95, 90, 100).stroke(); } catch (e) { doc.rect(45, 95, 90, 100).stroke(); }
   } else {
-    doc.rect(45, 95, 90, 100).stroke().font('Hindi').fontSize(9).fillColor('#6b7280').text('à¤«à¥‹à¤Ÿà¥‹', 77, 140);
+    doc.rect(45, 95, 90, 100).stroke().font('Hindi').fontSize(9).fillColor('#6b7280').text('फोटो', 77, 140);
   }
   doc.font('HindiBold').fontSize(16).fillColor('#111827').text(`${member.name} ${member.surname || ''}`, 155, 95);
   doc.font('Hindi').fontSize(10).fillColor('#374151');
   const rows = [
-    ['à¤®à¥‹à¤¬à¤¾à¤‡à¤²', member.mobile],
-    ['à¤µà¥ˆà¤•à¤²à¥à¤ªà¤¿à¤• à¤®à¥‹à¤¬à¤¾à¤‡à¤²', member.altMobile],
-    ['à¤œà¤¨à¥à¤® à¤¤à¤¿à¤¥à¤¿', member.dob ? member.dob.toLocaleDateString('hi-IN') : '-'],
-    ['à¤µà¤°à¥à¤·à¤—à¤¾à¤‚à¤ ', member.anniversary ? member.anniversary.toLocaleDateString('hi-IN') : '-'],
-    ['à¤²à¤¿à¤‚à¤—', member.gender],
-    ['à¤µà¤¾à¤°à¥à¤¡', member.ward?.number || member.ward?.name],
-    ['à¤¬à¥‚à¤¥', member.booth?.number || member.booth?.name],
-    ['à¤®à¤¤à¤¦à¤¾à¤¤à¤¾ à¤†à¤ˆà¤¡à¥€', member.voterId],
-    ['à¤˜à¤° à¤¸à¤‚à¤–à¥à¤¯à¤¾', member.houseNumber],
-    ['à¤…à¤¨à¥à¤­à¤¾à¤—', member.sectionName || member.sectionNumber],
-    ['à¤¸à¤®à¤°à¥à¤¥à¤¨', member.supportLevel],
-    ['à¤µà¥à¤¯à¤µà¤¸à¤¾à¤¯', member.occupation],
-    ['à¤¶à¤¿à¤•à¥à¤·à¤¾', member.education],
-    ['à¤ªà¤¤à¤¾', member.address],
-    ['à¤¸à¥à¤¥à¤¾à¤¨', member.location],
+    ['मोबाइल', member.mobile],
+    ['वैकल्पिक मोबाइल', member.altMobile],
+    ['जन्म तिथि', member.dob ? member.dob.toLocaleDateString('hi-IN') : '-'],
+    ['वर्षगांठ', member.anniversary ? member.anniversary.toLocaleDateString('hi-IN') : '-'],
+    ['लिंग', member.gender],
+    ['वार्ड', member.ward?.number || member.ward?.name],
+    ['बूथ', member.booth?.number || member.booth?.name],
+    ['मतदाता आईडी', member.voterId],
+    ['घर संख्या', member.houseNumber],
+    ['अनुभाग', member.sectionName || member.sectionNumber],
+    ['समर्थन', member.supportLevel],
+    ['व्यवसाय', member.occupation],
+    ['शिक्षा', member.education],
+    ['पता', member.address],
+    ['स्थान', member.location],
   ];
   let y = 125;
   for (const [label, value] of rows) {
@@ -70,19 +70,19 @@ const drawMemberProfile = (doc, member, index = 0) => {
     doc.fillColor('#111827').text(value || '-', 240, y, { width: 290 });
     y += 18;
   }
-  doc.font('HindiBold').moveDown().fillColor('#111827').text('à¤ªà¤°à¤¿à¤µà¤¾à¤°', 45, 250);
+  doc.font('HindiBold').moveDown().fillColor('#111827').text('परिवार', 45, 250);
   y = 270;
   (member.family || []).slice(0, 8).forEach((f) => {
     doc.font('Hindi').fontSize(9).text(`${f.name || '-'} | ${f.relation || '-'} | ${f.mobile || '-'}`, 55, y);
     y += 15;
   });
-  doc.font('HindiBold').fontSize(10).text('à¤…à¤¤à¤¿à¤°à¤¿à¤•à¥à¤¤ à¤œà¤¾à¤¨à¤•à¤¾à¤°à¥€', 45, 410);
+  doc.font('HindiBold').fontSize(10).text('अतिरिक्त जानकारी', 45, 410);
   y = 430;
   (member.extraDetails || []).slice(0, 12).forEach((d) => {
     doc.font('Hindi').fontSize(9).text(`${d.label || '-'}: ${d.value || '-'}`, 55, y);
     y += 15;
   });
-  doc.font('HindiBold').fontSize(10).text('à¤Ÿà¤¿à¤ªà¥à¤ªà¤£à¥€', 45, 625);
+  doc.font('HindiBold').fontSize(10).text('टिप्पणी', 45, 625);
   doc.font('Hindi').fontSize(9).text(member.notes || '-', 55, 645, { width: 470, height: 80 });
   if (member.qrCode) {
     try { doc.image(Buffer.from(member.qrCode.split(',')[1], 'base64'), 455, 690, { width: 75 }); } catch (e) {}
@@ -109,14 +109,14 @@ exports.profilePdf = async (req, res, next) => {
 
 exports.bulkProfilesPdf = async (req, res, next) => {
   try {
-    const members = await Member.find(buildFilter(req)).populate('ward booth party createdBy updatedBy').sort({ ward: 1, booth: 1, name: 1 }).limit(500);
+    const members = await Member.find(buildFilter(req)).populate('ward booth party createdBy updatedBy').sort({ ward: 1, booth: 1, name: 1 }).collation({ locale: 'en', numericOrdering: true, strength: 1 }).limit(500);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', 'inline; filename="member-profiles-bulk.pdf"');
     const doc = new PDFDocument({ size: 'A4', margin: 28 });
     preparePdf(doc);
     doc.pipe(res);
     members.forEach((member, index) => drawMemberProfile(doc, member, index));
-    if (!members.length) doc.font('Hindi').fontSize(16).text('à¤šà¥à¤¨à¥‡ à¤—à¤ à¤«à¤¼à¤¿à¤²à¥à¤Ÿà¤° à¤®à¥‡à¤‚ à¤•à¥‹à¤ˆ à¤¸à¤¦à¤¸à¥à¤¯ à¤¨à¤¹à¥€à¤‚ à¤®à¤¿à¤²à¤¾à¥¤');
+    if (!members.length) doc.font('Hindi').fontSize(16).text('चुने गए फ़िल्टर में कोई सदस्य नहीं मिला।');
     doc.end();
   } catch (e) { next(e); }
 };

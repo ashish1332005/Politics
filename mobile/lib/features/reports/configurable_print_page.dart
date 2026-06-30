@@ -41,34 +41,35 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
   bool missingMobile = false;
   bool missingHouse = false;
   int refreshKey = 0;
+  late Future<Map<String, dynamic>> votersFuture;
   static const pageSize = 50;
 
   static const availableFields = <String, String>{
-    'name': 'नाम',
+    'name': 'à¤¨à¤¾à¤®',
     'voterId': 'EPIC',
-    'mobile': 'मोबाइल',
-    'altMobile': 'वैकल्पिक मोबाइल',
-    'guardianName': 'पिता / पति',
-    'relationType': 'संबंध',
-    'age': 'उम्र',
-    'gender': 'लिंग',
-    'houseNumber': 'घर संख्या',
-    'address': 'पूरा पता',
-    'village': 'गाँव',
-    'gramPanchayat': 'ग्राम पंचायत',
-    'tehsil': 'तहसील',
-    'municipality': 'नगर पालिका',
-    'caste': 'जाति',
-    'subCaste': 'उपजाति',
-    'occupation': 'व्यवसाय',
-    'education': 'शिक्षा',
-    'organizationPost': 'संगठन पद',
-    'supportLevel': 'समर्थन स्तर',
-    'assembly': 'विधानसभा',
-    'partNumber': 'भाग संख्या',
-    'section': 'अनुभाग',
-    'booth': 'बूथ',
-    'ward': 'वार्ड',
+    'mobile': 'à¤®à¥‹à¤¬à¤¾à¤‡à¤²',
+    'altMobile': 'à¤µà¥ˆà¤•à¤²à¥à¤ªà¤¿à¤• à¤®à¥‹à¤¬à¤¾à¤‡à¤²',
+    'guardianName': 'à¤ªà¤¿à¤¤à¤¾ / à¤ªà¤¤à¤¿',
+    'relationType': 'à¤¸à¤‚à¤¬à¤‚à¤§',
+    'age': 'à¤‰à¤®à¥à¤°',
+    'gender': 'à¤²à¤¿à¤‚à¤—',
+    'houseNumber': 'à¤˜à¤° à¤¸à¤‚à¤–à¥à¤¯à¤¾',
+    'address': 'à¤ªà¥‚à¤°à¤¾ à¤ªà¤¤à¤¾',
+    'village': 'à¤—à¤¾à¤à¤µ',
+    'gramPanchayat': 'à¤—à¥à¤°à¤¾à¤® à¤ªà¤‚à¤šà¤¾à¤¯à¤¤',
+    'tehsil': 'à¤¤à¤¹à¤¸à¥€à¤²',
+    'municipality': 'à¤¨à¤—à¤° à¤ªà¤¾à¤²à¤¿à¤•à¤¾',
+    'caste': 'à¤œà¤¾à¤¤à¤¿',
+    'subCaste': 'à¤‰à¤ªà¤œà¤¾à¤¤à¤¿',
+    'occupation': 'à¤µà¥à¤¯à¤µà¤¸à¤¾à¤¯',
+    'education': 'à¤¶à¤¿à¤•à¥à¤·à¤¾',
+    'organizationPost': 'à¤¸à¤‚à¤—à¤ à¤¨ à¤ªà¤¦',
+    'supportLevel': 'à¤¸à¤®à¤°à¥à¤¥à¤¨ à¤¸à¥à¤¤à¤°',
+    'assembly': 'à¤µà¤¿à¤§à¤¾à¤¨à¤¸à¤­à¤¾',
+    'partNumber': 'à¤­à¤¾à¤— à¤¸à¤‚à¤–à¥à¤¯à¤¾',
+    'section': 'à¤…à¤¨à¥à¤­à¤¾à¤—',
+    'booth': 'à¤¬à¥‚à¤¥',
+    'ward': 'à¤µà¤¾à¤°à¥à¤¡',
   };
 
   Map<String, String?> get filters {
@@ -94,9 +95,19 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
       };
 
   @override
+  void initState() {
+    super.initState();
+    refreshVoters();
+  }
+
+  @override
   void dispose() {
     search.dispose();
     super.dispose();
+  }
+
+  void refreshVoters() {
+    votersFuture = api.getQuery('/api/members', listQuery);
   }
 
   void filtersChanged() => setState(() {
@@ -105,6 +116,7 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
         selectAllFiltered = false;
         selectedIds.clear();
         excludedIds.clear();
+        refreshVoters();
       });
 
   bool isSelected(String id) =>
@@ -140,6 +152,7 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
         selectAllFiltered = true;
         selectedIds.clear();
         excludedIds.clear();
+        refreshVoters();
       });
 
   void clearSmartFilter(String type) => setState(() {
@@ -152,6 +165,7 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
         selectAllFiltered = false;
         selectedIds.clear();
         excludedIds.clear();
+        refreshVoters();
       });
   Future<void> openOptionSelector(String field, String label) async {
     final current = Map<String, String?>.from(filters);
@@ -175,6 +189,7 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
       selectAllFiltered = false;
       selectedIds.clear();
       excludedIds.clear();
+      refreshVoters();
     });
   }
 
@@ -186,6 +201,7 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
         selectAllFiltered = false;
         selectedIds.clear();
         excludedIds.clear();
+        refreshVoters();
       });
   void applyFieldPreset(String preset) => setState(() {
         selectedFields
@@ -233,7 +249,7 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
     await printApiPdf(
       context,
       path: '/api/print/members.pdf',
-      jobName: 'चयनित मतदाता सूची',
+      jobName: 'à¤šà¤¯à¤¨à¤¿à¤¤ à¤®à¤¤à¤¦à¤¾à¤¤à¤¾ à¤¸à¥‚à¤šà¥€',
       query: {
         ...filters,
         if (selectAllFiltered) 'selectAll': 'true',
@@ -245,14 +261,14 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
         'orientation': orientation,
         'columns': '$columns',
         'photo': '$photo',
-        'title': 'चयनित मतदाता सूची ($count)',
+        'title': 'à¤šà¤¯à¤¨à¤¿à¤¤ à¤®à¤¤à¤¦à¤¾à¤¤à¤¾ à¤¸à¥‚à¤šà¥€ ($count)',
       },
     );
   }
 
   @override
   Widget build(BuildContext context) => FutureBuilder<Map<String, dynamic>>(
-        future: api.getQuery('/api/members', listQuery),
+        future: votersFuture,
         builder: (context, snapshot) {
           final loading = snapshot.connectionState != ConnectionState.done;
           final data = snapshot.data ?? const <String, dynamic>{};
@@ -265,45 +281,52 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
           final selectedCount = selectAllFiltered
               ? (total - excludedIds.length).clamp(0, total)
               : selectedIds.length;
+          final activeFilterCount = selectedOptionLabels.length +
+              (search.text.trim().isEmpty ? 0 : 1) +
+              (support.isEmpty ? 0 : 1) +
+              (verification.isEmpty ? 0 : 1) +
+              (missingMobile ? 1 : 0) +
+              (missingHouse ? 1 : 0);
           final pageIds = items.map((item) => '${item['_id']}').toList();
           final allPageSelected =
               pageIds.isNotEmpty && pageIds.every(isSelected);
 
           return AppPage(children: [
             PageHeading(
-              title: 'स्मार्ट Bulk Print',
-              subtitle:
-                  'मतदाता चुनें, जानकारी चुनें और साफ PDF preview के बाद print करें',
+              title: 'Smart Print',
+              subtitle: 'Select voters, choose fields, then preview PDF',
               action: _SelectionBadge(
                   count: selectedCount, allFiltered: selectAllFiltered),
             ),
+            _PrintSetupSummary(
+              selectedCount: selectedCount,
+              fieldCount: selectedFields.length,
+              activeFilterCount: activeFilterCount,
+              layout:
+                  '$paper · ${orientation == 'portrait' ? 'Portrait' : 'Landscape'} · $columns/card row',
+              ready: selectedCount > 0 && selectedFields.isNotEmpty,
+            ),
             SectionCard(
-              title: '1. मतदाता चुनें',
+              title: '1. Choose Voters',
+              subtitle:
+                  'Search or filter voters, then select one page or all matching voters.',
+              icon: Icons.groups_rounded,
               action: selectedCount > 0
                   ? TextButton.icon(
                       onPressed: clearSelection,
                       icon: const Icon(Icons.close_rounded),
-                      label: const Text('चयन साफ करें'))
+                      label: const Text('Clear selection'))
                   : null,
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Smart select',
-                        style: TextStyle(
-                            color: navy, fontWeight: FontWeight.w800)),
-                    const SizedBox(height: 8),
-                    Wrap(spacing: 8, runSpacing: 8, children: [
-                      _SmartChip(Icons.phone_disabled_rounded, 'मोबाइल गायब',
-                          rose, () => smartSelect('missingMobile')),
-                      _SmartChip(Icons.other_houses_rounded, 'घर संख्या गायब',
-                          orange, () => smartSelect('missingHouse')),
-                      _SmartChip(Icons.fact_check_rounded, 'Review जरूरी',
-                          purple, () => smartSelect('review')),
-                      _SmartChip(Icons.groups_rounded, 'सभी समर्थक', green,
-                          () => smartSelect('supporter')),
-                      _SmartChip(Icons.select_all_rounded,
-                          'इन filters के सभी चुनें', blue, chooseAllFiltered),
-                    ]),
+                    _QuickSelectPanel(
+                      onMissingMobile: () => smartSelect('missingMobile'),
+                      onMissingHouse: () => smartSelect('missingHouse'),
+                      onReview: () => smartSelect('review'),
+                      onSupporter: () => smartSelect('supporter'),
+                      onAllFiltered: chooseAllFiltered,
+                    ),
                     if (missingMobile ||
                         missingHouse ||
                         verification == 'needs_review' ||
@@ -312,21 +335,21 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
                       Wrap(spacing: 7, runSpacing: 7, children: [
                         if (missingMobile)
                           InputChip(
-                              label: const Text('मोबाइल गायब'),
+                              label: const Text('Mobile missing'),
                               onDeleted: () =>
                                   clearSmartFilter('missingMobile')),
                         if (missingHouse)
                           InputChip(
-                              label: const Text('घर संख्या गायब'),
+                              label: const Text('House missing'),
                               onDeleted: () =>
                                   clearSmartFilter('missingHouse')),
                         if (verification == 'needs_review')
                           InputChip(
-                              label: const Text('Review जरूरी'),
+                              label: const Text('Needs review'),
                               onDeleted: () => clearSmartFilter('review')),
                         if (support == 'supporter')
                           InputChip(
-                              label: const Text('समर्थक'),
+                              label: const Text('Supporter'),
                               onDeleted: () => clearSmartFilter('supporter')),
                       ]),
                     ],
@@ -334,86 +357,86 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
                     Wrap(spacing: 10, runSpacing: 10, children: [
                       _SearchBox(
                           controller: search,
-                          label: 'नाम, EPIC या मोबाइल',
+                          label: 'Name, EPIC or mobile',
                           icon: Icons.search_rounded,
                           onChanged: (_) => filtersChanged(),
                           width: 260),
                       _DatabaseFilterPicker(
-                        label: 'विधानसभा',
+                        label: 'Assembly',
                         icon: Icons.account_balance_rounded,
                         value: selectedOptionLabels['assembly'],
-                        onTap: () => openOptionSelector('assembly', 'विधानसभा'),
+                        onTap: () => openOptionSelector('assembly', 'Assembly'),
                         onClear: () => clearOption('assembly'),
                       ),
                       _DatabaseFilterPicker(
-                        label: 'गाँव',
+                        label: 'Village',
                         icon: Icons.location_city_rounded,
                         value: selectedOptionLabels['village'],
-                        onTap: () => openOptionSelector('village', 'गाँव'),
+                        onTap: () => openOptionSelector('village', 'Village'),
                         onClear: () => clearOption('village'),
                       ),
                       _DatabaseFilterPicker(
-                        label: 'ग्राम पंचायत',
+                        label: 'Gram Panchayat',
                         icon: Icons.holiday_village_rounded,
                         value: selectedOptionLabels['gramPanchayat'],
-                        onTap: () =>
-                            openOptionSelector('gramPanchayat', 'ग्राम पंचायत'),
+                        onTap: () => openOptionSelector(
+                            'gramPanchayat', 'Gram Panchayat'),
                         onClear: () => clearOption('gramPanchayat'),
                       ),
                       _DatabaseFilterPicker(
-                        label: 'तहसील',
+                        label: 'Tehsil',
                         icon: Icons.apartment_rounded,
                         value: selectedOptionLabels['tehsil'],
-                        onTap: () => openOptionSelector('tehsil', 'तहसील'),
+                        onTap: () => openOptionSelector('tehsil', 'Tehsil'),
                         onClear: () => clearOption('tehsil'),
                       ),
                       _DatabaseFilterPicker(
-                        label: 'नगर पालिका',
+                        label: 'Municipality',
                         icon: Icons.location_city_outlined,
                         value: selectedOptionLabels['municipality'],
                         onTap: () =>
-                            openOptionSelector('municipality', 'नगर पालिका'),
+                            openOptionSelector('municipality', 'Municipality'),
                         onClear: () => clearOption('municipality'),
                       ),
                       _DatabaseFilterPicker(
-                        label: 'भाग / बूथ',
+                        label: 'Part / Booth',
                         icon: Icons.how_to_vote_rounded,
                         value: selectedOptionLabels['partNumber'],
                         onTap: () =>
-                            openOptionSelector('partNumber', 'भाग / बूथ'),
+                            openOptionSelector('partNumber', 'Part / Booth'),
                         onClear: () => clearOption('partNumber'),
                       ),
                       _DatabaseFilterPicker(
-                        label: 'अनुभाग',
+                        label: 'Section',
                         icon: Icons.format_list_numbered_rounded,
                         value: selectedOptionLabels['section'],
-                        onTap: () => openOptionSelector('section', 'अनुभाग'),
+                        onTap: () => openOptionSelector('section', 'Section'),
                         onClear: () => clearOption('section'),
                       ),
                       _DatabaseFilterPicker(
-                        label: 'जाति',
+                        label: 'Caste',
                         icon: Icons.groups_2_rounded,
                         value: selectedOptionLabels['caste'],
-                        onTap: () => openOptionSelector('caste', 'जाति'),
+                        onTap: () => openOptionSelector('caste', 'Caste'),
                         onClear: () => clearOption('caste'),
                       ),
                       _DatabaseFilterPicker(
-                        label: 'संगठन पद',
+                        label: 'Org Post',
                         icon: Icons.badge_rounded,
                         value: selectedOptionLabels['organizationPost'],
                         onTap: () =>
-                            openOptionSelector('organizationPost', 'संगठन पद'),
+                            openOptionSelector('organizationPost', 'Org Post'),
                         onClear: () => clearOption('organizationPost'),
                       ),
                       _DropFilter(
-                        label: 'समर्थन',
+                        label: 'Support',
                         value: support,
                         items: const {
-                          '': 'सभी',
-                          'supporter': 'समर्थक',
-                          'opposite': 'विरोधी',
-                          'neutral': 'तटस्थ',
-                          'undecided': 'अनिर्णीत',
+                          '': 'All',
+                          'supporter': 'Supporter',
+                          'opposite': 'Opposite',
+                          'neutral': 'Neutral',
+                          'undecided': 'Undecided',
                         },
                         onChanged: (value) {
                           support = value;
@@ -449,7 +472,7 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
                                     }),
                           ),
                           Expanded(
-                            child: Text('मतदाता ($total)',
+                            child: Text('à¤®à¤¤à¤¦à¤¾à¤¤à¤¾ ($total)',
                                 style: const TextStyle(
                                     color: navy, fontWeight: FontWeight.w900)),
                           ),
@@ -469,8 +492,8 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
                                     }),
                             icon: const Icon(Icons.library_add_check_rounded),
                             label: Text(allPageSelected
-                                ? 'इस पेज का चयन हटाएँ'
-                                : 'इस पेज के सभी चुनें'),
+                                ? 'à¤‡à¤¸ à¤ªà¥‡à¤œ à¤•à¤¾ à¤šà¤¯à¤¨ à¤¹à¤Ÿà¤¾à¤à¤'
+                                : 'à¤‡à¤¸ à¤ªà¥‡à¤œ à¤•à¥‡ à¤¸à¤­à¥€ à¤šà¥à¤¨à¥‡à¤‚'),
                           ),
                         ]),
                         if (loading)
@@ -485,8 +508,8 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
                         else if (items.isEmpty)
                           const Padding(
                               padding: EdgeInsets.all(28),
-                              child:
-                                  Text('इन filters में कोई मतदाता नहीं मिला।'))
+                              child: Text(
+                                  'à¤‡à¤¨ filters à¤®à¥‡à¤‚ à¤•à¥‹à¤ˆ à¤®à¤¤à¤¦à¤¾à¤¤à¤¾ à¤¨à¤¹à¥€à¤‚ à¤®à¤¿à¤²à¤¾à¥¤'))
                         else
                           ...items.map((voter) => _VoterChoice(
                                 voter: voter,
@@ -503,20 +526,26 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
                                   IconButton.outlined(
                                       onPressed: page <= 1
                                           ? null
-                                          : () => setState(() => page--),
+                                          : () => setState(() {
+                                                page--;
+                                                refreshVoters();
+                                              }),
                                       icon: const Icon(
                                           Icons.chevron_left_rounded)),
                                   Padding(
                                       padding: const EdgeInsets.symmetric(
                                           horizontal: 14),
-                                      child: Text('पेज $page / $pages',
+                                      child: Text('à¤ªà¥‡à¤œ $page / $pages',
                                           style: const TextStyle(
                                               color: navy,
                                               fontWeight: FontWeight.w800))),
                                   IconButton.outlined(
                                       onPressed: page >= pages
                                           ? null
-                                          : () => setState(() => page++),
+                                          : () => setState(() {
+                                                page++;
+                                                refreshVoters();
+                                              }),
                                       icon: const Icon(
                                           Icons.chevron_right_rounded)),
                                 ]),
@@ -526,7 +555,9 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
                   ]),
             ),
             SectionCard(
-              title: '2. Print में जानकारी चुनें',
+              title: '2. Choose Printed Details',
+              subtitle: 'Pick a preset first, then adjust individual fields.',
+              icon: Icons.fact_check_rounded,
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -541,19 +572,19 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
                           onPressed: () => applyFieldPreset('contact')),
                       ActionChip(
                           avatar: const Icon(Icons.map_outlined, size: 18),
-                          label: const Text('पता एवं क्षेत्र'),
+                          label: const Text('Location'),
                           onPressed: () => applyFieldPreset('location')),
                       ActionChip(
                           avatar: const Icon(Icons.groups_outlined, size: 18),
-                          label: const Text('राजनीतिक'),
+                          label: const Text('Political'),
                           onPressed: () => applyFieldPreset('political')),
                       ActionChip(
                           avatar: const Icon(Icons.done_all_rounded, size: 18),
-                          label: const Text('सभी जानकारी'),
+                          label: const Text('All fields'),
                           onPressed: () => applyFieldPreset('all')),
                       ActionChip(
                           avatar: const Icon(Icons.clear_all_rounded, size: 18),
-                          label: const Text('साफ करें'),
+                          label: const Text('Clear'),
                           onPressed: () => setState(selectedFields.clear)),
                     ]),
                     const SizedBox(height: 12),
@@ -571,21 +602,23 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
                           .toList(),
                     ),
                     const SizedBox(height: 8),
-                    Text('${selectedFields.length} fields चुने गए',
+                    Text('${selectedFields.length} fields selected',
                         style: const TextStyle(color: muted, fontSize: 12)),
                   ]),
             ),
             SectionCard(
-              title: '3. Page layout और preview',
+              title: '3. Layout & Preview',
+              subtitle: 'Choose paper, direction, card density, and photo.',
+              icon: Icons.preview_rounded,
               child: LayoutBuilder(builder: (context, constraints) {
                 final controls = Wrap(spacing: 10, runSpacing: 10, children: [
                   _SimpleDropdown(
-                      label: 'पेपर',
+                      label: 'Paper',
                       value: paper,
                       items: const ['A4', 'A3', 'LETTER'],
                       onChanged: (value) => setState(() => paper = value)),
                   _SimpleDropdown(
-                      label: 'दिशा',
+                      label: 'Direction',
                       value: orientation,
                       items: const ['portrait', 'landscape'],
                       display: const {
@@ -595,14 +628,14 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
                       onChanged: (value) =>
                           setState(() => orientation = value)),
                   _SimpleDropdown(
-                      label: 'प्रति पंक्ति कार्ड',
+                      label: 'Cards / row',
                       value: '$columns',
                       items: const ['1', '2', '3'],
                       onChanged: (value) =>
                           setState(() => columns = int.parse(value))),
                   FilterChip(
                       avatar: const Icon(Icons.photo_outlined, size: 18),
-                      label: const Text('फोटो शामिल करें'),
+                      label: const Text('Include photo'),
                       selected: photo,
                       onSelected: (value) => setState(() => photo = value)),
                 ]);
@@ -645,10 +678,10 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                       Text(
-                          '$selectedCount मतदाता · ${selectedFields.length} fields',
+                          '$selectedCount voters · ${selectedFields.length} fields',
                           style: const TextStyle(
                               color: navy, fontWeight: FontWeight.w900)),
-                      const Text('Print dialog में PDF preview दिखेगा',
+                      const Text('PDF preview will open before printing',
                           style: TextStyle(color: muted, fontSize: 12)),
                     ])),
                 FilledButton.icon(
@@ -656,7 +689,7 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
                       ? null
                       : () => printSelected(total),
                   icon: const Icon(Icons.picture_as_pdf_rounded),
-                  label: const Text('Preview एवं Print'),
+                  label: const Text('Preview & Print'),
                 ),
               ]),
             ),
@@ -683,8 +716,8 @@ class _SelectionBadge extends StatelessWidget {
           const SizedBox(width: 7),
           Text(
               count > 0
-                  ? '$count चयनित${allFiltered ? ' (filtered)' : ''}'
-                  : 'मतदाता चुनें',
+                  ? '$count à¤šà¤¯à¤¨à¤¿à¤¤${allFiltered ? ' (filtered)' : ''}'
+                  : 'à¤®à¤¤à¤¦à¤¾à¤¤à¤¾ à¤šà¥à¤¨à¥‡à¤‚',
               style: TextStyle(
                   color: count > 0 ? green : muted,
                   fontWeight: FontWeight.w800)),
@@ -692,20 +725,241 @@ class _SelectionBadge extends StatelessWidget {
       );
 }
 
-class _SmartChip extends StatelessWidget {
-  const _SmartChip(this.icon, this.label, this.color, this.onTap);
+class _PrintSetupSummary extends StatelessWidget {
+  const _PrintSetupSummary({
+    required this.selectedCount,
+    required this.fieldCount,
+    required this.activeFilterCount,
+    required this.layout,
+    required this.ready,
+  });
+
+  final int selectedCount;
+  final int fieldCount;
+  final int activeFilterCount;
+  final String layout;
+  final bool ready;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: ready ? const Color(0xffeaf8f0) : Colors.white,
+          border: Border.all(color: ready ? green : border),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: LayoutBuilder(builder: (context, constraints) {
+          final itemWidth = constraints.maxWidth < 720
+              ? constraints.maxWidth
+              : (constraints.maxWidth - 24) / 4;
+          return Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _SummaryPill(
+                icon: Icons.groups_rounded,
+                label: 'Voters',
+                value: '$selectedCount selected',
+                color: selectedCount > 0 ? green : orange,
+                width: itemWidth,
+              ),
+              _SummaryPill(
+                icon: Icons.filter_alt_rounded,
+                label: 'Filters',
+                value: '$activeFilterCount active',
+                color: blue,
+                width: itemWidth,
+              ),
+              _SummaryPill(
+                icon: Icons.view_list_rounded,
+                label: 'Fields',
+                value: '$fieldCount selected',
+                color: fieldCount > 0 ? green : rose,
+                width: itemWidth,
+              ),
+              _SummaryPill(
+                icon: Icons.description_rounded,
+                label: 'Layout',
+                value: layout,
+                color: purple,
+                width: itemWidth,
+              ),
+            ],
+          );
+        }),
+      );
+}
+
+class _SummaryPill extends StatelessWidget {
+  const _SummaryPill({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+    required this.width,
+  });
+
   final IconData icon;
   final String label;
+  final String value;
   final Color color;
+  final double width;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        width: width,
+        child: Row(children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: .1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: color, size: 18),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(label, style: const TextStyle(color: muted, fontSize: 11)),
+              Text(value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      color: navy, fontWeight: FontWeight.w900, fontSize: 12)),
+            ]),
+          ),
+        ]),
+      );
+}
+
+class _QuickSelectPanel extends StatelessWidget {
+  const _QuickSelectPanel({
+    required this.onMissingMobile,
+    required this.onMissingHouse,
+    required this.onReview,
+    required this.onSupporter,
+    required this.onAllFiltered,
+  });
+
+  final VoidCallback onMissingMobile;
+  final VoidCallback onMissingHouse;
+  final VoidCallback onReview;
+  final VoidCallback onSupporter;
+  final VoidCallback onAllFiltered;
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Quick selection',
+              style: TextStyle(color: navy, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 8),
+          LayoutBuilder(builder: (context, constraints) {
+            final wide = constraints.maxWidth >= 760;
+            final width =
+                wide ? (constraints.maxWidth - 16) / 3 : constraints.maxWidth;
+            return Wrap(spacing: 8, runSpacing: 8, children: [
+              _QuickSelectTile(
+                icon: Icons.select_all_rounded,
+                title: 'All filtered voters',
+                subtitle: 'Select every voter matching the filters',
+                color: blue,
+                width: width,
+                onTap: onAllFiltered,
+              ),
+              _QuickSelectTile(
+                icon: Icons.phone_disabled_rounded,
+                title: 'Mobile missing',
+                subtitle: 'Print voters without mobile numbers',
+                color: rose,
+                width: width,
+                onTap: onMissingMobile,
+              ),
+              _QuickSelectTile(
+                icon: Icons.other_houses_rounded,
+                title: 'House missing',
+                subtitle: 'Print voters without house numbers',
+                color: orange,
+                width: width,
+                onTap: onMissingHouse,
+              ),
+              _QuickSelectTile(
+                icon: Icons.fact_check_rounded,
+                title: 'Needs review',
+                subtitle: 'Select voters marked for review',
+                color: purple,
+                width: width,
+                onTap: onReview,
+              ),
+              _QuickSelectTile(
+                icon: Icons.groups_rounded,
+                title: 'Supporters',
+                subtitle: 'Select supporter voters only',
+                color: green,
+                width: width,
+                onTap: onSupporter,
+              ),
+            ]);
+          }),
+        ],
+      );
+}
+
+class _QuickSelectTile extends StatelessWidget {
+  const _QuickSelectTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.color,
+    required this.width,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Color color;
+  final double width;
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => ActionChip(
-        avatar: Icon(icon, color: color, size: 18),
-        label: Text(label),
-        onPressed: onTap,
-        side: BorderSide(color: color.withValues(alpha: .35)),
-        backgroundColor: color.withValues(alpha: .06),
+  Widget build(BuildContext context) => SizedBox(
+        width: width,
+        child: Material(
+          color: color.withValues(alpha: .06),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+            side: BorderSide(color: color.withValues(alpha: .28)),
+          ),
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(children: [
+                Icon(icon, color: color, size: 22),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(title,
+                            style: const TextStyle(
+                                color: navy, fontWeight: FontWeight.w900)),
+                        const SizedBox(height: 2),
+                        Text(subtitle,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(color: muted, fontSize: 11)),
+                      ]),
+                ),
+                const Icon(Icons.chevron_right_rounded, color: muted),
+              ]),
+            ),
+          ),
+        ),
       );
 }
 
@@ -756,7 +1010,7 @@ class _FilterOptionDialogState extends State<_FilterOptionDialog> {
         contentPadding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
         title: Row(children: [
           Expanded(
-              child: Text('${widget.title} चुनें',
+              child: Text('${widget.title} à¤šà¥à¤¨à¥‡à¤‚',
                   style: const TextStyle(
                       color: navy, fontWeight: FontWeight.w900))),
           IconButton(
@@ -773,7 +1027,7 @@ class _FilterOptionDialogState extends State<_FilterOptionDialog> {
               onChanged: (_) => setState(() {}),
               decoration: InputDecoration(
                 prefixIcon: const Icon(Icons.search_rounded),
-                hintText: '${widget.title} खोजें...',
+                hintText: '${widget.title} à¤–à¥‹à¤œà¥‡à¤‚...',
                 suffixIcon: search.text.isEmpty
                     ? null
                     : IconButton(
@@ -809,7 +1063,8 @@ class _FilterOptionDialogState extends State<_FilterOptionDialog> {
                   ).map(_FilterOption.fromMap).toList();
                   if (options.isEmpty) {
                     return const Center(
-                        child: Text('Database में matching option नहीं मिला।',
+                        child: Text(
+                            'Database à¤®à¥‡à¤‚ matching option à¤¨à¤¹à¥€à¤‚ à¤®à¤¿à¤²à¤¾à¥¤',
                             style: TextStyle(color: muted)));
                   }
                   return ListView.separated(
@@ -825,7 +1080,7 @@ class _FilterOptionDialogState extends State<_FilterOptionDialog> {
                         title: Text(option.label,
                             style: const TextStyle(
                                 color: navy, fontWeight: FontWeight.w800)),
-                        subtitle: Text('${option.count} मतदाता'),
+                        subtitle: Text('${option.count} à¤®à¤¤à¤¦à¤¾à¤¤à¤¾'),
                         trailing: const Icon(Icons.chevron_right_rounded),
                         onTap: () => Navigator.pop(context, option),
                       );
@@ -879,7 +1134,7 @@ class _DatabaseFilterPicker extends StatelessWidget {
                     Text(label,
                         style: const TextStyle(color: muted, fontSize: 10)),
                     const SizedBox(height: 2),
-                    Text(selected ? value! : 'Database से चुनें',
+                    Text(selected ? value! : 'Database à¤¸à¥‡ à¤šà¥à¤¨à¥‡à¤‚',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -889,7 +1144,7 @@ class _DatabaseFilterPicker extends StatelessWidget {
                   ])),
               if (selected)
                 IconButton(
-                    tooltip: 'हटाएँ',
+                    tooltip: 'à¤¹à¤Ÿà¤¾à¤à¤',
                     visualDensity: VisualDensity.compact,
                     onPressed: onClear,
                     icon: const Icon(Icons.close_rounded, size: 18))
@@ -1005,7 +1260,7 @@ class _VoterChoice extends StatelessWidget {
           title: Text('${voter['name'] ?? '-'}',
               style: const TextStyle(color: navy, fontWeight: FontWeight.w800)),
           subtitle: Text(
-            '${voter['voterId'] ?? '-'}  ·  घर ${voter['houseNumber'] ?? '-'}  ·  ${voter['village'] ?? voter['location'] ?? '-'}',
+            '${voter['voterId'] ?? '-'}  Â·  à¤˜à¤° ${voter['houseNumber'] ?? '-'}  Â·  ${voter['village'] ?? voter['location'] ?? '-'}',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -1040,7 +1295,7 @@ class _PrintPreviewMock extends StatelessWidget {
                 ]),
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('मतदाता सूची',
+              const Text('à¤®à¤¤à¤¦à¤¾à¤¤à¤¾ à¤¸à¥‚à¤šà¥€',
                   style: TextStyle(
                       color: navy, fontSize: 8, fontWeight: FontWeight.w900)),
               const Divider(height: 8),
@@ -1075,7 +1330,7 @@ class _PrintPreviewMock extends StatelessWidget {
                                       .map((field) => Padding(
                                           padding:
                                               const EdgeInsets.only(bottom: 2),
-                                          child: Text('$field: —',
+                                          child: Text('$field: â€”',
                                               maxLines: 1,
                                               style: const TextStyle(
                                                   fontSize: 4, color: navy))))

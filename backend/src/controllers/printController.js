@@ -67,6 +67,9 @@ function applyPrintFilters(req, filter) {
   ]) {
     if (req.query[key]) filter[key] = req.query[key];
   }
+  if (req.query.letter) {
+    filter.name = new RegExp(`^${escapeRegex(String(req.query.letter).trim())}`, 'i');
+  }
   if (req.query.missingMobile === 'true') {
     filter.$and = [...(filter.$and || []), { $or: [{ mobile: '' }, { mobile: null }, { mobile: { $exists: false } }] }];
   }
@@ -116,6 +119,7 @@ exports.printMembers = async (req, res, next) => {
     const members = await Member.find(filter)
       .populate('booth ward')
       .sort({ village: 1, houseNumber: 1, name: 1 })
+      .collation({ locale: 'en', numericOrdering: true, strength: 1 })
       .limit(5000)
       .lean();
 

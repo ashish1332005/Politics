@@ -48,10 +48,31 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
   String gender = '';
   String verificationStatus = '';
   String support = '';
+  String nameLetter = '';
   int currentPage = 1;
+  late Future<Map<String, dynamic>> dashboardFuture;
+  late Future<VoterPageResult> votersFuture;
   static const int pageSize = 100;
 
-  void filtersChanged() => setState(() => currentPage = 1);
+  void refreshVoters() {
+    votersFuture = OfflineVoterCache.loadPage(
+      query: filterQuery,
+      page: currentPage,
+      limit: pageSize,
+    );
+  }
+
+  void filtersChanged() => setState(() {
+        currentPage = 1;
+        refreshVoters();
+      });
+
+  @override
+  void initState() {
+    super.initState();
+    dashboardFuture = api.get('/api/reports/dashboard');
+    refreshVoters();
+  }
 
   @override
   void dispose() {
@@ -89,6 +110,8 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
       'gender': gender,
       'verificationStatus': verificationStatus,
       'area': widget.initialAreaId,
+      'letter': nameLetter,
+      if (nameLetter.isNotEmpty) 'qMode': 'name',
     };
     for (final values in selectedOptionFilters.values) {
       query.addAll(values);
@@ -156,10 +179,12 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
       support = '';
       gender = '';
       verificationStatus = '';
+      nameLetter = '';
       currentPage = 1;
       selectedIds.clear();
       selectedOptionFilters.clear();
       selectedOptionLabels.clear();
+      refreshVoters();
     });
   }
 
@@ -197,6 +222,7 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
       selectedOptionLabels[field] = option.label;
       currentPage = 1;
       selectedIds.clear();
+      refreshVoters();
     });
   }
 
@@ -205,6 +231,7 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
         selectedOptionLabels.remove(field);
         currentPage = 1;
         selectedIds.clear();
+        refreshVoters();
       });
   Future<void> openCustomPrint() async {
     final options = await showDialog<_PrintOptions>(
@@ -260,7 +287,7 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
         {'confirmation': 'DELETE ALL VOTERS'},
       );
       if (!mounted) return;
-      setState(() {});
+      setState(refreshVoters);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(
             '${result['deletedMembers'] ?? 0} मतदाता और ${result['deletedFamilies'] ?? 0} परिवार हटा दिए गए'),
@@ -292,7 +319,8 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
               FilledButton.icon(
                 onPressed: () => showDialog(
                     context: context,
-                    builder: (_) => VoterForm(onSaved: () => setState(() {}))),
+                    builder: (_) =>
+                        VoterForm(onSaved: () => setState(refreshVoters))),
                 icon: const Icon(Icons.add),
                 label: Text(compact ? 'नया मतदाता' : 'नया मतदाता जोड़ें'),
               ),
@@ -445,6 +473,7 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
                 onChanged: (value) => setState(() {
                   support = value;
                   currentPage = 1;
+                  refreshVoters();
                 }),
               ),
               _FilterDropdown(
@@ -459,6 +488,7 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
                 onChanged: (value) => setState(() {
                   gender = value;
                   currentPage = 1;
+                  refreshVoters();
                 }),
               ),
               _FilterDropdown(
@@ -474,78 +504,125 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
                 onChanged: (value) => setState(() {
                   verificationStatus = value;
                   currentPage = 1;
+                  refreshVoters();
                 }),
               ),
             ]),
           ),
         ],
-        FutureBlock<Map<String, dynamic>>(
-          load: () => api.get('/api/reports/dashboard'),
-          builder: (d) => LayoutBuilder(builder: (context, constraints) {
-            final columns = constraints.maxWidth >= 720
-                ? 3
-                : constraints.maxWidth >= 360
-                    ? 2
-                    : 1;
-            final width = (constraints.maxWidth - (columns - 1) * 10) / columns;
-            final items = [
-              MetricCard(
-                  label: 'कुल मतदाता',
-                  value: '${d['members'] ?? 0}',
-                  icon: Icons.groups,
-                  color: blue),
-              MetricCard(
-                  label: 'समर्थक मतदाता',
-                  value: '${_supportCount(d, 'supporter')}',
-                  icon: Icons.group,
-                  color: green),
-              MetricCard(
-                  label: 'विरोधी मतदाता',
-                  value: '${_supportCount(d, 'opposite')}',
-                  icon: Icons.local_florist,
-                  color: orange),
-            ];
-            return Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: items
-                  .map((card) => SizedBox(width: width, child: card))
-                  .toList(),
-            );
+        FutureBuilder<Map<String, dynamic>>(
+          future: dashboardFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(30),
+                  child: CircularProgressIndicator(),
+                ),
+              );
+            }
+            if (snapshot.hasError) {
+              return Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text('${snapshot.error}',
+                    style: const TextStyle(color: Colors.red)),
+              );
+            }
+            final d = snapshot.data ?? const <String, dynamic>{};
+            return LayoutBuilder(builder: (context, constraints) {
+              final columns = constraints.maxWidth >= 720
+                  ? 3
+                  : constraints.maxWidth >= 360
+                      ? 2
+                      : 1;
+              final width =
+                  (constraints.maxWidth - (columns - 1) * 10) / columns;
+              final items = [
+                MetricCard(
+                    label: 'कुल मतदाता',
+                    value: '${d['members'] ?? 0}',
+                    icon: Icons.groups,
+                    color: blue),
+                MetricCard(
+                    label: 'समर्थक मतदाता',
+                    value: '${_supportCount(d, 'supporter')}',
+                    icon: Icons.group,
+                    color: green),
+                MetricCard(
+                    label: 'विरोधी मतदाता',
+                    value: '${_supportCount(d, 'opposite')}',
+                    icon: Icons.local_florist,
+                    color: orange),
+              ];
+              return Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: items
+                    .map((card) => SizedBox(width: width, child: card))
+                    .toList(),
+              );
+            });
+          },
+        ),
+        _AlphabetFilterBar(
+          selected: nameLetter,
+          onChanged: (letter) => setState(() {
+            nameLetter = letter;
+            currentPage = 1;
+            selectedIds.clear();
+            refreshVoters();
           }),
         ),
-        FutureBlock<VoterPageResult>(
-          load: () => OfflineVoterCache.loadPage(
-            query: filterQuery,
-            page: currentPage,
-            limit: pageSize,
-          ),
-          builder: (result) => VoterTable(
-            items:
-                result.items.map((e) => Map<String, dynamic>.from(e)).toList(),
-            refresh: () => setState(() {}),
-            onDeleteAll: deleteAll,
-            total: result.total,
-            page: result.page,
-            pages: result.pages,
-            onPageChanged: (page) => setState(() => currentPage = page),
-            pageSize: result.limit,
-            selectedIds: selectedIds,
-            onSelectionChanged: (id, selected) => setState(() {
-              if (selected) {
-                selectedIds.add(id);
-              } else {
-                selectedIds.remove(id);
-              }
-            }),
-            onSelectPage: (ids, selected) => setState(() {
-              if (selected) {
-                selectedIds.addAll(ids);
-              } else {
-                selectedIds.removeAll(ids);
-              }
-            }),
-          ),
+        FutureBuilder<VoterPageResult>(
+          future: votersFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(30),
+                  child: CircularProgressIndicator(),
+                ),
+              );
+            }
+            if (snapshot.hasError) {
+              return Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text('${snapshot.error}',
+                    style: const TextStyle(color: Colors.red)),
+              );
+            }
+            final result = snapshot.data!;
+            return VoterTable(
+              items: result.items
+                  .map((e) => Map<String, dynamic>.from(e))
+                  .toList(),
+              refresh: () => setState(refreshVoters),
+              onDeleteAll: deleteAll,
+              total: result.total,
+              page: result.page,
+              pages: result.pages,
+              onPageChanged: (page) => setState(() {
+                currentPage = page;
+                refreshVoters();
+              }),
+              pageSize: result.limit,
+              selectedIds: selectedIds,
+              onSelectionChanged: (id, selected) => setState(() {
+                if (selected) {
+                  selectedIds.add(id);
+                } else {
+                  selectedIds.remove(id);
+                }
+              }),
+              onSelectPage: (ids, selected) => setState(() {
+                if (selected) {
+                  selectedIds.addAll(ids);
+                } else {
+                  selectedIds.removeAll(ids);
+                }
+              }),
+            );
+          },
         ),
         Container(
           padding: const EdgeInsets.all(12),
@@ -664,6 +741,145 @@ class _SmartFilterDef {
   final String field;
   final String label;
   final IconData icon;
+}
+
+class _AlphabetFilterBar extends StatelessWidget {
+  const _AlphabetFilterBar({required this.selected, required this.onChanged});
+
+  final String selected;
+  final ValueChanged<String> onChanged;
+
+  static const english = <String>[
+    'A',
+    'B',
+    'C',
+    'D',
+    'E',
+    'F',
+    'G',
+    'H',
+    'I',
+    'J',
+    'K',
+    'L',
+    'M',
+    'N',
+    'O',
+    'P',
+    'Q',
+    'R',
+    'S',
+    'T',
+    'U',
+    'V',
+    'W',
+    'X',
+    'Y',
+    'Z',
+  ];
+  static const hindi = <String>[
+    'अ',
+    'आ',
+    'इ',
+    'ई',
+    'उ',
+    'ऊ',
+    'ए',
+    'ऐ',
+    'ओ',
+    'औ',
+    'क',
+    'ख',
+    'ग',
+    'घ',
+    'च',
+    'छ',
+    'ज',
+    'झ',
+    'ट',
+    'ठ',
+    'ड',
+    'ढ',
+    'त',
+    'थ',
+    'द',
+    'ध',
+    'न',
+    'प',
+    'फ',
+    'ब',
+    'भ',
+    'म',
+    'य',
+    'र',
+    'ल',
+    'व',
+    'श',
+    'ष',
+    'स',
+    'ह',
+  ];
+
+  @override
+  Widget build(BuildContext context) => SectionCard(
+        title: 'नाम के अक्षर से खोज',
+        subtitle:
+            'A, B, C या हिंदी अक्षर चुनते ही उसी अक्षर से शुरू होने वाले मतदाता दिखेंगे',
+        icon: Icons.sort_by_alpha_rounded,
+        action: selected.isEmpty
+            ? null
+            : TextButton.icon(
+                onPressed: () => onChanged(''),
+                icon: const Icon(Icons.close_rounded),
+                label: const Text('सभी दिखाएं'),
+              ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          _LetterWrap(
+            letters: english,
+            selected: selected,
+            onChanged: onChanged,
+          ),
+          const SizedBox(height: 10),
+          _LetterWrap(
+            letters: hindi,
+            selected: selected,
+            onChanged: onChanged,
+          ),
+        ]),
+      );
+}
+
+class _LetterWrap extends StatelessWidget {
+  const _LetterWrap({
+    required this.letters,
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final List<String> letters;
+  final String selected;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) => Wrap(
+        spacing: 6,
+        runSpacing: 6,
+        children: letters
+            .map((letter) => ChoiceChip(
+                  label: Text(letter),
+                  selected: selected == letter,
+                  onSelected: (_) =>
+                      onChanged(selected == letter ? '' : letter),
+                  labelStyle: TextStyle(
+                    color: selected == letter ? Colors.white : navy,
+                    fontWeight: FontWeight.w800,
+                  ),
+                  selectedColor: blue,
+                  backgroundColor: Colors.white,
+                  side: BorderSide(color: selected == letter ? blue : border),
+                ))
+            .toList(),
+      );
 }
 
 class _DatabaseFilterPicker extends StatelessWidget {
