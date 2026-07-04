@@ -20,6 +20,12 @@ services:
         value: magick
       - key: OCR_LANGUAGES
         value: hin+eng
+      - key: OCR_DPI
+        value: 200
+      - key: OCR_CELL_CONCURRENCY
+        value: 2
+      - key: IMAGE_CROP_CONCURRENCY
+        value: 2
       - key: USE_PYTHON_OCR
         value: true
       - key: MONGO_URI

@@ -81,8 +81,16 @@ class Api {
         res.body.trimLeft().startsWith('[')) {
       body = json.decode(res.body);
     } else {
+      final compactPreview = res.body.replaceAll(RegExp(r'\s+'), ' ').trim();
+      final preview = compactPreview.substring(
+          0, compactPreview.length > 80 ? 80 : compactPreview.length);
+      if (res.body.trimLeft().startsWith('<!DOCTYPE html') ||
+          res.body.trimLeft().startsWith('<html')) {
+        throw Exception(
+            'Backend ne JSON ki jagah Render error page bheja. Service deploy/restart/crash ho sakti hai. Render logs check karein. API: $baseUrl. Preview: $preview');
+      }
       throw Exception(
-          'API returned non-JSON response. Check backend is running at $baseUrl. Preview: ${res.body.substring(0, res.body.length > 80 ? 80 : res.body.length)}');
+          'API returned non-JSON response. Check backend is running at $baseUrl. Preview: $preview');
     }
     if (res.statusCode >= 400) {
       throw Exception(body is Map
