@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../services/api.dart';
 
-const productionApiUrl = 'https://politics-d578.onrender.com';
+const productionApiUrl = 'https://politics-docker.onrender.com';
 
 String _defaultApiUrl() {
   if (kIsWeb) {
