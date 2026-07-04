@@ -33,14 +33,30 @@ npm run dev
 
 Admin users can access all data. Booth users are automatically scoped to `assignedBooth` for member reads and writes.
 
-## PDF Photo Extraction
+## PDF/OCR Import
 
-Text extraction works from the Node dependencies. For voter photo extraction from PDFs, install Poppler and make `pdfimages` available.
+Text-based PDFs can be parsed from Node dependencies. Scanned voter-list PDFs need Poppler, Tesseract with Hindi data, ImageMagick, and Python OCR packages.
 
-On Windows, install Poppler, then set in `.env` if needed:
+On Windows, install Poppler/Tesseract/ImageMagick, then set in `.env` if needed:
 
 ```env
 PDFIMAGES_PATH=C:\poppler\Library\bin\pdfimages.exe
+PDFTOPPM_PATH=C:\poppler\Library\bin\pdftoppm.exe
+TESSERACT_PATH=C:\Program Files\Tesseract-OCR\tesseract.exe
+IMAGEMAGICK_PATH=C:\Program Files\ImageMagick-7.1.2-Q16-HDRI\magick.exe
+TESSDATA_PREFIX=D:\Politcs\backend\tessdata
 ```
 
-If Poppler is not installed, PDF import still imports text data and returns an image extraction status message.
+On Render, deploy the backend as a Docker service using `backend/Dockerfile` or the root `render.yaml` blueprint. Do not use Windows paths in Render env vars. Use:
+
+```env
+PDFIMAGES_PATH=pdfimages
+PDFTOPPM_PATH=pdftoppm
+TESSERACT_PATH=tesseract
+IMAGEMAGICK_PATH=magick
+PYTHON_PATH=python3
+OCR_LANGUAGES=hin+eng
+USE_PYTHON_OCR=true
+```
+
+Leave `TESSDATA_PREFIX` unset on Render.

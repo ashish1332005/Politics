@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: politics-backend
+    env: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PYTHON_PATH
+        value: python3
+      - key: PDFTOPPM_PATH
+        value: pdftoppm
+      - key: PDFIMAGES_PATH
+        value: pdfimages
+      - key: TESSERACT_PATH
+        value: tesseract
+      - key: IMAGEMAGICK_PATH
+        value: magick
+      - key: OCR_LANGUAGES
+        value: hin+eng
+      - key: USE_PYTHON_OCR
+        value: true
+      - key: MONGO_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
