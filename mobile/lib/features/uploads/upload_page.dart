@@ -130,7 +130,10 @@ class _UploadPageState extends State<UploadPage> {
         filename: file.name,
         filePath: pickedFilePath(file),
         bytes: pickedFileBytes(file),
-        fields: {'uploadId': uploadId},
+        fields: {
+          'uploadId': uploadId,
+          if (pdf) 'asyncImport': 'true',
+        },
         onProgress: (sent, total) {
           if (!mounted) return;
           setState(() {

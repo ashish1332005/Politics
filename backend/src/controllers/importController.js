@@ -1196,6 +1196,17 @@ exports.importPdfMembers = async (req, res, next) => {
   try {
     if (!req.file) return res.status(400).json({ message: 'PDF file required' });
     assertReadablePdf(req.file.path);
+    const context = {
+      file: req.file,
+      body: { ...req.body },
+      currentUser: req.currentUser,
+    };
+    const useBackgroundImport = String(req.body?.asyncImport || req.query?.asyncImport || '').toLowerCase() === 'true';
+    if (!useBackgroundImport) {
+      const result = await runPdfImport(context, uploadId);
+      return res.json(result);
+    }
+
     setProgress(uploadId, {
       status: 'processing',
       stage: 'Upload received. PDF/OCR import running in background',
@@ -1205,11 +1216,6 @@ exports.importPdfMembers = async (req, res, next) => {
       total: 0,
     });
 
-    const context = {
-      file: req.file,
-      body: { ...req.body },
-      currentUser: req.currentUser,
-    };
     setImmediate(() => {
       runPdfImport(context, uploadId).catch((error) => {
         console.error('Background PDF import failed:', error);
