@@ -3,7 +3,7 @@ services:
     name: politics-backend
     env: docker
     dockerfilePath: ./backend/Dockerfile
-    dockerContext: ./backend
+    dockerContext: .
     healthCheckPath: /
     envVars:
       - key: NODE_ENV
