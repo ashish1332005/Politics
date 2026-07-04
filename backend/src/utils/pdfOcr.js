@@ -2,20 +2,11 @@ const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 const { uploadFilePath, uploadPublicPath } = require('./uploadPath');
-
-const isWindows = process.platform === 'win32';
-const isWindowsExecutablePath = (value = '') => /^[a-z]:\\/i.test(String(value));
-const commandFromEnv = (envName, fallback) => {
-  const configured = process.env[envName];
-  if (!configured) return fallback;
-  if (!isWindows && isWindowsExecutablePath(configured)) return fallback;
-  return configured;
-};
-const subprocessEnv = () => {
-  const env = { ...process.env };
-  if (!isWindows && isWindowsExecutablePath(env.TESSDATA_PREFIX)) delete env.TESSDATA_PREFIX;
-  return env;
-};
+const {
+  commandFromEnv,
+  friendlyMissingBinaryError,
+  subprocessEnv,
+} = require('./ocrRuntime');
 
 const run = (command, args) => new Promise((resolve, reject) => {
   const child = spawn(command, args, { windowsHide: true, env: subprocessEnv() });
@@ -23,7 +14,7 @@ const run = (command, args) => new Promise((resolve, reject) => {
   let stderr = '';
   child.stdout.on('data', (chunk) => { stdout += chunk.toString(); });
   child.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
-  child.on('error', reject);
+  child.on('error', (error) => reject(friendlyMissingBinaryError(command, error)));
   child.on('close', (code) => {
     if (code === 0) resolve(stdout);
     else reject(new Error(stderr || `${command} exited with code ${code}`));

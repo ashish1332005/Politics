@@ -47,7 +47,17 @@ IMAGEMAGICK_PATH=C:\Program Files\ImageMagick-7.1.2-Q16-HDRI\magick.exe
 TESSDATA_PREFIX=D:\Politcs\backend\tessdata
 ```
 
-On Render, deploy the backend as a Docker service using `backend/Dockerfile` or the root `render.yaml` blueprint. Do not use Windows paths in Render env vars. Use:
+On Render, deploy the backend as a Docker service using the root `Dockerfile` or the root `render.yaml` blueprint.
+
+Manual Render settings:
+
+```text
+Runtime: Docker
+Dockerfile Path: ./Dockerfile
+Docker Build Context Directory: .
+```
+
+Do not use Windows paths in Render env vars. Use:
 
 ```env
 PDFIMAGES_PATH=pdfimages

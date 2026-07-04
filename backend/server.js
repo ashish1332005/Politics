@@ -8,6 +8,7 @@ const errorHandler = require('./src/middleware/errorHandler');
 const { startMessageWorker } = require('./src/services/messageQueue');
 const { restoreWebSessions } = require('./src/services/whatsappWeb');
 const { uploadRoot } = require('./src/utils/uploadPath');
+const { checkOcrRuntime } = require('./src/utils/ocrRuntime');
 
 const app = express();
 const configuredOrigins = (process.env.CORS_ORIGIN || '*')
@@ -37,6 +38,14 @@ app.use('/uploads', express.static(uploadRoot()));
 app.use('/party-logos', express.static(path.join(__dirname, 'src/public/party-logos')));
 
 app.get('/', (req, res) => res.json({ name: 'Political Booth Management CRM API', status: 'ok' }));
+app.get('/api/system/ocr', async (req, res, next) => {
+  try {
+    const result = await checkOcrRuntime();
+    res.status(result.ok ? 200 : 503).json(result);
+  } catch (error) {
+    next(error);
+  }
+});
 app.use('/api/auth', require('./src/routes/auth'));
 app.use('/api/wards', require('./src/routes/wards'));
 app.use('/api/areas', require('./src/routes/areas'));
