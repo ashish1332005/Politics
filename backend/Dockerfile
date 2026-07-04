@@ -14,6 +14,9 @@ RUN apt-get update \
     tesseract-ocr-hin \
   && rm -rf /var/lib/apt/lists/*
 
+RUN printf '#!/bin/sh\nif [ "$1" = "identify" ]; then shift; exec identify "$@"; fi\nexec convert "$@"\n' > /usr/local/bin/magick \
+  && chmod +x /usr/local/bin/magick
+
 COPY backend/package*.json ./
 RUN npm ci --omit=dev
 
