@@ -975,21 +975,24 @@ exports.importMembers = async (req, res, next) => {
   }
 };
 
-exports.importPdfMembers = async (req, res, next) => {
-  const uploadId = progressId(req);
+const runPdfImport = async ({ file, body, currentUser }, uploadId) => {
   try {
     setProgress(uploadId, { status: 'processing', stage: 'Reading PDF/OCR text', imported: 0, skipped: 0, processed: 0, total: 0 });
-    if (!req.file) return res.status(400).json({ message: 'PDF file required' });
-    assertReadablePdf(req.file.path);
-    let parsed = await parsePdfMembers(req.file.path, req.file.filename);
+    if (!file) {
+      const err = new Error('PDF file required');
+      err.status = 400;
+      throw err;
+    }
+    assertReadablePdf(file.path);
+    let parsed = await parsePdfMembers(file.path, file.filename);
     setProgress(uploadId, { stage: 'PDF records detected', total: parsed.members.length, processed: 0 });
     if (
-      req.currentUser.role === 'admin'
-      && !req.body.ward
+      currentUser.role === 'admin'
+      && !body.ward
       && !parsed.members[0]?.assemblyNumber
       && !parsed.ocr
     ) {
-      const ocr = await ocrPdf(req.file.path, req.file.filename);
+      const ocr = await ocrPdf(file.path, file.filename);
       parsed = {
         text: ocr.text,
         members: parseHindiVoterRoll(ocr.text),
@@ -1000,7 +1003,7 @@ exports.importPdfMembers = async (req, res, next) => {
     const extractedImages = parsed.ocr?.images?.length
       ? { images: parsed.ocr.images, status: parsed.ocr.status }
       : shouldExtractImages
-        ? await extractPdfImages(req.file.path, req.file.filename)
+        ? await extractPdfImages(file.path, file.filename)
         : { images: [], status: 'Photo extraction skipped for faster import. Set EXTRACT_PDF_IMAGES=true to enable it.' };
     const detectedHeader = parseHeader(parsed.text);
     const firstMemberWithHeader = {
@@ -1008,14 +1011,18 @@ exports.importPdfMembers = async (req, res, next) => {
       ...(parsed.members[0] || {}),
     };
     const { ward, booth } = await getOrCreateImportScope({
-      user: req.currentUser,
-      body: req.body,
+      user: currentUser,
+      body,
       firstMember: firstMemberWithHeader,
     });
-    if (!booth || !ward) return res.status(400).json({ message: 'PDF se ward/booth detect nahi hua. Text-based voter PDF upload karein ya manual ward/booth select karein.' });
-    assertBoothAccess(req.currentUser, booth);
-    assertWardAccess(req.currentUser, ward);
-    const assemblyArea = await ensureAreaHierarchy(firstMemberWithHeader, req.currentUser._id);
+    if (!booth || !ward) {
+      const err = new Error('PDF se ward/booth detect nahi hua. Text-based voter PDF upload karein ya manual ward/booth select karein.');
+      err.status = 400;
+      throw err;
+    }
+    assertBoothAccess(currentUser, booth);
+    assertWardAccess(currentUser, ward);
+    const assemblyArea = await ensureAreaHierarchy(firstMemberWithHeader, currentUser._id);
     const created = [];
     const skipped = [];
     let processed = 0;
@@ -1025,12 +1032,12 @@ exports.importPdfMembers = async (req, res, next) => {
       if (!item.name) {
         const review = await ImportReview.create({
           sourceType: 'pdf',
-          sourceFile: req.file.filename,
+          sourceFile: file.filename,
           reason: 'Name missing or unreadable',
           suggestedData: item,
           ward,
           booth,
-          createdBy: req.currentUser._id,
+          createdBy: currentUser._id,
         });
         skipped.push({ item, reason: 'Name missing or unreadable', reviewId: review._id });
         processed += 1;
@@ -1040,12 +1047,12 @@ exports.importPdfMembers = async (req, res, next) => {
       if (!isValidEpic(item.voterId)) {
         const review = await ImportReview.create({
           sourceType: 'pdf',
-          sourceFile: req.file.filename,
+          sourceFile: file.filename,
           reason: 'EPIC missing or invalid',
           suggestedData: { ...item, voterId: item.voterId || '' },
           ward,
           booth,
-          createdBy: req.currentUser._id,
+          createdBy: currentUser._id,
         });
         skipped.push({ item, reason: 'EPIC missing or invalid', reviewId: review._id });
         processed += 1;
@@ -1087,10 +1094,10 @@ exports.importPdfMembers = async (req, res, next) => {
         existing.area = item.village ? itemArea : (existing.area || assemblyArea);
         assignNonEmptyFields(existing, item, ['tehsil', 'gramPanchayat', 'village']);
         if (!existing.party && party?._id) existing.party = party._id;
-        existing.updatedBy = req.currentUser._id;
+        existing.updatedBy = currentUser._id;
         existing.sourceDocument = {
           type: 'pdf',
-          file: `/uploads/${req.file.filename}`,
+          file: `/uploads/${file.filename}`,
           rawText: item.rawText || parsed.text.slice(0, 1000),
           imageExtractionStatus: extractedImages.status,
         };
@@ -1128,8 +1135,8 @@ exports.importPdfMembers = async (req, res, next) => {
         gramPanchayat: item.gramPanchayat,
         village: item.village,
         party: party?._id,
-        createdBy: req.currentUser._id,
-        updatedBy: req.currentUser._id,
+        createdBy: currentUser._id,
+        updatedBy: currentUser._id,
         verificationStatus: duplicates.length ? 'duplicate' : 'pending',
         duplicateWarnings: duplicates.map((d) => ({
           field: d.voterId === item.voterId ? 'voterId' : d.mobile === item.mobile ? 'mobile' : 'address',
@@ -1138,7 +1145,7 @@ exports.importPdfMembers = async (req, res, next) => {
         })),
         sourceDocument: {
           type: 'pdf',
-          file: `/uploads/${req.file.filename}`,
+          file: `/uploads/${file.filename}`,
           rawText: item.rawText || parsed.text.slice(0, 1000),
           imageExtractionStatus: extractedImages.status,
         },
@@ -1153,16 +1160,8 @@ exports.importPdfMembers = async (req, res, next) => {
       imported: created.length,
       skipped: skipped.length,
     });
-    const families = await rebuildFamiliesForMembers(created, req.currentUser._id);
-    finishProgressSoon(uploadId, {
-      status: 'completed',
-      stage: 'Import complete',
-      processed,
-      total: parsed.members.length,
-      imported: created.length,
-      skipped: skipped.length,
-    });
-    res.json({
+    const families = await rebuildFamiliesForMembers(created, currentUser._id);
+    const result = {
       imported: created.length,
       reviewRequired: skipped.filter((entry) => entry.reviewId).length,
       skipped,
@@ -1172,13 +1171,62 @@ exports.importPdfMembers = async (req, res, next) => {
       extractedTextPreview: parsed.text.slice(0, 1500),
       extractionMode: parsed.ocr ? 'ocr-coordinate' : 'text-embedded',
       importedIds: created.map((member) => member._id),
+    };
+    finishProgressSoon(uploadId, {
+      status: 'completed',
+      stage: 'Import complete',
+      processed,
+      total: parsed.members.length,
+      imported: created.length,
+      skipped: skipped.length,
+      result,
+    });
+    return result;
+  } catch (e) {
+    finishProgressSoon(uploadId, {
+      status: 'failed',
+      stage: e.message || 'PDF import failed',
+    });
+    throw e;
+  }
+};
+
+exports.importPdfMembers = async (req, res, next) => {
+  const uploadId = progressId(req);
+  try {
+    if (!req.file) return res.status(400).json({ message: 'PDF file required' });
+    assertReadablePdf(req.file.path);
+    setProgress(uploadId, {
+      status: 'processing',
+      stage: 'Upload received. PDF/OCR import running in background',
+      imported: 0,
+      skipped: 0,
+      processed: 0,
+      total: 0,
+    });
+
+    const context = {
+      file: req.file,
+      body: { ...req.body },
+      currentUser: req.currentUser,
+    };
+    setImmediate(() => {
+      runPdfImport(context, uploadId).catch((error) => {
+        console.error('Background PDF import failed:', error);
+      });
+    });
+
+    return res.status(202).json({
+      processing: true,
+      uploadId,
+      message: 'PDF upload complete. Server OCR/import background me chal raha hai.',
     });
   } catch (e) {
     finishProgressSoon(uploadId, {
       status: 'failed',
       stage: e.message || 'PDF import failed',
     });
-    next(e);
+    return next(e);
   }
 };
 

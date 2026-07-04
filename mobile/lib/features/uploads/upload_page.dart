@@ -64,6 +64,33 @@ class _UploadPageState extends State<UploadPage> {
     });
   }
 
+  Future<Map<String, dynamic>> waitForImportCompletion(String uploadId) async {
+    final deadline = DateTime.now().add(const Duration(minutes: 35));
+    while (DateTime.now().isBefore(deadline)) {
+      final progress = await api.get('/api/import/status/$uploadId');
+      if (!mounted) return progress;
+      setState(() {
+        processingStage = (progress['stage'] ?? '').toString();
+        processedRecords = ((progress['processed'] ?? 0) as num).toInt();
+        totalRecords = ((progress['total'] ?? 0) as num).toInt();
+        importedRecords = ((progress['imported'] ?? 0) as num).toInt();
+        skippedRecords = ((progress['skipped'] ?? 0) as num).toInt();
+        serverProcessing = true;
+      });
+      if (progress['status'] == 'completed') {
+        final result = progress['result'];
+        if (result is Map) return Map<String, dynamic>.from(result);
+        return progress;
+      }
+      if (progress['status'] == 'failed') {
+        throw Exception((progress['stage'] ?? 'PDF import failed').toString());
+      }
+      await Future.delayed(const Duration(seconds: 2));
+    }
+    throw Exception(
+        'PDF import abhi bhi chal raha hai. Thodi der baad data refresh karke check karein.');
+  }
+
   Future<void> upload(bool pdf) async {
     if (uploading) return;
     final ok = await api.validateSession();
@@ -98,7 +125,7 @@ class _UploadPageState extends State<UploadPage> {
     final uploadId = 'upload-${DateTime.now().millisecondsSinceEpoch}';
     startProgressPolling(uploadId);
     try {
-      final res = await api.uploadFile(
+      var res = await api.uploadFile(
         pdf ? '/api/import/members/pdf' : '/api/import/members',
         filename: file.name,
         filePath: pickedFilePath(file),
@@ -117,6 +144,15 @@ class _UploadPageState extends State<UploadPage> {
           });
         },
       );
+      if (res['processing'] == true) {
+        if (!mounted) return;
+        setState(() {
+          serverProcessing = true;
+          status =
+              'Upload complete. Server OCR/import background me chal raha hai...';
+        });
+        res = await waitForImportCompletion(uploadId);
+      }
       await OfflineVoterCache.clear();
       api.notifyDataChanged();
       if (!mounted) return;
