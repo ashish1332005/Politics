@@ -3,8 +3,22 @@ const path = require('path');
 const { spawn } = require('child_process');
 const { uploadFilePath, uploadPublicPath } = require('./uploadPath');
 
+const isWindows = process.platform === 'win32';
+const isWindowsExecutablePath = (value = '') => /^[a-z]:\\/i.test(String(value));
+const commandFromEnv = (envName, fallback) => {
+  const configured = process.env[envName];
+  if (!configured) return fallback;
+  if (!isWindows && isWindowsExecutablePath(configured)) return fallback;
+  return configured;
+};
+const subprocessEnv = () => {
+  const env = { ...process.env };
+  if (!isWindows && isWindowsExecutablePath(env.TESSDATA_PREFIX)) delete env.TESSDATA_PREFIX;
+  return env;
+};
+
 const run = (command, args) => new Promise((resolve, reject) => {
-  const child = spawn(command, args, { windowsHide: true });
+  const child = spawn(command, args, { windowsHide: true, env: subprocessEnv() });
   let stdout = '';
   let stderr = '';
   child.stdout.on('data', (chunk) => { stdout += chunk.toString(); });
@@ -68,7 +82,7 @@ const renderPages = async (pdfPath, outputDir, { firstPage, lastPage } = {}) => 
   if (firstPage) args.push('-f', String(firstPage));
   if (lastPage) args.push('-l', String(lastPage));
   args.push(pdfPath, prefix);
-  await run(process.env.PDFTOPPM_PATH || 'pdftoppm', args);
+  await run(commandFromEnv('PDFTOPPM_PATH', 'pdftoppm'), args);
   return fs.readdirSync(outputDir)
     .filter((file) => /^page-\d+\.png$/i.test(file))
     .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
@@ -80,7 +94,11 @@ const runPythonWorker = (pages, outputDir) => new Promise((resolve, reject) => {
   const script = path.join(__dirname, '../../python/ocr_worker.py');
   const child = spawn(python, [script], {
     windowsHide: true,
-    env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
+    env: {
+      ...subprocessEnv(),
+      TESSERACT_PATH: commandFromEnv('TESSERACT_PATH', 'tesseract'),
+      PYTHONIOENCODING: 'utf-8',
+    },
   });
   let stdout = '';
   let stderr = '';
@@ -99,7 +117,7 @@ const runPythonWorker = (pages, outputDir) => new Promise((resolve, reject) => {
 });
 
 const cropVoterPage = async (page, pageIndex, outputDir) => {
-  const magick = process.env.IMAGEMAGICK_PATH || 'magick';
+  const magick = commandFromEnv('IMAGEMAGICK_PATH', 'magick');
   const columns = Number(process.env.VOTER_GRID_COLUMNS || 3);
   const rows = Number(process.env.VOTER_GRID_ROWS || 10);
   const [pageWidth, pageHeight] = (await run(magick, ['identify', '-format', '%w %h', page])).trim().split(/\s+/).map(Number);
@@ -192,9 +210,10 @@ exports.ocrPdf = async (pdfPath, importFileName, pageRange = {}) => {
   const pageResults = [];
   const voterCells = [];
   let voterPageCount = 0;
+  const tesseract = commandFromEnv('TESSERACT_PATH', 'tesseract');
   for (let pageIndex = 0; pageIndex < pages.length; pageIndex += 1) {
     const page = pages[pageIndex];
-    const pageText = await run(process.env.TESSERACT_PATH || 'tesseract', [
+    const pageText = await run(tesseract, [
       page, 'stdout', '-l', process.env.OCR_LANGUAGES || 'hin+eng',
       '--psm', process.env.OCR_PSM || '6',
     ]);
@@ -209,18 +228,18 @@ exports.ocrPdf = async (pdfPath, importFileName, pageRange = {}) => {
         cells,
         Number(process.env.OCR_CELL_CONCURRENCY || 4),
         async (cell) => {
-          let cellText = await run(process.env.TESSERACT_PATH || 'tesseract', [
+          let cellText = await run(tesseract, [
             cell.ocr, 'stdout', '-l', process.env.OCR_LANGUAGES || 'hin+eng',
             '--psm', process.env.VOTER_CELL_OCR_PSM || '6',
           ]);
-          const epicText = await run(process.env.TESSERACT_PATH || 'tesseract', [
+          const epicText = await run(tesseract, [
             cell.epic, 'stdout', '-l', 'eng',
             '--psm', '7',
             '-c', 'tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/',
           ]);
           cellText = `${epicText.trim()}\n${cellText}`;
           if (!looksLikeVoterText(cellText)) {
-            const retryText = await run(process.env.TESSERACT_PATH || 'tesseract', [
+            const retryText = await run(tesseract, [
               cell.ocr, 'stdout', '-l', process.env.OCR_LANGUAGES || 'hin+eng',
               '--psm', '11',
             ]);
@@ -234,7 +253,7 @@ exports.ocrPdf = async (pdfPath, importFileName, pageRange = {}) => {
       voterCells.push(...fastRecords.filter(Boolean));
       continue;
       for (const cell of cells) {
-        let cellText = await run(process.env.TESSERACT_PATH || 'tesseract', [
+        let cellText = await run(tesseract, [
           cell.cell, 'stdout', '-l', process.env.OCR_LANGUAGES || 'hin+eng',
           '--psm', process.env.VOTER_CELL_OCR_PSM || '6',
         ]);
@@ -243,7 +262,7 @@ exports.ocrPdf = async (pdfPath, importFileName, pageRange = {}) => {
           continue;
         }
         if (!/निर्वा\S*\s+का\s+नाम/.test(cellText)) {
-          const retryText = await run(process.env.TESSERACT_PATH || 'tesseract', [
+          const retryText = await run(tesseract, [
             cell.cell, 'stdout', '-l', process.env.OCR_LANGUAGES || 'hin+eng',
             '--psm', '11',
           ]);

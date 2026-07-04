@@ -15,6 +15,15 @@ const { normalizeEpic, isValidEpic } = require('../utils/epic');
 const { convertKrutiDevToUnicode } = require('../utils/legacyHindi');
 const importProgress = new Map();
 
+const isWindows = process.platform === 'win32';
+const isWindowsExecutablePath = (value = '') => /^[a-z]:\\/i.test(String(value));
+const commandFromEnv = (envName, fallback) => {
+  const configured = process.env[envName];
+  if (!configured) return fallback;
+  if (!isWindows && isWindowsExecutablePath(configured)) return fallback;
+  return configured;
+};
+
 const progressId = (req) => String(req.body?.uploadId || req.params?.uploadId || req.query?.uploadId || '').replace(/[^a-z0-9_-]/gi, '').slice(0, 80);
 const setProgress = (id, patch) => {
   if (!id) return;
@@ -749,7 +758,7 @@ const parsePdfMembers = async (filePath, importFileName) => {
 };
 
 const extractPdfImages = async (filePath, importFileName) => {
-  const pdfimages = process.env.PDFIMAGES_PATH || 'pdfimages';
+  const pdfimages = commandFromEnv('PDFIMAGES_PATH', 'pdfimages');
   const safeBase = path.basename(importFileName, path.extname(importFileName)).replace(/[^a-z0-9_-]/gi, '-');
   const imageId = `${Date.now()}-${safeBase}`;
   const imageDir = uploadFilePath('pdf-images', imageId);
