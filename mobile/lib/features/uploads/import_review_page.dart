@@ -15,8 +15,8 @@ class _ImportReviewPageState extends State<ImportReviewPage> {
   @override
   Widget build(BuildContext context) => AppPage(children: [
         const PageHeading(
-            title: 'EPIC Review Queue',
-            subtitle: 'जिन voters का EPIC upload में नहीं पढ़ा गया'),
+            title: 'EPIC समीक्षा सूची',
+            subtitle: 'जिन मतदाताओं का EPIC अपलोड में नहीं पढ़ा गया'),
         FutureBlock<List<dynamic>>(
           load: () => api.list('/api/import-reviews'),
           builder: (items) => Column(
@@ -47,7 +47,7 @@ class _ImportReviewPageState extends State<ImportReviewPage> {
     final save = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('सही EPIC number'),
+        title: const Text('सही EPIC नंबर'),
         content: TextField(
             controller: epic,
             textCapitalization: TextCapitalization.characters,
@@ -58,7 +58,7 @@ class _ImportReviewPageState extends State<ImportReviewPage> {
               child: const Text('रद्द करें')),
           FilledButton(
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('Update / Merge')),
+              child: const Text('अपडेट करें')),
         ],
       ),
     );

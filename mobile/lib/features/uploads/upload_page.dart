@@ -83,19 +83,21 @@ class _UploadPageState extends State<UploadPage> {
         return progress;
       }
       if (progress['status'] == 'failed') {
-        throw Exception((progress['stage'] ?? 'PDF import failed').toString());
+        throw Exception(_localizedStage(
+            (progress['stage'] ?? 'PDF import failed').toString()));
       }
       await Future.delayed(const Duration(seconds: 2));
     }
     throw Exception(
-        'PDF import abhi bhi chal raha hai. Thodi der baad data refresh karke check karein.');
+        'PDF का आयात अभी चल रहा है। कुछ देर बाद मतदाता सूची दोबारा खोलकर देखें।');
   }
 
   Future<void> upload(bool pdf) async {
     if (uploading) return;
     final ok = await api.validateSession();
     if (!ok) {
-      setState(() => status = 'Session expired. Logout/login again.');
+      setState(() => status =
+          'आपका लॉगिन सत्र समाप्त हो गया है। कृपया दोबारा लॉगिन करें।');
       return;
     }
     final picked = await FilePicker.platform.pickFiles(
@@ -107,13 +109,13 @@ class _UploadPageState extends State<UploadPage> {
     if (picked == null) return;
     final file = picked.files.single;
     if (file.size <= 0) {
-      setState(() => status = 'Selected file is empty or cannot be read.');
+      setState(() => status = 'चुनी गई फाइल खाली है या पढ़ी नहीं जा सकती।');
       return;
     }
     const maxUploadBytes = 250 * 1024 * 1024;
     if (file.size > maxUploadBytes) {
-      setState(() =>
-          status = 'File is too large. Maximum upload size is 250 MB.');
+      setState(() => status =
+          'फाइल बहुत बड़ी है। अधिकतम 250 MB की फाइल अपलोड की जा सकती है।');
       return;
     }
     setState(() {
@@ -130,8 +132,7 @@ class _UploadPageState extends State<UploadPage> {
       serverUploadBytes = 0;
       serverUploadTotalBytes = 0;
       processingStage = '';
-      status =
-          'File upload ho rahi hai. Badi PDF me kuch samay lag sakta hai...';
+      status = 'फाइल अपलोड हो रही है। बड़ी PDF में कुछ समय लग सकता है…';
     });
     final uploadId = 'upload-${DateTime.now().millisecondsSinceEpoch}';
     startProgressPolling(uploadId);
@@ -154,8 +155,7 @@ class _UploadPageState extends State<UploadPage> {
             uploadTotalBytes = total > 0 ? total : file.size;
             if (sent >= uploadTotalBytes && uploadTotalBytes > 0) {
               serverProcessing = true;
-              status =
-                  'Upload complete. Server processing/import kar raha hai...';
+              status = 'फाइल अपलोड हो गई। अब मतदाता रिकॉर्ड तैयार हो रहे हैं…';
             }
           });
         },
@@ -165,7 +165,7 @@ class _UploadPageState extends State<UploadPage> {
         setState(() {
           serverProcessing = true;
           status =
-              'Upload complete. Server OCR/import background me chal raha hai...';
+              'फाइल अपलोड हो गई। PDF पढ़कर मतदाता रिकॉर्ड बनाए जा रहे हैं…';
         });
         res = await waitForImportCompletion(uploadId);
       }
@@ -174,7 +174,7 @@ class _UploadPageState extends State<UploadPage> {
       if (!mounted) return;
       setState(() {
         status =
-            'Mode: ${res['extractionMode'] ?? 'standard'} | Imported ${res['imported'] ?? 0}, skipped ${(res['skipped'] as List? ?? []).length}. Data auto-refresh ho gaya. ${res['imageExtractionStatus'] ?? ''}';
+            'आयात सफल रहा। ${res['imported'] ?? 0} मतदाता जोड़े गए और ${(res['skipped'] as List? ?? []).length} रिकॉर्ड समीक्षा के लिए छोड़े गए। मतदाता सूची अपने आप अपडेट हो गई है।';
       });
     } catch (e) {
       if (!mounted) return;
@@ -189,7 +189,7 @@ class _UploadPageState extends State<UploadPage> {
   Widget build(BuildContext context) => AppPage(children: [
         const PageHeading(
           title: 'PDF / Excel अपलोड',
-          subtitle: 'Badi voter-list files upload aur process karein',
+          subtitle: 'मतदाता सूची की PDF, Excel या CSV फाइल अपलोड करें',
         ),
         LayoutBuilder(
           builder: (context, constraints) {
@@ -200,8 +200,8 @@ class _UploadPageState extends State<UploadPage> {
               SizedBox(
                 width: width,
                 child: _UploadCard(
-                  title: 'Voter List PDF',
-                  description: 'Text/scanned PDF aur OCR support',
+                  title: 'मतदाता सूची PDF',
+                  description: 'टेक्स्ट और स्कैन की हुई दोनों PDF समर्थित हैं',
                   icon: Icons.picture_as_pdf,
                   color: Colors.red,
                   enabled: !uploading,
@@ -212,7 +212,7 @@ class _UploadPageState extends State<UploadPage> {
                 width: width,
                 child: _UploadCard(
                   title: 'Excel / CSV',
-                  description: 'Bulk voter aur family records import karein',
+                  description: 'एक साथ कई मतदाता रिकॉर्ड जोड़ें',
                   icon: Icons.table_view,
                   color: green,
                   enabled: !uploading,
@@ -224,8 +224,7 @@ class _UploadPageState extends State<UploadPage> {
         ),
         if (uploading || status.isNotEmpty)
           SectionCard(
-            title:
-                uploading ? 'Upload aur processing jaari hai' : 'Upload result',
+            title: uploading ? 'अपलोड और आयात जारी है' : 'अपलोड का परिणाम',
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               if (currentFile != null)
@@ -258,42 +257,40 @@ class _UploadPageState extends State<UploadPage> {
                 Text(
                   serverProcessing
                       ? totalRecords > 0
-                          ? 'Processing $processedRecords / $totalRecords records | Imported $importedRecords, skipped $skippedRecords'
-                          : '${processingStage.isEmpty ? 'Server processing kar raha hai' : processingStage}...'
-                      : 'Uploaded ${_formatBytes(uploadedBytes)} / ${_formatBytes(uploadTotalBytes > 0 ? uploadTotalBytes : currentBytes)}',
+                          ? '$totalRecords में से $processedRecords रिकॉर्ड तैयार हुए • $importedRecords जोड़े गए • $skippedRecords छोड़े गए'
+                          : '${processingStage.isEmpty ? 'PDF पढ़ी जा रही है' : _localizedStage(processingStage)}…'
+                      : '${_formatBytes(uploadTotalBytes > 0 ? uploadTotalBytes : currentBytes)} में से ${_formatBytes(uploadedBytes)} अपलोड हुआ',
                   style:
                       const TextStyle(color: navy, fontWeight: FontWeight.w800),
                 ),
                 if (serverProcessing && processingStage.isNotEmpty) ...[
                   const SizedBox(height: 4),
-                  Text(processingStage, style: const TextStyle(color: muted)),
+                  Text(_localizedStage(processingStage),
+                      style: const TextStyle(color: muted)),
                 ],
                 const SizedBox(height: 8),
                 const Text(
-                  'App band na karein. Upload ke baad PDF/OCR processing me kuch minute lag sakte hain.',
+                  'कृपया ऐप बंद न करें। फाइल अपलोड होने के बाद PDF पढ़ने और मतदाता जोड़ने में कुछ मिनट लग सकते हैं।',
                   style: TextStyle(color: muted),
                 ),
               ] else
                 Text(
                   status,
                   style: TextStyle(
-                    color: status.contains('Imported') ? green : Colors.red,
+                    color: status.startsWith('आयात सफल') ? green : Colors.red,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
             ]),
           ),
         const SectionCard(
-          title: 'Large file support',
+          title: 'जरूरी जानकारी',
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('• Maximum upload size: 250 MB'),
-            Text(
-                '• Upload progress aur server import progress alag-alag dikhega'),
-            Text(
-                '• OCR/PDF processing upload complete hone ke baad bhi chal sakti hai'),
-            Text(
-                '• Ward/booth PDF se detect hone par automatic create hote hain'),
+            Text('• अधिकतम 250 MB की फाइल अपलोड की जा सकती है।'),
+            Text('• अपलोड और रिकॉर्ड आयात की प्रगति अलग-अलग दिखाई जाएगी।'),
+            Text('• स्कैन की हुई PDF पढ़ने में कुछ मिनट लग सकते हैं।'),
+            Text('• PDF में मिले वार्ड और बूथ अपने आप बनाए जाएंगे।'),
           ]),
         ),
       ]);
@@ -358,5 +355,25 @@ String _formatBytes(int bytes) {
     return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
   if (bytes >= 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-  return '$bytes bytes';
+  return '$bytes बाइट';
+}
+
+String _localizedStage(String stage) {
+  const stages = {
+    'Waiting for upload': 'फाइल अपलोड होने की प्रतीक्षा है',
+    'Receiving file on server': 'फाइल सर्वर पर भेजी जा रही है',
+    'Upload received. Preparing import':
+        'फाइल मिल गई, आयात की तैयारी हो रही है',
+    'Upload received. PDF/OCR import running in background':
+        'PDF पढ़कर मतदाता रिकॉर्ड बनाए जा रहे हैं',
+    'Reading PDF/OCR text': 'PDF का टेक्स्ट पढ़ा जा रहा है',
+    'Reading Excel/CSV file': 'Excel / CSV फाइल पढ़ी जा रही है',
+    'Importing voter rows': 'मतदाता रिकॉर्ड जोड़े जा रहे हैं',
+    'PDF records detected': 'PDF में मिले मतदाता रिकॉर्ड तैयार किए जा रहे हैं',
+    'Building family records': 'परिवार रिकॉर्ड बनाए जा रहे हैं',
+    'Import complete': 'आयात पूरा हो गया',
+    'PDF import failed': 'PDF का आयात असफल रहा',
+    'Excel/CSV import failed': 'Excel / CSV का आयात असफल रहा',
+  };
+  return stages[stage] ?? stage;
 }

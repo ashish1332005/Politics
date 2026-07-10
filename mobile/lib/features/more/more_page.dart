@@ -23,56 +23,51 @@ class MorePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final importOptions = <_Option>[
-      _Option('PDF / Excel अपलोड', 'Voter list और bulk records import करें',
+      _Option('PDF / Excel अपलोड', 'मतदाता सूची से एक साथ रिकॉर्ड जोड़ें',
           Icons.cloud_upload_rounded, orange, const UploadPage()),
       if (role == 'admin')
-        _Option('Smart Excel Import', 'Column mapping और update preview',
+        _Option('Excel का विस्तृत आयात', 'कॉलम मिलाएं और रिकॉर्ड पहले जांचें',
             Icons.rule_folder_rounded, green, const SmartExcelImportPage()),
       if (role == 'admin')
-        _Option(
-            'EPIC Review Queue',
-            'Missing/duplicate EPIC records merge करें',
-            Icons.fact_check_rounded,
-            purple,
-            const ImportReviewPage()),
+        _Option('EPIC समीक्षा सूची', 'अधूरे या दोहराए गए EPIC रिकॉर्ड ठीक करें',
+            Icons.fact_check_rounded, purple, const ImportReviewPage()),
     ];
     final workOptions = <_Option>[
-      _Option('Advanced Print', 'Selected voters + custom fields print करें',
+      _Option('विस्तृत प्रिंट', 'चुने हुए मतदाता और जानकारी प्रिंट करें',
           Icons.print_rounded, blue, const ConfigurablePrintPage()),
       if (role == 'admin')
-        _Option('WhatsApp Campaign', 'QR sender, drafts और paced bulk queue',
+        _Option('WhatsApp अभियान', 'संदेश बनाएं और समूह में भेजें',
             Icons.campaign_rounded, green, const BulkMessagePage()),
       _Option(
-          'Follow-up Dashboard',
-          'आज, overdue और upcoming reminders',
+          'संपर्क अनुस्मारक',
+          'आज के, लंबित और आने वाले काम देखें',
           Icons.notifications_active_rounded,
           orange,
           const ReminderDashboardPage()),
     ];
     final reportOptions = <_Option>[
-      _Option('Political Dashboard', 'Strong/weak booth और undecided analysis',
+      _Option('राजनीतिक विश्लेषण', 'मजबूत, कमजोर बूथ और अनिर्णीत मतदाता देखें',
           Icons.insights_rounded, blue, const PoliticalDashboardPage()),
-      _Option('रिपोर्ट', 'सभी reports देखें और download करें',
+      _Option('रिपोर्ट', 'सभी रिपोर्ट देखें और डाउनलोड करें',
           Icons.bar_chart_rounded, orange, const ReportsPage()),
-      _Option('गतिविधि लॉग', 'Import, update और user activity देखें',
+      _Option('गतिविधि लॉग', 'आयात, बदलाव और उपयोगकर्ता गतिविधि देखें',
           Icons.history_rounded, const Color(0xff10a9a0), const ActivityPage()),
     ];
     final adminOptions = <_Option>[
       if (role == 'admin')
-        _Option('बूथ प्रबंधन', 'बूथ की जानकारी जोड़ें और edit करें',
+        _Option('बूथ प्रबंधन', 'बूथ की जानकारी जोड़ें और बदलें',
             Icons.how_to_vote_rounded, blue, const BoothPage()),
       if (role == 'admin')
-        _Option('बूथ उपयोगकर्ता', 'Users जोड़ें और booth assign करें',
+        _Option('बूथ उपयोगकर्ता', 'उपयोगकर्ता जोड़ें और बूथ निर्धारित करें',
             Icons.supervisor_account_rounded, green, const BoothUserPage()),
-      _Option('सेटिंग्स', 'Backup, sync और app settings',
+      _Option('सेटिंग्स', 'बैकअप, सिंक और ऐप की सेटिंग्स',
           Icons.settings_rounded, purple, const SettingsPage()),
     ];
 
     return AppPage(children: [
       AppHeroBanner(
         title: 'अधिक विकल्प',
-        subtitle:
-            'कम इस्तेमाल होने वाले features को categories में रखा है ताकि mobile पर जल्दी मिलें',
+        subtitle: 'सभी अतिरिक्त सुविधाएं यहां आसानी से मिलेंगी',
         icon: Icons.grid_view_rounded,
         primaryAction: FilledButton.icon(
           style: FilledButton.styleFrom(
@@ -80,13 +75,14 @@ class MorePage extends StatelessWidget {
           onPressed: () =>
               _open(context, const UploadPage(), 'PDF / Excel अपलोड'),
           icon: const Icon(Icons.upload_file_rounded),
-          label: const Text('Import Data'),
+          label: const Text('फाइल अपलोड'),
         ),
       ),
-      _OptionSection(title: 'डेटा Import और Review', options: importOptions),
-      _OptionSection(title: 'काम और Communication', options: workOptions),
-      _OptionSection(title: 'Reports और Analysis', options: reportOptions),
-      _OptionSection(title: 'Admin और Settings', options: adminOptions),
+      _OptionSection(
+          title: 'जानकारी का आयात और समीक्षा', options: importOptions),
+      _OptionSection(title: 'काम और संपर्क', options: workOptions),
+      _OptionSection(title: 'रिपोर्ट और विश्लेषण', options: reportOptions),
+      _OptionSection(title: 'प्रबंधन और सेटिंग्स', options: adminOptions),
     ]);
   }
 

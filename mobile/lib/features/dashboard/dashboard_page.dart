@@ -43,7 +43,7 @@ class DashboardPage extends StatelessWidget {
               AppHeroBanner(
                 title: 'नमस्कार, ${api.user?['name'] ?? 'Admin'} 👋',
                 subtitle:
-                    'आज के जरूरी काम, मतदाता डेटा और संगठन की स्थिति एक साफ dashboard में',
+                    'आज के जरूरी काम, मतदाता जानकारी और संगठन की स्थिति एक ही जगह देखें',
                 icon: Icons.dashboard_customize_rounded,
                 trailing: Wrap(spacing: 10, runSpacing: 10, children: [
                   VisualSummaryCard(
@@ -78,7 +78,7 @@ class DashboardPage extends StatelessWidget {
                   onPressed: () => Navigator.push(context,
                       MaterialPageRoute(builder: (_) => const UploadPage())),
                   icon: const Icon(Icons.upload_file_rounded),
-                  label: const Text('Import'),
+                  label: const Text('फाइल अपलोड'),
                 ),
               ),
               _MetricGrid(items: [
@@ -136,7 +136,7 @@ class DashboardPage extends StatelessWidget {
                 _ActionData(
                     Icons.print_rounded,
                     'चयन एवं प्रिंट',
-                    'कस्टम फील्ड के साथ bulk print',
+                    'चुनी हुई जानकारी के साथ एक साथ प्रिंट करें',
                     blue,
                     () => Navigator.push(
                         context,
@@ -237,7 +237,7 @@ class _BoothManagerHome extends StatelessWidget {
                 child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Welcome, ${user['name'] ?? 'Booth manager'}',
+                      Text('नमस्कार, ${user['name'] ?? 'बूथ प्रबंधक'}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
@@ -245,7 +245,7 @@ class _BoothManagerHome extends StatelessWidget {
                               fontSize: 18,
                               fontWeight: FontWeight.w900)),
                       Text(
-                          'Booth ${booth['number'] ?? '-'} · ${booth['name'] ?? 'Assigned booth'}',
+                          'बूथ ${booth['number'] ?? '-'} · ${booth['name'] ?? 'निर्धारित बूथ'}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
@@ -255,9 +255,9 @@ class _BoothManagerHome extends StatelessWidget {
             ]),
             const SizedBox(height: 14),
             Wrap(spacing: 8, runSpacing: 8, children: [
-              _LightPill(Icons.how_to_vote_rounded, '$total voters'),
-              _LightPill(Icons.home_work_rounded, '$families families'),
-              _LightPill(Icons.person_add_alt_rounded, '$today added today'),
+              _LightPill(Icons.how_to_vote_rounded, '$total मतदाता'),
+              _LightPill(Icons.home_work_rounded, '$families परिवार'),
+              _LightPill(Icons.person_add_alt_rounded, 'आज $today जोड़े'),
             ]),
           ]),
         ),
@@ -268,54 +268,53 @@ class _BoothManagerHome extends StatelessWidget {
             SizedBox(
                 width: width,
                 child: MetricCard(
-                    label: 'Voters',
+                    label: 'मतदाता',
                     value: '$total',
                     icon: Icons.groups_rounded,
                     color: blue,
-                    caption: 'Your booth')),
+                    caption: 'आपका बूथ')),
             SizedBox(
                 width: width,
                 child: MetricCard(
-                    label: 'Supporters',
+                    label: 'समर्थक',
                     value: '$supporter',
                     icon: Icons.thumb_up_alt_rounded,
                     color: green,
-                    caption: 'Marked support')),
+                    caption: 'चिह्नित समर्थन')),
             SizedBox(
                 width: width,
                 child: MetricCard(
-                    label: 'Review',
+                    label: 'समीक्षा',
                     value: '$review',
                     icon: Icons.fact_check_rounded,
                     color: review > 0 ? orange : green,
-                    caption: 'Needs attention')),
+                    caption: 'जांच आवश्यक')),
             SizedBox(
                 width: width,
                 child: MetricCard(
-                    label: 'Missing',
+                    label: 'अधूरी जानकारी',
                     value: '${missingMobile + missingHouse}',
                     icon: Icons.error_outline_rounded,
                     color: rose,
-                    caption: 'Mobile/house')),
+                    caption: 'मोबाइल / घर संख्या')),
           ]);
         }),
         _SectionHeading(
-            title: 'Quick work',
-            subtitle: 'Open the task you need without hunting through menus'),
+            title: 'जरूरी काम', subtitle: 'अपना काम सीधे यहां से खोलें'),
         _ActionGrid(actions: [
-          _ActionData(Icons.search_rounded, 'Search voters',
-              'Find by name, EPIC, mobile or house', blue, () => onNavigate(1)),
-          _ActionData(Icons.person_add_alt_1_rounded, 'Add voter',
-              'Create a voter in your booth', green, () => onNavigate(1)),
-          _ActionData(Icons.print_rounded, 'Print list',
-              'Bulk print selected voter data', orange, () {
+          _ActionData(Icons.search_rounded, 'मतदाता खोजें',
+              'नाम, EPIC, मोबाइल या घर से खोजें', blue, () => onNavigate(1)),
+          _ActionData(Icons.person_add_alt_1_rounded, 'मतदाता जोड़ें',
+              'अपने बूथ में नया मतदाता जोड़ें', green, () => onNavigate(1)),
+          _ActionData(Icons.print_rounded, 'सूची प्रिंट करें',
+              'चुने हुए मतदाताओं की जानकारी प्रिंट करें', orange, () {
             Navigator.push(
                 context,
                 MaterialPageRoute(
                     builder: (_) => const ConfigurablePrintPage()));
           }),
-          _ActionData(Icons.family_restroom_rounded, 'Families',
-              'Review family records', purple, () => onNavigate(2)),
+          _ActionData(Icons.family_restroom_rounded, 'परिवार',
+              'परिवार रिकॉर्ड देखें', purple, () => onNavigate(2)),
         ]),
         LayoutBuilder(builder: (context, constraints) {
           final wide = constraints.maxWidth >= 780;
@@ -325,8 +324,8 @@ class _BoothManagerHome extends StatelessWidget {
             SizedBox(
               width: width,
               child: SectionCard(
-                title: 'Support status',
-                subtitle: 'Current political marking in this booth',
+                title: 'समर्थन स्थिति',
+                subtitle: 'इस बूथ की वर्तमान राजनीतिक स्थिति',
                 icon: Icons.pie_chart_rounded,
                 child: Row(children: [
                   DonutChart(
@@ -341,9 +340,9 @@ class _BoothManagerHome extends StatelessWidget {
                   const SizedBox(width: 14),
                   Expanded(
                     child: Column(children: [
-                      _LegendRow('Supporter', supporter, blue),
-                      _LegendRow('Opposite', opposite, orange),
-                      _LegendRow('Neutral', neutral, purple),
+                      _LegendRow('समर्थक', supporter, blue),
+                      _LegendRow('विपक्ष', opposite, orange),
+                      _LegendRow('तटस्थ', neutral, purple),
                     ]),
                   ),
                 ]),
@@ -352,19 +351,19 @@ class _BoothManagerHome extends StatelessWidget {
             SizedBox(
               width: width,
               child: SectionCard(
-                title: 'Data tasks',
-                subtitle: 'Keep booth voter data usable',
+                title: 'जानकारी सुधारें',
+                subtitle: 'अधूरी मतदाता जानकारी पूरी करें',
                 icon: Icons.checklist_rounded,
                 action: TextButton(
                     onPressed: () => onNavigate(1),
-                    child: const Text('Open voters')),
+                    child: const Text('मतदाता खोलें')),
                 child: Column(children: [
-                  _QualityRow(Icons.phone_rounded, 'Missing mobile',
+                  _QualityRow(Icons.phone_rounded, 'मोबाइल नंबर नहीं है',
                       missingMobile, total, rose),
-                  _QualityRow(Icons.home_rounded, 'Missing house number',
+                  _QualityRow(Icons.home_rounded, 'घर संख्या नहीं है',
                       missingHouse, total, orange),
-                  _QualityRow(Icons.fact_check_rounded, 'Needs review', review,
-                      total, purple),
+                  _QualityRow(Icons.fact_check_rounded, 'समीक्षा आवश्यक',
+                      review, total, purple),
                 ]),
               ),
             ),
@@ -595,7 +594,7 @@ class _SupportCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => SectionCard(
         title: 'समर्थन स्थिति',
-        subtitle: 'समर्थक / विपक्ष / अनिर्णीत snapshot',
+        subtitle: 'समर्थक, विपक्ष और अनिर्णीत मतदाताओं का सारांश',
         icon: Icons.pie_chart_rounded,
         child: Row(children: [
           DonutChart(values: [
@@ -659,7 +658,7 @@ class _QualityCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => SectionCard(
         title: 'डेटा गुणवत्ता',
-        subtitle: 'गलत या missing data जल्दी पकड़ें',
+        subtitle: 'गलत या अधूरी जानकारी जल्दी पहचानें',
         icon: Icons.health_and_safety_rounded,
         action:
             TextButton(onPressed: onOpen, child: const Text('रिकॉर्ड देखें')),
@@ -729,7 +728,7 @@ class _ActivityCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => SectionCard(
         title: 'हाल की गतिविधि',
-        subtitle: 'नए changes और import updates',
+        subtitle: 'हाल के बदलाव और आयात की जानकारी',
         icon: Icons.history_rounded,
         child: items.isEmpty
             ? const _EmptyState(
