@@ -4,6 +4,15 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+class NetworkRequestException implements Exception {
+  const NetworkRequestException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
 class DownloadedFile {
   const DownloadedFile({
     required this.bytes,
@@ -70,6 +79,64 @@ class Api {
         if (token != null) 'Authorization': 'Bearer $token',
       };
 
+  bool _isTransientNetworkError(Object error) {
+    if (error is NetworkRequestException) return true;
+    final message = error.toString().toLowerCase();
+    return message.contains('socketexception') ||
+        message.contains('failed host lookup') ||
+        message.contains('connection reset by peer') ||
+        message.contains('connection closed') ||
+        message.contains('connection refused') ||
+        message.contains('network is unreachable') ||
+        message.contains('clientexception') ||
+        message.contains('xmlhttprequest error') ||
+        message.contains('failed to fetch');
+  }
+
+  NetworkRequestException _friendlyNetworkError(Object error) {
+    final message = error.toString().toLowerCase();
+    if (message.contains('failed host lookup')) {
+      return const NetworkRequestException(
+        'सर्वर का पता नहीं मिला। इंटरनेट चालू रखें, VPN या Private DNS बंद करके फिर प्रयास करें।',
+      );
+    }
+    if (message.contains('connection reset by peer') ||
+        message.contains('connection closed')) {
+      return const NetworkRequestException(
+        'सर्वर से कनेक्शन बीच में बंद हो गया। नेटवर्क बदलकर फिर अपलोड करें।',
+      );
+    }
+    return const NetworkRequestException(
+      'सर्वर से संपर्क नहीं हो सका। इंटरनेट कनेक्शन जांचकर फिर प्रयास करें।',
+    );
+  }
+
+  Future<T> _withNetworkRetry<T>(
+    Future<T> Function() operation, {
+    int attempts = 3,
+    bool retryConnectionReset = true,
+  }) async {
+    Object? lastError;
+    for (var attempt = 1; attempt <= attempts; attempt++) {
+      try {
+        return await operation();
+      } catch (error) {
+        if (!_isTransientNetworkError(error)) rethrow;
+        lastError = error;
+        final message = error.toString().toLowerCase();
+        if (!retryConnectionReset &&
+            (message.contains('connection reset by peer') ||
+                message.contains('connection closed'))) {
+          break;
+        }
+        if (attempt < attempts) {
+          await Future.delayed(Duration(seconds: attempt));
+        }
+      }
+    }
+    throw _friendlyNetworkError(lastError!);
+  }
+
   Future<dynamic> _send(Future<http.Response> future) async {
     final res = await future;
     dynamic body;
@@ -101,9 +168,10 @@ class Api {
   }
 
   Future<Map<String, dynamic>> login(String email, String password) async {
-    final data = await _send(http.post(Uri.parse('$baseUrl/api/auth/login'),
+    final data = await _withNetworkRetry(() => _send(http.post(
+        Uri.parse('$baseUrl/api/auth/login'),
         headers: headers,
-        body: json.encode({'email': email, 'password': password})));
+        body: json.encode({'email': email, 'password': password}))));
     token = data['token'];
     user = Map<String, dynamic>.from(data['user']);
     await _persistSession();
@@ -117,7 +185,10 @@ class Api {
       user = await get('/api/auth/me');
       await _persistSession();
       return true;
-    } catch (_) {
+    } catch (error) {
+      if (error is NetworkRequestException) {
+        return user != null;
+      }
       await _clearSession();
       return false;
     }
@@ -134,14 +205,17 @@ class Api {
       final value = entry.value;
       if (value != null && value.isNotEmpty) clean[entry.key] = value;
     }
-    return await _send(http.get(
-        Uri.parse('$baseUrl$path').replace(queryParameters: clean),
-        headers: headers));
+    return List<dynamic>.from(await _withNetworkRetry<dynamic>(() => _send(
+          http.get(
+            Uri.parse('$baseUrl$path').replace(queryParameters: clean),
+            headers: headers,
+          ),
+        )));
   }
 
   Future<Map<String, dynamic>> get(String path) async =>
-      Map<String, dynamic>.from(
-          await _send(http.get(Uri.parse('$baseUrl$path'), headers: headers)));
+      Map<String, dynamic>.from(await _withNetworkRetry<dynamic>(
+          () => _send(http.get(Uri.parse('$baseUrl$path'), headers: headers))));
   Future<Map<String, dynamic>> getQuery(String path,
       [Map<String, String?> query = const {}]) async {
     final clean = <String, String>{};
@@ -149,25 +223,37 @@ class Api {
       final value = entry.value;
       if (value != null && value.isNotEmpty) clean[entry.key] = value;
     }
-    return Map<String, dynamic>.from(await _send(http.get(
-        Uri.parse('$baseUrl$path').replace(queryParameters: clean),
-        headers: headers)));
+    return Map<String, dynamic>.from(await _withNetworkRetry<dynamic>(() =>
+        _send(http.get(
+            Uri.parse('$baseUrl$path').replace(queryParameters: clean),
+            headers: headers))));
   }
 
   Future<Map<String, dynamic>> post(String path, Map data) async =>
-      Map<String, dynamic>.from(await _send(http.post(
-          Uri.parse('$baseUrl$path'),
-          headers: headers,
-          body: json.encode(data))));
+      Map<String, dynamic>.from(await _withNetworkRetry<dynamic>(
+          () => _send(http.post(
+                Uri.parse('$baseUrl$path'),
+                headers: headers,
+                body: json.encode(data),
+              )),
+          attempts: 1));
   Future<Map<String, dynamic>> put(String path, Map data) async =>
-      Map<String, dynamic>.from(await _send(http.put(Uri.parse('$baseUrl$path'),
-          headers: headers, body: json.encode(data))));
-  Future<void> delete(String path) async =>
-      await _send(http.delete(Uri.parse('$baseUrl$path'), headers: headers));
+      Map<String, dynamic>.from(await _withNetworkRetry<dynamic>(
+          () => _send(http.put(
+                Uri.parse('$baseUrl$path'),
+                headers: headers,
+                body: json.encode(data),
+              )),
+          attempts: 1));
+  Future<void> delete(String path) async => await _withNetworkRetry(
+      () => _send(http.delete(Uri.parse('$baseUrl$path'), headers: headers)),
+      attempts: 1);
   Future<Map<String, dynamic>> deleteWithBody(String path, Map data) async =>
       Map<String, dynamic>.from(
-        await _send(http.delete(Uri.parse('$baseUrl$path'),
-            headers: headers, body: json.encode(data))),
+        await _withNetworkRetry<dynamic>(
+            () => _send(http.delete(Uri.parse('$baseUrl$path'),
+                headers: headers, body: json.encode(data))),
+            attempts: 1),
       );
 
   Future<DownloadedFile> download(String path,
@@ -179,7 +265,7 @@ class Api {
       if (value != null && value.isNotEmpty) clean[entry.key] = value;
     }
     final uri = Uri.parse('$baseUrl$path').replace(queryParameters: clean);
-    final res = await http.get(uri, headers: headers);
+    final res = await _withNetworkRetry(() => http.get(uri, headers: headers));
     if (res.statusCode >= 400) {
       final contentType = res.headers['content-type'] ?? '';
       if (contentType.contains('application/json') ||
@@ -228,40 +314,61 @@ class Api {
         ? Uri.parse('$baseUrl$path')
         : Uri.parse('$baseUrl$path')
             .replace(queryParameters: {'uploadId': uploadId});
-    final request = http.MultipartRequest(method, uri);
-    if (token != null) request.headers['Authorization'] = 'Bearer $token';
-    request.fields.addAll(fields);
-    if (fileStream != null && fileLength != null && fileLength > 0) {
-      final file = http.MultipartFile(fileField, fileStream, fileLength,
-          filename: filename);
-      request.files.add(_trackMultipartProgress(file, onProgress));
-    } else if (filePath != null && filePath.isNotEmpty) {
-      final file = await http.MultipartFile.fromPath(fileField, filePath,
-          filename: filename);
-      request.files.add(_trackMultipartProgress(file, onProgress));
-    } else if (bytes != null) {
-      final file =
-          http.MultipartFile.fromBytes(fileField, bytes, filename: filename);
-      request.files.add(_trackMultipartProgress(file, onProgress));
-    } else {
-      throw Exception('चुनी गई फाइल पढ़ी नहीं जा सकी।');
-    }
-    try {
+    Future<Map<String, dynamic>> sendRequest({
+      String? pathSource,
+      Uint8List? byteSource,
+      Stream<List<int>>? streamSource,
+    }) async {
+      final request = http.MultipartRequest(method, uri);
+      if (token != null) request.headers['Authorization'] = 'Bearer $token';
+      request.fields.addAll(fields);
+      if (pathSource != null && pathSource.isNotEmpty) {
+        final file = await http.MultipartFile.fromPath(fileField, pathSource,
+            filename: filename);
+        request.files.add(_trackMultipartProgress(file, onProgress));
+      } else if (byteSource != null) {
+        final file = http.MultipartFile.fromBytes(fileField, byteSource,
+            filename: filename);
+        request.files.add(_trackMultipartProgress(file, onProgress));
+      } else if (streamSource != null && fileLength != null && fileLength > 0) {
+        final file = http.MultipartFile(fileField, streamSource, fileLength,
+            filename: filename);
+        request.files.add(_trackMultipartProgress(file, onProgress));
+      } else {
+        throw Exception('चुनी गई फाइल पढ़ी नहीं जा सकी।');
+      }
       final streamed = await request.send();
       final response = await http.Response.fromStream(streamed);
       return Map<String, dynamic>.from(await _send(Future.value(response)));
-    } catch (error) {
-      final message = error.toString();
-      if (message.contains('XMLHttpRequest error') ||
-          message.contains('Failed to fetch') ||
-          message.contains('ClientException')) {
-        throw Exception(
-          'Backend से संपर्क नहीं हो सका। API $baseUrl पर चल रही है या नहीं, '
-          'CORS और HTTPS सेटिंग जांचें।',
-        );
-      }
-      rethrow;
     }
+
+    if (filePath != null && filePath.isNotEmpty) {
+      try {
+        return await _withNetworkRetry(
+          () => sendRequest(pathSource: filePath),
+          retryConnectionReset: false,
+        );
+      } catch (error) {
+        final message = error.toString().toLowerCase();
+        final unreadablePath = message.contains('filesystemexception') ||
+            message.contains('cannot open file') ||
+            message.contains('no such file');
+        if (!unreadablePath || fileStream == null) rethrow;
+      }
+    }
+    if (bytes != null) {
+      return _withNetworkRetry(
+        () => sendRequest(byteSource: bytes),
+        retryConnectionReset: false,
+      );
+    }
+    if (fileStream != null) {
+      return _withNetworkRetry(
+        () => sendRequest(streamSource: fileStream),
+        attempts: 1,
+      );
+    }
+    throw Exception('चुनी गई फाइल पढ़ी नहीं जा सकी।');
   }
 
   http.MultipartFile _trackMultipartProgress(
