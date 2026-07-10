@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -30,39 +28,7 @@ class _UploadPageState extends State<UploadPage> {
   int totalRecords = 0;
   int importedRecords = 0;
   int skippedRecords = 0;
-  int serverUploadBytes = 0;
-  int serverUploadTotalBytes = 0;
   String processingStage = '';
-  Timer? progressTimer;
-
-  @override
-  void dispose() {
-    progressTimer?.cancel();
-    super.dispose();
-  }
-
-  void startProgressPolling(String uploadId) {
-    progressTimer?.cancel();
-    progressTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
-      try {
-        final progress = await api.get('/api/import/status/$uploadId');
-        if (!mounted) return;
-        setState(() {
-          processingStage = (progress['stage'] ?? '').toString();
-          processedRecords = ((progress['processed'] ?? 0) as num).toInt();
-          totalRecords = ((progress['total'] ?? 0) as num).toInt();
-          importedRecords = ((progress['imported'] ?? 0) as num).toInt();
-          skippedRecords = ((progress['skipped'] ?? 0) as num).toInt();
-          serverUploadBytes = ((progress['uploadBytes'] ?? 0) as num).toInt();
-          serverUploadTotalBytes =
-              ((progress['uploadTotalBytes'] ?? 0) as num).toInt();
-          if (progress['status'] == 'processing' || totalRecords > 0) {
-            serverProcessing = true;
-          }
-        });
-      } catch (_) {}
-    });
-  }
 
   Future<Map<String, dynamic>> waitForImportCompletion(String uploadId) async {
     final deadline = DateTime.now().add(const Duration(minutes: 35));
@@ -129,13 +95,10 @@ class _UploadPageState extends State<UploadPage> {
       totalRecords = 0;
       importedRecords = 0;
       skippedRecords = 0;
-      serverUploadBytes = 0;
-      serverUploadTotalBytes = 0;
       processingStage = '';
       status = 'फाइल अपलोड हो रही है। बड़ी PDF में कुछ समय लग सकता है…';
     });
     final uploadId = 'upload-${DateTime.now().millisecondsSinceEpoch}';
-    startProgressPolling(uploadId);
     try {
       var res = await api.uploadFile(
         pdf ? '/api/import/members/pdf' : '/api/import/members',
@@ -180,7 +143,6 @@ class _UploadPageState extends State<UploadPage> {
       if (!mounted) return;
       setState(() => status = e.toString().replaceFirst('Exception: ', ''));
     } finally {
-      progressTimer?.cancel();
       if (mounted) setState(() => uploading = false);
     }
   }
@@ -241,17 +203,17 @@ class _UploadPageState extends State<UploadPage> {
               if (uploading) ...[
                 LinearProgressIndicator(
                   minHeight: 7,
-                  value: serverProcessing && totalRecords > 0
-                      ? (processedRecords / totalRecords).clamp(0, 1).toDouble()
-                      : serverUploadTotalBytes > 0
-                          ? (serverUploadBytes / serverUploadTotalBytes)
+                  value: serverProcessing
+                      ? totalRecords > 0
+                          ? (processedRecords / totalRecords)
                               .clamp(0, 1)
                               .toDouble()
-                          : uploadTotalBytes > 0
-                              ? (uploadedBytes / uploadTotalBytes)
-                                  .clamp(0, 1)
-                                  .toDouble()
-                              : null,
+                          : null
+                      : uploadTotalBytes > 0
+                          ? (uploadedBytes / uploadTotalBytes)
+                              .clamp(0, 1)
+                              .toDouble()
+                          : null,
                 ),
                 const SizedBox(height: 10),
                 Text(
