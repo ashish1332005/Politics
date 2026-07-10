@@ -218,6 +218,8 @@ class Api {
     String fileField = 'file',
     String? filePath,
     Uint8List? bytes,
+    Stream<List<int>>? fileStream,
+    int? fileLength,
     Map<String, String> fields = const {},
     void Function(int sent, int total)? onProgress,
   }) async {
@@ -229,7 +231,11 @@ class Api {
     final request = http.MultipartRequest(method, uri);
     if (token != null) request.headers['Authorization'] = 'Bearer $token';
     request.fields.addAll(fields);
-    if (filePath != null && filePath.isNotEmpty) {
+    if (fileStream != null && fileLength != null && fileLength > 0) {
+      final file = http.MultipartFile(fileField, fileStream, fileLength,
+          filename: filename);
+      request.files.add(_trackMultipartProgress(file, onProgress));
+    } else if (filePath != null && filePath.isNotEmpty) {
       final file = await http.MultipartFile.fromPath(fileField, filePath,
           filename: filename);
       request.files.add(_trackMultipartProgress(file, onProgress));

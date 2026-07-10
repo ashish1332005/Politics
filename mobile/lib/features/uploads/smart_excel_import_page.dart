@@ -28,6 +28,7 @@ class _SmartExcelImportPageState extends State<SmartExcelImportPage> {
       type: FileType.custom,
       allowedExtensions: const ['xlsx', 'xls', 'csv'],
       withData: kIsWeb,
+      withReadStream: !kIsWeb,
     );
     if (result == null) return;
     final file = result.files.single;
@@ -37,6 +38,8 @@ class _SmartExcelImportPageState extends State<SmartExcelImportPage> {
       filename: file.name,
       filePath: pickedFilePath(file),
       bytes: pickedFileBytes(file),
+      fileStream: file.readStream,
+      fileLength: file.size,
     );
     setState(() {
       preview = data;

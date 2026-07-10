@@ -102,9 +102,20 @@ class _UploadPageState extends State<UploadPage> {
       type: FileType.custom,
       allowedExtensions: pdf ? ['pdf'] : ['xlsx', 'xls', 'csv'],
       withData: kIsWeb,
+      withReadStream: !kIsWeb,
     );
     if (picked == null) return;
     final file = picked.files.single;
+    if (file.size <= 0) {
+      setState(() => status = 'Selected file is empty or cannot be read.');
+      return;
+    }
+    const maxUploadBytes = 250 * 1024 * 1024;
+    if (file.size > maxUploadBytes) {
+      setState(() =>
+          status = 'File is too large. Maximum upload size is 250 MB.');
+      return;
+    }
     setState(() {
       uploading = true;
       currentFile = file.name;
@@ -130,6 +141,8 @@ class _UploadPageState extends State<UploadPage> {
         filename: file.name,
         filePath: pickedFilePath(file),
         bytes: pickedFileBytes(file),
+        fileStream: file.readStream,
+        fileLength: file.size,
         fields: {
           'uploadId': uploadId,
           if (pdf) 'asyncImport': 'true',
