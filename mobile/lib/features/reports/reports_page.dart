@@ -30,7 +30,7 @@ class ReportsPage extends StatelessWidget {
                       MaterialPageRoute(
                           builder: (_) => const ConfigurablePrintPage())),
                   icon: const Icon(Icons.print_rounded),
-                  label: const Text('Smart Bulk Print')),
+                  label: const Text('मतदाता सूची प्रिंट')),
             ),
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,

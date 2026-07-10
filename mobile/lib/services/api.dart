@@ -87,10 +87,10 @@ class Api {
       if (res.body.trimLeft().startsWith('<!DOCTYPE html') ||
           res.body.trimLeft().startsWith('<html')) {
         throw Exception(
-            'Backend ne JSON ki jagah Render error page bheja. Service deploy/restart/crash ho sakti hai. Render logs check karein. API: $baseUrl. Preview: $preview');
+            'सर्वर ने गलत उत्तर भेजा है। सेवा कुछ समय के लिए बंद या दोबारा शुरू हो रही हो सकती है। API: $baseUrl। विवरण: $preview');
       }
       throw Exception(
-          'API returned non-JSON response. Check backend is running at $baseUrl. Preview: $preview');
+          'सर्वर से सही उत्तर नहीं मिला। $baseUrl पर सेवा की स्थिति जांचें। विवरण: $preview');
     }
     if (res.statusCode >= 400) {
       throw Exception(body is Map
@@ -244,7 +244,7 @@ class Api {
           http.MultipartFile.fromBytes(fileField, bytes, filename: filename);
       request.files.add(_trackMultipartProgress(file, onProgress));
     } else {
-      throw Exception('Selected file could not be read.');
+      throw Exception('चुनी गई फाइल पढ़ी नहीं जा सकी।');
     }
     try {
       final streamed = await request.send();

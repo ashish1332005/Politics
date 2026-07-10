@@ -59,7 +59,7 @@ class _SmartExcelImportPageState extends State<SmartExcelImportPage> {
   Future<void> commit() async {
     if (ward == null || booth == null) {
       ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Ward और booth चुनें।')));
+          .showSnackBar(const SnackBar(content: Text('वार्ड और बूथ चुनें।')));
       return;
     }
     final result =
@@ -74,15 +74,15 @@ class _SmartExcelImportPageState extends State<SmartExcelImportPage> {
     setState(() => preview = null);
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(
-          'Created ${result['created']}, updated ${result['updated']}, review ${result['reviewRequired']} — data auto-refresh ho gaya'),
+          '${result['created']} नए मतदाता जोड़े गए, ${result['updated']} रिकॉर्ड अपडेट हुए और ${result['reviewRequired']} रिकॉर्ड समीक्षा के लिए रखे गए।'),
     ));
   }
 
   @override
   Widget build(BuildContext context) => AppPage(children: [
         PageHeading(
-          title: 'Smart Excel Import',
-          subtitle: 'पहले preview और mapping, फिर database import',
+          title: 'Excel से मतदाता आयात',
+          subtitle: 'पहले जानकारी जांचें और कॉलम मिलाएं, फिर मतदाता जोड़ें',
           action: FilledButton.icon(
               onPressed: busy ? null : pick,
               icon: const Icon(Icons.upload_file),
@@ -93,7 +93,7 @@ class _SmartExcelImportPageState extends State<SmartExcelImportPage> {
           _summary(),
           _invalidCorrectionPanel(),
           Panel(
-            title: 'Column Mapping',
+            title: 'कॉलम मिलान',
             child: Column(children: [
               ...List<String>.from(preview!['headers'] ?? [])
                   .map((header) => Padding(
@@ -110,7 +110,7 @@ class _SmartExcelImportPageState extends State<SmartExcelImportPage> {
                               initialValue: mapping[header] ?? '',
                               items: [
                                 const DropdownMenuItem(
-                                    value: '', child: Text('Ignore')),
+                                    value: '', child: Text('छोड़ें')),
                                 ...List<String>.from(preview!['targets'] ?? [])
                                     .map((target) => DropdownMenuItem(
                                         value: target, child: Text(target))),
@@ -129,7 +129,7 @@ class _SmartExcelImportPageState extends State<SmartExcelImportPage> {
                     width: 220,
                     child: DropdownButtonFormField<String>(
                       initialValue: ward,
-                      decoration: const InputDecoration(labelText: 'Ward'),
+                      decoration: const InputDecoration(labelText: 'वार्ड'),
                       items: items
                           .map((item) => DropdownMenuItem(
                               value: '${item['_id']}',
@@ -146,7 +146,7 @@ class _SmartExcelImportPageState extends State<SmartExcelImportPage> {
                     width: 220,
                     child: DropdownButtonFormField<String>(
                       initialValue: booth,
-                      decoration: const InputDecoration(labelText: 'Booth'),
+                      decoration: const InputDecoration(labelText: 'बूथ'),
                       items: items
                           .map((item) => DropdownMenuItem(
                               value: '${item['_id']}',
@@ -163,16 +163,16 @@ class _SmartExcelImportPageState extends State<SmartExcelImportPage> {
                 OutlinedButton.icon(
                     onPressed: validate,
                     icon: const Icon(Icons.fact_check),
-                    label: const Text('Validate again')),
+                    label: const Text('दोबारा जांचें')),
                 FilledButton.icon(
                     onPressed: commit,
                     icon: const Icon(Icons.save),
-                    label: const Text('Confirm Import')),
+                    label: const Text('मतदाता जोड़ें')),
               ]),
             ]),
           ),
           Panel(
-            title: 'Sample Preview',
+            title: 'फाइल का नमूना',
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: DataTable(
@@ -199,12 +199,12 @@ class _SmartExcelImportPageState extends State<SmartExcelImportPage> {
   Widget _summary() {
     final data = validation ?? {};
     return Wrap(spacing: 10, runSpacing: 10, children: [
-      _metric('Total', data['total']),
-      _metric('Create', data['creates']),
-      _metric('Update', data['updates']),
-      _metric('Invalid EPIC', data['invalidEpic']),
-      _metric('File duplicates', data['fileDuplicates']),
-      _metric('Mobile duplicates', data['mobileDuplicates']),
+      _metric('कुल', data['total']),
+      _metric('नए', data['creates']),
+      _metric('अपडेट', data['updates']),
+      _metric('गलत EPIC', data['invalidEpic']),
+      _metric('फाइल में दोहराव', data['fileDuplicates']),
+      _metric('मोबाइल दोहराव', data['mobileDuplicates']),
     ]);
   }
 
@@ -212,17 +212,17 @@ class _SmartExcelImportPageState extends State<SmartExcelImportPage> {
     final rows = List.from(validation?['invalidRows'] ?? []);
     if (rows.isEmpty) return const SizedBox.shrink();
     return Panel(
-      title: 'Invalid records correction',
+      title: 'गलत रिकॉर्ड ठीक करें',
       child: Column(
         children: rows.map((raw) {
           final row = Map<String, dynamic>.from(raw);
           return ListTile(
-            title: Text('Row ${row['row']} • ${row['name'] ?? '-'}'),
+            title: Text('पंक्ति ${row['row']} • ${row['name'] ?? '-'}'),
             subtitle: Text(
-                'EPIC: ${row['voterId'] ?? '-'} • Area: ${row['areaName'] ?? '-'} • Post: ${row['organizationPost'] ?? '-'}'),
+                'EPIC: ${row['voterId'] ?? '-'} • क्षेत्र: ${row['areaName'] ?? '-'} • पद: ${row['organizationPost'] ?? '-'}'),
             trailing: OutlinedButton(
                 onPressed: () => _correctRow(row),
-                child: const Text('Correct')),
+                child: const Text('ठीक करें')),
           );
         }).toList(),
       ),
@@ -238,7 +238,7 @@ class _SmartExcelImportPageState extends State<SmartExcelImportPage> {
     final save = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Row ${row['row']} correction'),
+        title: Text('पंक्ति ${row['row']} में सुधार'),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
           TextField(
               controller: epic,
@@ -246,22 +246,22 @@ class _SmartExcelImportPageState extends State<SmartExcelImportPage> {
               decoration: const InputDecoration(labelText: 'EPIC')),
           TextField(
               controller: mobile,
-              decoration: const InputDecoration(labelText: 'Mobile')),
+              decoration: const InputDecoration(labelText: 'मोबाइल')),
           TextField(
               controller: area,
               decoration: const InputDecoration(
-                  labelText: 'Area / Panchayat / Municipality')),
+                  labelText: 'क्षेत्र / पंचायत / नगरपालिका')),
           TextField(
               controller: post,
-              decoration: const InputDecoration(labelText: 'Political post')),
+              decoration: const InputDecoration(labelText: 'संगठन का पद')),
         ]),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel')),
+              child: const Text('रद्द करें')),
           FilledButton(
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('Save')),
+              child: const Text('सहेजें')),
         ],
       ),
     );
