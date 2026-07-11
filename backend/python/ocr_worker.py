@@ -212,6 +212,7 @@ def detect_photo_box(card):
 def process_page(page_path, output_dir, page_no):
     image = cv2.imread(str(page_path))
     if image is None:
+        print(json.dumps({"type": "progress", "page": page_no}), file=sys.stderr, flush=True)
         return []
     height, width = image.shape[:2]
     boxes = detect_card_boxes(image)
@@ -268,6 +269,7 @@ def process_page(page_path, output_dir, page_no):
             if record["name"] or record["voterId"] or record["guardianName"] or record["houseNumber"] or record["age"]:
                 record["needsReview"] = record["confidence"] < int(os.getenv("OCR_MIN_CONFIDENCE", "45")) or not record["name"] or not record["voterId"]
                 records.append(record)
+    print(json.dumps({"type": "progress", "page": page_no}), file=sys.stderr, flush=True)
     return records
 
 

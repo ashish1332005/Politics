@@ -28,6 +28,8 @@ class _UploadPageState extends State<UploadPage> {
   int totalRecords = 0;
   int importedRecords = 0;
   int skippedRecords = 0;
+  int ocrPagesProcessed = 0;
+  int ocrPagesTotal = 0;
   String processingStage = '';
 
   Future<Map<String, dynamic>> waitForImportCompletion(String uploadId) async {
@@ -41,6 +43,9 @@ class _UploadPageState extends State<UploadPage> {
         totalRecords = ((progress['total'] ?? 0) as num).toInt();
         importedRecords = ((progress['imported'] ?? 0) as num).toInt();
         skippedRecords = ((progress['skipped'] ?? 0) as num).toInt();
+        ocrPagesProcessed =
+            ((progress['ocrPagesProcessed'] ?? 0) as num).toInt();
+        ocrPagesTotal = ((progress['ocrPagesTotal'] ?? 0) as num).toInt();
         serverProcessing = true;
       });
       if (progress['status'] == 'completed') {
@@ -95,6 +100,8 @@ class _UploadPageState extends State<UploadPage> {
       totalRecords = 0;
       importedRecords = 0;
       skippedRecords = 0;
+      ocrPagesProcessed = 0;
+      ocrPagesTotal = 0;
       processingStage = '';
       status = 'फाइल अपलोड हो रही है। बड़ी PDF में कुछ समय लग सकता है…';
     });
@@ -208,7 +215,11 @@ class _UploadPageState extends State<UploadPage> {
                           ? (processedRecords / totalRecords)
                               .clamp(0, 1)
                               .toDouble()
-                          : null
+                          : ocrPagesTotal > 0
+                              ? (ocrPagesProcessed / ocrPagesTotal)
+                                  .clamp(0, 1)
+                                  .toDouble()
+                              : null
                       : uploadTotalBytes > 0
                           ? (uploadedBytes / uploadTotalBytes)
                               .clamp(0, 1)
@@ -220,7 +231,9 @@ class _UploadPageState extends State<UploadPage> {
                   serverProcessing
                       ? totalRecords > 0
                           ? '$totalRecords में से $processedRecords रिकॉर्ड तैयार हुए • $importedRecords जोड़े गए • $skippedRecords छोड़े गए'
-                          : '${processingStage.isEmpty ? 'PDF पढ़ी जा रही है' : _localizedStage(processingStage)}…'
+                          : ocrPagesTotal > 0
+                              ? 'PDF के $ocrPagesTotal में से $ocrPagesProcessed पेज पढ़े गए'
+                              : '${processingStage.isEmpty ? 'PDF पढ़ी जा रही है' : _localizedStage(processingStage)}…'
                       : '${_formatBytes(uploadTotalBytes > 0 ? uploadTotalBytes : currentBytes)} में से ${_formatBytes(uploadedBytes)} अपलोड हुआ',
                   style:
                       const TextStyle(color: navy, fontWeight: FontWeight.w800),
@@ -336,6 +349,12 @@ String _localizedStage(String stage) {
     'Import complete': 'आयात पूरा हो गया',
     'PDF import failed': 'PDF का आयात असफल रहा',
     'Excel/CSV import failed': 'Excel / CSV का आयात असफल रहा',
+    'Preparing PDF pages for OCR': 'PDF के पेज OCR के लिए तैयार हो रहे हैं',
   };
+  final pageProgress =
+      RegExp(r'^Reading PDF pages (\d+) / (\d+)$').firstMatch(stage);
+  if (pageProgress != null) {
+    return 'PDF के ${pageProgress.group(2)} में से ${pageProgress.group(1)} पेज पढ़े गए';
+  }
   return stages[stage] ?? stage;
 }

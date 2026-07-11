@@ -36,7 +36,7 @@ const finishProgressSoon = (id, patch) => {
 
 exports.importStatus = (req, res) => {
   const current = importProgress.get(progressId(req));
-  res.json(current || { status: 'waiting', stage: 'Waiting for upload', imported: 0, skipped: 0, total: 0, processed: 0, uploadBytes: 0, uploadTotalBytes: 0 });
+  res.json(current || { status: 'waiting', stage: 'Waiting for upload', imported: 0, skipped: 0, total: 0, processed: 0, uploadBytes: 0, uploadTotalBytes: 0, ocrPagesProcessed: 0, ocrPagesTotal: 0 });
 };
 exports.trackUploadProgress = (req, res, next) => {
   const id = progressId(req);
@@ -52,6 +52,8 @@ exports.trackUploadProgress = (req, res, next) => {
     skipped: 0,
     processed: 0,
     total: 0,
+    ocrPagesProcessed: 0,
+    ocrPagesTotal: 0,
   });
   req.on('data', (chunk) => {
     receivedBytes += chunk.length;
@@ -493,7 +495,7 @@ const parseHindiVoterRoll = (text, headerOverride) => {
   }).filter(Boolean);
 };
 
-const extractTextWithFallback = async (filePath, importFileName) => {
+const extractTextWithFallback = async (filePath, importFileName, onOcrProgress) => {
   const pdfBuffer = assertReadablePdf(filePath);
   const extractionErrors = [];
   try {
@@ -534,7 +536,7 @@ const extractTextWithFallback = async (filePath, importFileName) => {
     }
   }
   try {
-    const ocr = await ocrPdf(filePath, importFileName);
+    const ocr = await ocrPdf(filePath, importFileName, { onProgress: onOcrProgress });
     return { text: ocr.text, ocr };
   } catch (ocrError) {
     const detail = [...extractionErrors, 'OCR: ' + ocrError.message].filter(Boolean).join(' | ');
@@ -642,7 +644,7 @@ const parsePdfTextLayerMembers = async (filePath) => {
   }));
   return { text: documentText.join('\n'), members: normalizedMembers, imageOnlyPages, header: documentHeader };
 };
-const parsePdfMembers = async (filePath, importFileName) => {
+const parsePdfMembers = async (filePath, importFileName, onOcrProgress) => {
   const textLayer = await parsePdfTextLayerMembers(filePath);
   if (textLayer.members.length && !textLayer.imageOnlyPages.length) {
     return { text: textLayer.text, members: textLayer.members, ocr: null };
@@ -650,7 +652,11 @@ const parsePdfMembers = async (filePath, importFileName) => {
   if (textLayer.members.length && textLayer.imageOnlyPages.length) {
     const firstPage = Math.min(...textLayer.imageOnlyPages);
     const lastPage = Math.max(...textLayer.imageOnlyPages);
-    const ocr = await ocrPdf(filePath, importFileName, { firstPage, lastPage });
+    const ocr = await ocrPdf(filePath, importFileName, {
+      firstPage,
+      lastPage,
+      onProgress: onOcrProgress,
+    });
     const header = { ...(ocr.header || {}), ...textLayer.header };
     const sectionNames = new Map();
     for (const member of textLayer.members) {
@@ -693,7 +699,7 @@ const parsePdfMembers = async (filePath, importFileName) => {
     });
     return { text: `${textLayer.text}\n${ocr.text || ''}`, members: [...merged.values()], ocr };
   }
-  const extracted = await extractTextWithFallback(filePath, importFileName);
+  const extracted = await extractTextWithFallback(filePath, importFileName, onOcrProgress);
   let text = String(extracted?.text || '');
   const header = {
     ...parseHeader(text),
@@ -746,7 +752,7 @@ const parsePdfMembers = async (filePath, importFileName) => {
   if (members.length || extracted.ocr) return { text, members, ocr: extracted.ocr };
 
   try {
-    const ocr = await ocrPdf(filePath, importFileName);
+    const ocr = await ocrPdf(filePath, importFileName, { onProgress: onOcrProgress });
     text = ocr.text;
     const ocrMembers = parseHindiVoterRoll(text);
     return { text, members: ocrMembers, ocr };
@@ -977,14 +983,23 @@ exports.importMembers = async (req, res, next) => {
 
 const runPdfImport = async ({ file, body, currentUser }, uploadId) => {
   try {
-    setProgress(uploadId, { status: 'processing', stage: 'Reading PDF/OCR text', imported: 0, skipped: 0, processed: 0, total: 0 });
+    setProgress(uploadId, { status: 'processing', stage: 'Reading PDF/OCR text', imported: 0, skipped: 0, processed: 0, total: 0, ocrPagesProcessed: 0, ocrPagesTotal: 0 });
     if (!file) {
       const err = new Error('PDF file required');
       err.status = 400;
       throw err;
     }
     assertReadablePdf(file.path);
-    let parsed = await parsePdfMembers(file.path, file.filename);
+    const onOcrProgress = ({ phase, processedPages, totalPages }) => {
+      setProgress(uploadId, {
+        stage: phase === 'rendering'
+          ? 'Preparing PDF pages for OCR'
+          : `Reading PDF pages ${processedPages} / ${totalPages}`,
+        ocrPagesProcessed: processedPages,
+        ocrPagesTotal: totalPages,
+      });
+    };
+    let parsed = await parsePdfMembers(file.path, file.filename, onOcrProgress);
     setProgress(uploadId, { stage: 'PDF records detected', total: parsed.members.length, processed: 0 });
     if (
       currentUser.role === 'admin'
@@ -992,7 +1007,7 @@ const runPdfImport = async ({ file, body, currentUser }, uploadId) => {
       && !parsed.members[0]?.assemblyNumber
       && !parsed.ocr
     ) {
-      const ocr = await ocrPdf(file.path, file.filename);
+      const ocr = await ocrPdf(file.path, file.filename, { onProgress: onOcrProgress });
       parsed = {
         text: ocr.text,
         members: parseHindiVoterRoll(ocr.text),
