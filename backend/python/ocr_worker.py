@@ -330,14 +330,25 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
     if os.getenv("TESSERACT_PATH"):
         pytesseract.pytesseract.tesseract_cmd = os.getenv("TESSERACT_PATH")
-    headers = [read_header(page) for page in pages]
-    page_headers = [parse_header_numbers(header) for header in headers]
     workers = max(1, min(int(os.getenv("OCR_PAGE_CONCURRENCY", "2")), len(pages)))
+
+    def process_page_bundle(item):
+        page_no, page = item
+        # Header OCR used to run sequentially for every page before any voter
+        # card work began. Keep the header associated with its page, but run it
+        # inside the same bounded worker pool so useful card progress starts
+        # early and low-CPU deployments do not spend minutes at 0/26.
+        header = read_header(page)
+        return header, process_page(page, output_dir, page_no)
+
     with ThreadPoolExecutor(max_workers=workers) as executor:
-        page_records = list(executor.map(
-            lambda item: process_page(item[1], output_dir, item[0]),
+        page_bundles = list(executor.map(
+            process_page_bundle,
             enumerate(pages, start=1),
         ))
+    headers = [bundle[0] for bundle in page_bundles]
+    page_records = [bundle[1] for bundle in page_bundles]
+    page_headers = [parse_header_numbers(header) for header in headers]
     records = []
     summary_marker = "\u0928\u093e\u092e\u093e\u0935\u0932\u0940 \u0915\u093e \u092a\u094d\u0930\u0915\u093e\u0930"
     for index, result in enumerate(page_records):
