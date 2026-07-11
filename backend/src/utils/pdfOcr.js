@@ -80,7 +80,7 @@ const renderPages = async (pdfPath, outputDir, { firstPage, lastPage } = {}) => 
     .map((file) => path.join(outputDir, file));
 };
 
-const runPythonWorker = (pages, outputDir) => new Promise((resolve, reject) => {
+const runPythonWorker = (pages, outputDir, onProgress) => new Promise((resolve, reject) => {
   const python = process.env.PYTHON_PATH || 'python';
   const script = path.join(__dirname, '../../python/ocr_worker.py');
   const child = spawn(python, [script], {
@@ -93,10 +93,26 @@ const runPythonWorker = (pages, outputDir) => new Promise((resolve, reject) => {
   });
   let stdout = '';
   let stderr = '';
+  let stderrPending = '';
   child.stdout.on('data', (chunk) => { stdout += chunk.toString(); });
-  child.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
+  child.stderr.on('data', (chunk) => {
+    stderrPending += chunk.toString();
+    const lines = stderrPending.split(/\r?\n/);
+    stderrPending = lines.pop() || '';
+    for (const line of lines) {
+      try {
+        const event = JSON.parse(line);
+        if (event.type === 'progress') {
+          onProgress?.(event);
+          continue;
+        }
+      } catch (_) {}
+      stderr += `${line}\n`;
+    }
+  });
   child.on('error', reject);
   child.on('close', (code) => {
+    if (stderrPending) stderr += stderrPending;
     if (code !== 0) return reject(new Error(stderr || `Python OCR exited with code ${code}`));
     try {
       return resolve(JSON.parse(stdout));
@@ -170,15 +186,26 @@ const cropVoterPage = async (page, pageIndex, outputDir) => {
 };
 
 exports.ocrPdf = async (pdfPath, importFileName, pageRange = {}) => {
+  const { onProgress, ...renderRange } = pageRange;
   const safeBase = path.basename(importFileName, path.extname(importFileName)).replace(/[^a-z0-9_-]/gi, '-');
   const workId = `${Date.now()}-${safeBase}`;
   const workDir = uploadFilePath('ocr', workId);
   fs.mkdirSync(workDir, { recursive: true });
-  const pages = await renderPages(pdfPath, workDir, pageRange);
+  onProgress?.({ phase: 'rendering', processedPages: 0, totalPages: 0 });
+  const pages = await renderPages(pdfPath, workDir, renderRange);
   if (!pages.length) throw new Error('OCR page rendering produced no images.');
+  onProgress?.({ phase: 'ocr', processedPages: 0, totalPages: pages.length });
   if (String(process.env.USE_PYTHON_OCR || 'true').toLowerCase() !== 'false') {
     try {
-      const pythonResult = await runPythonWorker(pages, workDir);
+      let pythonProcessedPages = 0;
+      const pythonResult = await runPythonWorker(pages, workDir, () => {
+        pythonProcessedPages += 1;
+        onProgress?.({
+          phase: 'ocr',
+          processedPages: pythonProcessedPages,
+          totalPages: pages.length,
+        });
+      });
       const records = pythonResult.records || [];
       if (records.length) {
         const headerText = pythonResult.headerText || '';
@@ -242,6 +269,7 @@ exports.ocrPdf = async (pdfPath, importFileName, pageRange = {}) => {
         },
       );
       voterCells.push(...fastRecords.filter(Boolean));
+      onProgress?.({ phase: 'ocr', processedPages: pageIndex + 1, totalPages: pages.length });
       continue;
       for (const cell of cells) {
         let cellText = await run(tesseract, [
@@ -266,6 +294,7 @@ exports.ocrPdf = async (pdfPath, importFileName, pageRange = {}) => {
         }
       }
     }
+    onProgress?.({ phase: 'ocr', processedPages: pageIndex + 1, totalPages: pages.length });
   }
   const headerText = pageResults.slice(0, 3).map((page) => page.text).join('\n');
   const voterText = voterCells.map((cell) => cell.text).join('\n');

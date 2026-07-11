@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -30,39 +28,9 @@ class _UploadPageState extends State<UploadPage> {
   int totalRecords = 0;
   int importedRecords = 0;
   int skippedRecords = 0;
-  int serverUploadBytes = 0;
-  int serverUploadTotalBytes = 0;
+  int ocrPagesProcessed = 0;
+  int ocrPagesTotal = 0;
   String processingStage = '';
-  Timer? progressTimer;
-
-  @override
-  void dispose() {
-    progressTimer?.cancel();
-    super.dispose();
-  }
-
-  void startProgressPolling(String uploadId) {
-    progressTimer?.cancel();
-    progressTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
-      try {
-        final progress = await api.get('/api/import/status/$uploadId');
-        if (!mounted) return;
-        setState(() {
-          processingStage = (progress['stage'] ?? '').toString();
-          processedRecords = ((progress['processed'] ?? 0) as num).toInt();
-          totalRecords = ((progress['total'] ?? 0) as num).toInt();
-          importedRecords = ((progress['imported'] ?? 0) as num).toInt();
-          skippedRecords = ((progress['skipped'] ?? 0) as num).toInt();
-          serverUploadBytes = ((progress['uploadBytes'] ?? 0) as num).toInt();
-          serverUploadTotalBytes =
-              ((progress['uploadTotalBytes'] ?? 0) as num).toInt();
-          if (progress['status'] == 'processing' || totalRecords > 0) {
-            serverProcessing = true;
-          }
-        });
-      } catch (_) {}
-    });
-  }
 
   Future<Map<String, dynamic>> waitForImportCompletion(String uploadId) async {
     final deadline = DateTime.now().add(const Duration(minutes: 35));
@@ -75,6 +43,9 @@ class _UploadPageState extends State<UploadPage> {
         totalRecords = ((progress['total'] ?? 0) as num).toInt();
         importedRecords = ((progress['imported'] ?? 0) as num).toInt();
         skippedRecords = ((progress['skipped'] ?? 0) as num).toInt();
+        ocrPagesProcessed =
+            ((progress['ocrPagesProcessed'] ?? 0) as num).toInt();
+        ocrPagesTotal = ((progress['ocrPagesTotal'] ?? 0) as num).toInt();
         serverProcessing = true;
       });
       if (progress['status'] == 'completed') {
@@ -129,13 +100,12 @@ class _UploadPageState extends State<UploadPage> {
       totalRecords = 0;
       importedRecords = 0;
       skippedRecords = 0;
-      serverUploadBytes = 0;
-      serverUploadTotalBytes = 0;
+      ocrPagesProcessed = 0;
+      ocrPagesTotal = 0;
       processingStage = '';
       status = 'फाइल अपलोड हो रही है। बड़ी PDF में कुछ समय लग सकता है…';
     });
     final uploadId = 'upload-${DateTime.now().millisecondsSinceEpoch}';
-    startProgressPolling(uploadId);
     try {
       var res = await api.uploadFile(
         pdf ? '/api/import/members/pdf' : '/api/import/members',
@@ -180,7 +150,6 @@ class _UploadPageState extends State<UploadPage> {
       if (!mounted) return;
       setState(() => status = e.toString().replaceFirst('Exception: ', ''));
     } finally {
-      progressTimer?.cancel();
       if (mounted) setState(() => uploading = false);
     }
   }
@@ -241,24 +210,30 @@ class _UploadPageState extends State<UploadPage> {
               if (uploading) ...[
                 LinearProgressIndicator(
                   minHeight: 7,
-                  value: serverProcessing && totalRecords > 0
-                      ? (processedRecords / totalRecords).clamp(0, 1).toDouble()
-                      : serverUploadTotalBytes > 0
-                          ? (serverUploadBytes / serverUploadTotalBytes)
+                  value: serverProcessing
+                      ? totalRecords > 0
+                          ? (processedRecords / totalRecords)
                               .clamp(0, 1)
                               .toDouble()
-                          : uploadTotalBytes > 0
-                              ? (uploadedBytes / uploadTotalBytes)
+                          : ocrPagesTotal > 0
+                              ? (ocrPagesProcessed / ocrPagesTotal)
                                   .clamp(0, 1)
                                   .toDouble()
-                              : null,
+                              : null
+                      : uploadTotalBytes > 0
+                          ? (uploadedBytes / uploadTotalBytes)
+                              .clamp(0, 1)
+                              .toDouble()
+                          : null,
                 ),
                 const SizedBox(height: 10),
                 Text(
                   serverProcessing
                       ? totalRecords > 0
                           ? '$totalRecords में से $processedRecords रिकॉर्ड तैयार हुए • $importedRecords जोड़े गए • $skippedRecords छोड़े गए'
-                          : '${processingStage.isEmpty ? 'PDF पढ़ी जा रही है' : _localizedStage(processingStage)}…'
+                          : ocrPagesTotal > 0
+                              ? 'PDF के $ocrPagesTotal में से $ocrPagesProcessed पेज पढ़े गए'
+                              : '${processingStage.isEmpty ? 'PDF पढ़ी जा रही है' : _localizedStage(processingStage)}…'
                       : '${_formatBytes(uploadTotalBytes > 0 ? uploadTotalBytes : currentBytes)} में से ${_formatBytes(uploadedBytes)} अपलोड हुआ',
                   style:
                       const TextStyle(color: navy, fontWeight: FontWeight.w800),
@@ -374,6 +349,12 @@ String _localizedStage(String stage) {
     'Import complete': 'आयात पूरा हो गया',
     'PDF import failed': 'PDF का आयात असफल रहा',
     'Excel/CSV import failed': 'Excel / CSV का आयात असफल रहा',
+    'Preparing PDF pages for OCR': 'PDF के पेज OCR के लिए तैयार हो रहे हैं',
   };
+  final pageProgress =
+      RegExp(r'^Reading PDF pages (\d+) / (\d+)$').firstMatch(stage);
+  if (pageProgress != null) {
+    return 'PDF के ${pageProgress.group(2)} में से ${pageProgress.group(1)} पेज पढ़े गए';
+  }
   return stages[stage] ?? stage;
 }
