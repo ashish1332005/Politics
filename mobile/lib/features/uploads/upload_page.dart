@@ -30,10 +30,12 @@ class _UploadPageState extends State<UploadPage> {
   int skippedRecords = 0;
   int ocrPagesProcessed = 0;
   int ocrPagesTotal = 0;
+  int ocrCardsProcessed = 0;
+  int ocrCardsTotal = 0;
   String processingStage = '';
 
   Future<Map<String, dynamic>> waitForImportCompletion(String uploadId) async {
-    final deadline = DateTime.now().add(const Duration(minutes: 35));
+    final deadline = DateTime.now().add(const Duration(minutes: 90));
     while (DateTime.now().isBefore(deadline)) {
       final progress = await api.get('/api/import/status/$uploadId');
       if (!mounted) return progress;
@@ -46,6 +48,9 @@ class _UploadPageState extends State<UploadPage> {
         ocrPagesProcessed =
             ((progress['ocrPagesProcessed'] ?? 0) as num).toInt();
         ocrPagesTotal = ((progress['ocrPagesTotal'] ?? 0) as num).toInt();
+        ocrCardsProcessed =
+            ((progress['ocrCardsProcessed'] ?? 0) as num).toInt();
+        ocrCardsTotal = ((progress['ocrCardsTotal'] ?? 0) as num).toInt();
         serverProcessing = true;
       });
       if (progress['status'] == 'completed') {
@@ -102,6 +107,8 @@ class _UploadPageState extends State<UploadPage> {
       skippedRecords = 0;
       ocrPagesProcessed = 0;
       ocrPagesTotal = 0;
+      ocrCardsProcessed = 0;
+      ocrCardsTotal = 0;
       processingStage = '';
       status = 'फाइल अपलोड हो रही है। बड़ी PDF में कुछ समय लग सकता है…';
     });
@@ -215,11 +222,15 @@ class _UploadPageState extends State<UploadPage> {
                           ? (processedRecords / totalRecords)
                               .clamp(0, 1)
                               .toDouble()
-                          : ocrPagesTotal > 0
-                              ? (ocrPagesProcessed / ocrPagesTotal)
+                          : ocrCardsTotal > 0
+                              ? (ocrCardsProcessed / ocrCardsTotal)
                                   .clamp(0, 1)
                                   .toDouble()
-                              : null
+                              : ocrPagesTotal > 0
+                                  ? (ocrPagesProcessed / ocrPagesTotal)
+                                      .clamp(0, 1)
+                                      .toDouble()
+                                  : null
                       : uploadTotalBytes > 0
                           ? (uploadedBytes / uploadTotalBytes)
                               .clamp(0, 1)
@@ -231,9 +242,11 @@ class _UploadPageState extends State<UploadPage> {
                   serverProcessing
                       ? totalRecords > 0
                           ? '$totalRecords में से $processedRecords रिकॉर्ड तैयार हुए • $importedRecords जोड़े गए • $skippedRecords छोड़े गए'
-                          : ocrPagesTotal > 0
-                              ? 'PDF के $ocrPagesTotal में से $ocrPagesProcessed पेज पढ़े गए'
-                              : '${processingStage.isEmpty ? 'PDF पढ़ी जा रही है' : _localizedStage(processingStage)}…'
+                          : ocrCardsTotal > 0
+                              ? '$ocrCardsTotal में से $ocrCardsProcessed संभावित मतदाता रिकॉर्ड पढ़े गए'
+                              : ocrPagesTotal > 0
+                                  ? 'PDF के $ocrPagesTotal में से $ocrPagesProcessed पेज पढ़े गए'
+                                  : '${processingStage.isEmpty ? 'PDF पढ़ी जा रही है' : _localizedStage(processingStage)}…'
                       : '${_formatBytes(uploadTotalBytes > 0 ? uploadTotalBytes : currentBytes)} में से ${_formatBytes(uploadedBytes)} अपलोड हुआ',
                   style:
                       const TextStyle(color: navy, fontWeight: FontWeight.w800),
@@ -355,6 +368,11 @@ String _localizedStage(String stage) {
       RegExp(r'^Reading PDF pages (\d+) / (\d+)$').firstMatch(stage);
   if (pageProgress != null) {
     return 'PDF के ${pageProgress.group(2)} में से ${pageProgress.group(1)} पेज पढ़े गए';
+  }
+  final cardProgress =
+      RegExp(r'^Reading voter cards (\d+) / (\d+)$').firstMatch(stage);
+  if (cardProgress != null) {
+    return '${cardProgress.group(2)} में से ${cardProgress.group(1)} संभावित मतदाता रिकॉर्ड पढ़े गए';
   }
   return stages[stage] ?? stage;
 }

@@ -36,7 +36,7 @@ const finishProgressSoon = (id, patch) => {
 
 exports.importStatus = (req, res) => {
   const current = importProgress.get(progressId(req));
-  res.json(current || { status: 'waiting', stage: 'Waiting for upload', imported: 0, skipped: 0, total: 0, processed: 0, uploadBytes: 0, uploadTotalBytes: 0, ocrPagesProcessed: 0, ocrPagesTotal: 0 });
+  res.json(current || { status: 'waiting', stage: 'Waiting for upload', imported: 0, skipped: 0, total: 0, processed: 0, uploadBytes: 0, uploadTotalBytes: 0, ocrPagesProcessed: 0, ocrPagesTotal: 0, ocrCardsProcessed: 0, ocrCardsTotal: 0 });
 };
 exports.trackUploadProgress = (req, res, next) => {
   const id = progressId(req);
@@ -54,6 +54,8 @@ exports.trackUploadProgress = (req, res, next) => {
     total: 0,
     ocrPagesProcessed: 0,
     ocrPagesTotal: 0,
+    ocrCardsProcessed: 0,
+    ocrCardsTotal: 0,
   });
   req.on('data', (chunk) => {
     receivedBytes += chunk.length;
@@ -983,20 +985,24 @@ exports.importMembers = async (req, res, next) => {
 
 const runPdfImport = async ({ file, body, currentUser }, uploadId) => {
   try {
-    setProgress(uploadId, { status: 'processing', stage: 'Reading PDF/OCR text', imported: 0, skipped: 0, processed: 0, total: 0, ocrPagesProcessed: 0, ocrPagesTotal: 0 });
+    setProgress(uploadId, { status: 'processing', stage: 'Reading PDF/OCR text', imported: 0, skipped: 0, processed: 0, total: 0, ocrPagesProcessed: 0, ocrPagesTotal: 0, ocrCardsProcessed: 0, ocrCardsTotal: 0 });
     if (!file) {
       const err = new Error('PDF file required');
       err.status = 400;
       throw err;
     }
     assertReadablePdf(file.path);
-    const onOcrProgress = ({ phase, processedPages, totalPages }) => {
+    const onOcrProgress = ({ phase, processedPages, totalPages, processedCards = 0, totalCards = 0 }) => {
       setProgress(uploadId, {
         stage: phase === 'rendering'
           ? 'Preparing PDF pages for OCR'
-          : `Reading PDF pages ${processedPages} / ${totalPages}`,
+          : totalCards > 0
+            ? `Reading voter cards ${processedCards} / ${totalCards}`
+            : `Reading PDF pages ${processedPages} / ${totalPages}`,
         ocrPagesProcessed: processedPages,
         ocrPagesTotal: totalPages,
+        ocrCardsProcessed: processedCards,
+        ocrCardsTotal: totalCards,
       });
     };
     let parsed = await parsePdfMembers(file.path, file.filename, onOcrProgress);
