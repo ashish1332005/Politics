@@ -102,7 +102,7 @@ const runPythonWorker = (pages, outputDir, onProgress) => new Promise((resolve, 
     for (const line of lines) {
       try {
         const event = JSON.parse(line);
-        if (event.type === 'progress') {
+        if (event.type === 'progress' || event.type === 'card_progress') {
           onProgress?.(event);
           continue;
         }
@@ -198,12 +198,29 @@ exports.ocrPdf = async (pdfPath, importFileName, pageRange = {}) => {
   if (String(process.env.USE_PYTHON_OCR || 'true').toLowerCase() !== 'false') {
     try {
       let pythonProcessedPages = 0;
-      const pythonResult = await runPythonWorker(pages, workDir, () => {
+      let pythonProcessedCards = 0;
+      const totalCards = pages.length
+        * Number(process.env.VOTER_GRID_ROWS || 10)
+        * Number(process.env.VOTER_GRID_COLUMNS || 3);
+      const pythonResult = await runPythonWorker(pages, workDir, (event) => {
+        if (event.type === 'card_progress') {
+          pythonProcessedCards += 1;
+          onProgress?.({
+            phase: 'ocr',
+            processedPages: pythonProcessedPages,
+            totalPages: pages.length,
+            processedCards: pythonProcessedCards,
+            totalCards,
+          });
+          return;
+        }
         pythonProcessedPages += 1;
         onProgress?.({
           phase: 'ocr',
           processedPages: pythonProcessedPages,
           totalPages: pages.length,
+          processedCards: pythonProcessedCards,
+          totalCards,
         });
       });
       const records = pythonResult.records || [];

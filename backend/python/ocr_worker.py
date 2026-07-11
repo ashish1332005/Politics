@@ -17,6 +17,14 @@ def ratio(name, default):
     return float(os.getenv(name, default))
 
 
+def report_card_progress(page_no, cell_no):
+    print(json.dumps({
+        "type": "card_progress",
+        "page": page_no,
+        "cell": cell_no,
+    }), file=sys.stderr, flush=True)
+
+
 def clean(text):
     return re.sub(r"\s+", " ", text or "").strip()
 
@@ -232,6 +240,7 @@ def process_page(page_path, output_dir, page_no):
     for cell_no, (x, y, card_w, card_h) in enumerate(boxes, start=1):
             card = image[y:y + card_h, x:x + card_w]
             if card.size == 0:
+                report_card_progress(page_no, cell_no)
                 continue
             px, py, pw, ph = detect_photo_box(card)
             pad_x = max(2, round(pw * 0.04))
@@ -253,7 +262,10 @@ def process_page(page_path, output_dir, page_no):
             language = os.getenv("OCR_LANGUAGES", "hin+eng")
             text = pytesseract.image_to_string(gray, lang=language, config="--psm 6")
 
-            epic_text = ocr_epic(card)
+            # The full-card OCR often reads EPIC correctly. Running the
+            # expensive focused EPIC passes for every card multiplies OCR time
+            # on low-CPU hosts, so use them only when the first pass missed it.
+            epic_text = "" if epic_from(text) else ocr_epic(card)
             record = parse_card(text, epic_text, str(photo_file), page_no, cell_no)
             house_digits = re.sub(r"\D", "", record["houseNumber"] or "")
             if not house_digits or set(house_digits).issubset({"1", "7"}):
@@ -269,6 +281,7 @@ def process_page(page_path, output_dir, page_no):
             if record["name"] or record["voterId"] or record["guardianName"] or record["houseNumber"] or record["age"]:
                 record["needsReview"] = record["confidence"] < int(os.getenv("OCR_MIN_CONFIDENCE", "45")) or not record["name"] or not record["voterId"]
                 records.append(record)
+            report_card_progress(page_no, cell_no)
     print(json.dumps({"type": "progress", "page": page_no}), file=sys.stderr, flush=True)
     return records
 
