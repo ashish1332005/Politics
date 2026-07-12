@@ -13,6 +13,7 @@ const { findPartyFromText } = require('../utils/partySeed');
 const { ocrPdf } = require('../utils/pdfOcr');
 const { normalizeEpic, isValidEpic } = require('../utils/epic');
 const { convertKrutiDevToUnicode } = require('../utils/legacyHindi');
+const { uploadFilePath } = require('../utils/uploadPath');
 const importProgress = new Map();
 
 const isWindows = process.platform === 'win32';
@@ -25,9 +26,11 @@ const commandFromEnv = (envName, fallback) => {
 };
 
 const progressId = (req) => String(req.body?.uploadId || req.params?.uploadId || req.query?.uploadId || '').replace(/[^a-z0-9_-]/gi, '').slice(0, 80);
+const safeUploadId = (value) => String(value || '').replace(/[^a-z0-9_-]/gi, '').slice(0, 80);
+const chunkDirectory = (id) => uploadFilePath('chunks', safeUploadId(id));
 const setProgress = (id, patch) => {
   if (!id) return;
-  importProgress.set(id, { id, updatedAt: new Date().toISOString(), ...importProgress.get(id), ...patch });
+  importProgress.set(id, { id, ...importProgress.get(id), ...patch, updatedAt: new Date().toISOString() });
 };
 const finishProgressSoon = (id, patch) => {
   setProgress(id, patch);
@@ -75,6 +78,87 @@ exports.trackUploadProgress = (req, res, next) => {
     });
   });
   next();
+};
+
+exports.uploadPdfChunk = (req, res, next) => {
+  try {
+    const id = safeUploadId(req.params.uploadId);
+    const index = Number(req.params.index);
+    const totalChunks = Number(req.header('x-total-chunks'));
+    const totalBytes = Number(req.header('x-total-bytes'));
+    if (!id || !Number.isInteger(index) || index < 0 || !Number.isInteger(totalChunks)
+      || totalChunks < 1 || index >= totalChunks || !Buffer.isBuffer(req.body) || !req.body.length) {
+      const error = new Error('Invalid PDF upload chunk.'); error.status = 400; throw error;
+    }
+    const maxBytes = Number(process.env.MAX_UPLOAD_MB || 250) * 1024 * 1024;
+    if (!Number.isFinite(totalBytes) || totalBytes < 1 || totalBytes > maxBytes) {
+      const error = new Error(`PDF is too large. Maximum upload size is ${process.env.MAX_UPLOAD_MB || 250} MB.`);
+      error.status = 413; throw error;
+    }
+    const dir = chunkDirectory(id);
+    fs.mkdirSync(dir, { recursive: true });
+    const metaPath = path.join(dir, 'meta.json');
+    const owner = String(req.currentUser._id);
+    if (fs.existsSync(metaPath)) {
+      const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+      if (meta.owner !== owner || meta.totalChunks !== totalChunks || meta.totalBytes !== totalBytes) {
+        const error = new Error('Upload ID is already in use. Start a new upload.'); error.status = 409; throw error;
+      }
+    } else {
+      fs.writeFileSync(metaPath, JSON.stringify({ owner, totalChunks, totalBytes, createdAt: Date.now() }));
+    }
+    const target = path.join(dir, `${index}.part`);
+    const temporary = `${target}.tmp`;
+    fs.writeFileSync(temporary, req.body);
+    fs.renameSync(temporary, target);
+    const receivedBytes = fs.readdirSync(dir).filter((name) => /^\d+\.part$/.test(name))
+      .reduce((sum, name) => sum + fs.statSync(path.join(dir, name)).size, 0);
+    setProgress(id, { status: 'uploading', stage: 'Receiving file on server', uploadBytes: receivedBytes,
+      uploadTotalBytes: totalBytes, imported: 0, skipped: 0, processed: 0, total: 0 });
+    res.json({ received: index, receivedBytes, totalBytes });
+  } catch (error) { next(error); }
+};
+
+exports.completePdfChunks = (req, res, next) => {
+  const id = safeUploadId(req.params.uploadId);
+  try {
+    const dir = chunkDirectory(id);
+    const meta = JSON.parse(fs.readFileSync(path.join(dir, 'meta.json'), 'utf8'));
+    if (meta.owner !== String(req.currentUser._id)) {
+      const error = new Error('This upload belongs to another user.'); error.status = 403; throw error;
+    }
+    const filename = String(req.body?.filename || 'voter-list.pdf').replace(/[^a-z0-9._-]/gi, '-');
+    if (!/\.pdf$/i.test(filename)) { const error = new Error('PDF filename required.'); error.status = 400; throw error; }
+    const finalName = `${Date.now()}-${filename}`;
+    const finalPath = uploadFilePath(finalName);
+    const output = fs.openSync(finalPath, 'w');
+    let assembledBytes = 0;
+    try {
+      for (let index = 0; index < meta.totalChunks; index += 1) {
+        const partPath = path.join(dir, `${index}.part`);
+        if (!fs.existsSync(partPath)) {
+          const error = new Error(`Upload incomplete. Missing chunk ${index + 1} of ${meta.totalChunks}.`);
+          error.status = 409; throw error;
+        }
+        const chunk = fs.readFileSync(partPath);
+        fs.writeSync(output, chunk); assembledBytes += chunk.length;
+      }
+    } finally { fs.closeSync(output); }
+    if (assembledBytes !== meta.totalBytes) {
+      fs.rmSync(finalPath, { force: true });
+      const error = new Error('Uploaded PDF size did not match. Retry the upload.'); error.status = 409; throw error;
+    }
+    assertReadablePdf(finalPath);
+    fs.rmSync(dir, { recursive: true, force: true });
+    const file = { path: finalPath, filename: finalName, originalname: filename, size: assembledBytes };
+    setProgress(id, { status: 'processing', stage: 'Upload received. PDF/OCR import running in background',
+      uploadBytes: assembledBytes, uploadTotalBytes: assembledBytes });
+    setImmediate(() => runPdfImport({ file, body: { ...req.body, uploadId: id }, currentUser: req.currentUser }, id)
+      .catch((error) => console.error('Background chunked PDF import failed:', error)));
+    res.status(202).json({ processing: true, uploadId: id, message: 'PDF upload complete. OCR/import started.' });
+  } catch (error) {
+    finishProgressSoon(id, { status: 'failed', stage: error.message || 'PDF upload failed' }); next(error);
+  }
 };
 
 const estimateDobFromAge = (age) => {
@@ -1209,6 +1293,8 @@ const runPdfImport = async ({ file, body, currentUser }, uploadId) => {
       stage: e.message || 'PDF import failed',
     });
     throw e;
+  } finally {
+    if (file?.path) fs.rmSync(file.path, { force: true });
   }
 };
 

@@ -114,29 +114,37 @@ class _UploadPageState extends State<UploadPage> {
     });
     final uploadId = 'upload-${DateTime.now().millisecondsSinceEpoch}';
     try {
-      var res = await api.uploadFile(
-        pdf ? '/api/import/members/pdf' : '/api/import/members',
-        filename: file.name,
-        filePath: pickedFilePath(file),
-        bytes: pickedFileBytes(file),
-        fileStream: file.readStream,
-        fileLength: file.size,
-        fields: {
-          'uploadId': uploadId,
-          if (pdf) 'asyncImport': 'true',
-        },
-        onProgress: (sent, total) {
-          if (!mounted) return;
-          setState(() {
-            uploadedBytes = sent;
-            uploadTotalBytes = total > 0 ? total : file.size;
-            if (sent >= uploadTotalBytes && uploadTotalBytes > 0) {
-              serverProcessing = true;
-              status = 'फाइल अपलोड हो गई। अब मतदाता रिकॉर्ड तैयार हो रहे हैं…';
-            }
-          });
-        },
-      );
+      void updateProgress(int sent, int total) {
+        if (!mounted) return;
+        setState(() {
+          uploadedBytes = sent;
+          uploadTotalBytes = total > 0 ? total : file.size;
+          if (sent >= uploadTotalBytes && uploadTotalBytes > 0) {
+            serverProcessing = true;
+            status = 'फाइल अपलोड हो गई। अब मतदाता रिकॉर्ड तैयार हो रहे हैं…';
+          }
+        });
+      }
+
+      var res = pdf
+          ? await api.uploadPdfResumable(
+              uploadId: uploadId,
+              filename: file.name,
+              fileLength: file.size,
+              bytes: pickedFileBytes(file),
+              fileStream: file.readStream,
+              onProgress: updateProgress,
+            )
+          : await api.uploadFile(
+              '/api/import/members',
+              filename: file.name,
+              filePath: pickedFilePath(file),
+              bytes: pickedFileBytes(file),
+              fileStream: file.readStream,
+              fileLength: file.size,
+              fields: {'uploadId': uploadId},
+              onProgress: updateProgress,
+            );
       if (res['processing'] == true) {
         if (!mounted) return;
         setState(() {

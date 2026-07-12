@@ -35,6 +35,15 @@ const mapConcurrent = async (items, limit, worker) => {
   return results;
 };
 
+const keepOnlyVoterPhotos = (workDir, photoFiles = []) => {
+  const keep = new Set(photoFiles.map((file) => path.resolve(file)));
+  for (const name of fs.readdirSync(workDir)) {
+    const target = path.resolve(workDir, name);
+    if (keep.has(target)) continue;
+    fs.rmSync(target, { recursive: true, force: true });
+  }
+};
+
 const looksLikeVoterText = (text) => (
   /(?:निर्वा\S*|मतदाता)\s+का\s+नाम/.test(text)
   || /\b(?:[A-Z]{3}\s*[0-9O]{7}|RJ\s*\/\s*[0-9O/]{8,})\b/i.test(text)
@@ -226,6 +235,8 @@ exports.ocrPdf = async (pdfPath, importFileName, pageRange = {}) => {
       const records = pythonResult.records || [];
       if (records.length) {
         const headerText = pythonResult.headerText || '';
+        const photos = records.map((record) => record.photo).filter(Boolean);
+        keepOnlyVoterPhotos(workDir, photos);
         return {
           text: `${headerText}\n${records.map((record) => record.rawText).join('\n')}`,
           words: [],
@@ -316,6 +327,7 @@ exports.ocrPdf = async (pdfPath, importFileName, pageRange = {}) => {
   const headerText = pageResults.slice(0, 3).map((page) => page.text).join('\n');
   const voterText = voterCells.map((cell) => cell.text).join('\n');
   const photoFiles = voterCells.map((cell) => cell.photo);
+  keepOnlyVoterPhotos(workDir, photoFiles);
   const photoStatus = `Skipped ${pages.length - voterPageCount} non-voter/summary page(s). Processed ${voterPageCount} voter page(s) and coordinate-matched ${photoFiles.length} voter photo crop(s).`;
   return {
     text: `${headerText}\n${voterText}`,

@@ -4,7 +4,7 @@ services:
     env: docker
     dockerfilePath: ./Dockerfile
     dockerContext: .
-    healthCheckPath: /api/system/ocr
+    healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
         value: production
