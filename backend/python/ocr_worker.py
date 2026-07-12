@@ -114,7 +114,18 @@ def ocr_epic(card):
 
 
 def parse_card(text, epic_text, photo_path, page_no, cell_no, focused_house=""):
+    name_line_pattern = r"नाम\s*[:：;\-]?\s*(.+)$"
+    relation_line_pattern = r"(?:पिता|पि\S*|पति|पत्ति|प्रति|माता)\s*(?:का)?\s*नाम"
+    fallback_name = ""
+    for line in (text or "").splitlines():
+        if "नाम" not in line or re.search(relation_line_pattern, line):
+            continue
+        fallback_name = clean_person_name(field(line, name_line_pattern))
+        if fallback_name:
+            break
+    name = fallback_name
     name = clean_person_name(field(text, r"(?:निर्वा\S*|मतदाता)\s*(?:का)?\s*नाम\s*[:：;\-]?\s*([^\n]+)"))
+    name = name or fallback_name
     father = clean_person_name(field(text, r"(?:पिता|पि\S*)\s*(?:का)?\s*नाम\s*[:：;\-]?\s*([^\n]+)"))
     husband = clean_person_name(field(text, r"(?:पति|पत्ति|प्रति)\s*(?:का)?\s*नाम\s*[:：;\-]?\s*([^\n]+)"))
     mother = clean_person_name(field(text, r"माता\s*(?:का)?\s*नाम\s*[:：;\-]?\s*([^\n]+)"))
@@ -265,6 +276,25 @@ def process_page(page_path, output_dir, page_no):
             ),
         })
 
+    # One English coordinate pass recovers EPICs without per-card processes.
+    epic_data = pytesseract.image_to_data(
+        image,
+        lang="eng",
+        config="--psm 11 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/",
+        output_type=pytesseract.Output.DICT,
+    )
+    epic_words = []
+    for index, value in enumerate(epic_data.get("text", [])):
+        value = clean(value)
+        if not value:
+            continue
+        epic_words.append({
+            "text": value,
+            "left": int(epic_data["left"][index]),
+            "top": int(epic_data["top"][index]),
+            "width": int(epic_data["width"][index]),
+            "height": int(epic_data["height"][index]),
+        })
     records = []
     fallback_limit = max(0, int(os.getenv("OCR_CARD_FALLBACKS_PER_PAGE", "3")))
     fallbacks_used = 0
@@ -303,7 +333,12 @@ def process_page(page_path, output_dir, page_no):
                 text = pytesseract.image_to_string(gray, lang=language, config="--psm 6")
                 fallbacks_used += 1
 
-            epic_text = ""
+            epic_text = " ".join(word["text"] for word in epic_words if (
+                x <= word["left"] + word["width"] / 2 <= x + card_w
+                and y <= word["top"] + word["height"] / 2 <= y + round(card_h * 0.38)
+            ))
+            if not epic_from(epic_text):
+                epic_text = ocr_epic(card)
             record = parse_card(text, epic_text, str(photo_file), page_no, cell_no)
             if os.getenv("OCR_DEEP_RETRY", "false").lower() == "true" and (not record["name"] or not record["voterId"]):
                 gray = cv2.cvtColor(card, cv2.COLOR_BGR2GRAY)
