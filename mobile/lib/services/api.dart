@@ -93,6 +93,16 @@ class Api {
         message.contains('failed to fetch');
   }
 
+  bool _isTemporaryServerError(Object error) {
+    final message = error.toString().toLowerCase();
+    return message.contains('server') &&
+        (message.contains('temporarily') ||
+            message.contains('restart') ||
+            message.contains('503') ||
+            message.contains('502') ||
+            message.contains('504'));
+  }
+
   NetworkRequestException _friendlyNetworkError(Object error) {
     final message = error.toString().toLowerCase();
     if (message.contains('failed host lookup')) {
@@ -186,7 +196,7 @@ class Api {
       await _persistSession();
       return true;
     } catch (error) {
-      if (error is NetworkRequestException) {
+      if (error is NetworkRequestException || _isTemporaryServerError(error)) {
         return user != null;
       }
       await _clearSession();
@@ -346,6 +356,7 @@ class Api {
       try {
         return await _withNetworkRetry(
           () => sendRequest(pathSource: filePath),
+          attempts: 1,
           retryConnectionReset: false,
         );
       } catch (error) {
@@ -359,6 +370,7 @@ class Api {
     if (bytes != null) {
       return _withNetworkRetry(
         () => sendRequest(byteSource: bytes),
+        attempts: 1,
         retryConnectionReset: false,
       );
     }
@@ -369,6 +381,62 @@ class Api {
       );
     }
     throw Exception('चुनी गई फाइल पढ़ी नहीं जा सकी।');
+  }
+
+  Future<Map<String, dynamic>> uploadPdfResumable({
+    required String uploadId,
+    required String filename,
+    required int fileLength,
+    Uint8List? bytes,
+    Stream<List<int>>? fileStream,
+    void Function(int sent, int total)? onProgress,
+  }) async {
+    const chunkSize = 512 * 1024;
+    if (fileLength < 1 || (bytes == null && fileStream == null)) {
+      throw Exception('Selected PDF could not be read.');
+    }
+    final totalChunks = (fileLength / chunkSize).ceil();
+    final source = bytes != null ? Stream<List<int>>.value(bytes) : fileStream!;
+    var pending = <int>[];
+    var index = 0;
+    var sent = 0;
+
+    Future<void> sendChunk(Uint8List chunk, int chunkIndex) async {
+      final uri = Uri.parse(
+          '$baseUrl/api/import/members/pdf/chunks/$uploadId/$chunkIndex');
+      await _withNetworkRetry<dynamic>(
+        () => _send(http.put(uri,
+            headers: {
+              if (token != null) 'Authorization': 'Bearer $token',
+              'Content-Type': 'application/octet-stream',
+              'X-Total-Chunks': '$totalChunks',
+              'X-Total-Bytes': '$fileLength',
+            },
+            body: chunk)),
+        attempts: 5,
+      );
+      sent += chunk.length;
+      onProgress?.call(sent, fileLength);
+    }
+
+    await for (final data in source) {
+      pending.addAll(data);
+      while (pending.length >= chunkSize) {
+        final chunk = Uint8List.fromList(pending.sublist(0, chunkSize));
+        pending = pending.sublist(chunkSize);
+        await sendChunk(chunk, index++);
+      }
+    }
+    if (pending.isNotEmpty)
+      await sendChunk(Uint8List.fromList(pending), index++);
+    if (sent != fileLength || index != totalChunks) {
+      throw Exception(
+          'PDF could not be read completely. Please select it again.');
+    }
+    return post('/api/import/members/pdf/chunks/$uploadId/complete', {
+      'filename': filename,
+      'uploadId': uploadId,
+    });
   }
 
   http.MultipartFile _trackMultipartProgress(

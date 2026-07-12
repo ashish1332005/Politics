@@ -236,7 +236,38 @@ def process_page(page_path, output_dir, page_no):
             for row in range(int(os.getenv("VOTER_GRID_ROWS", "10")))
             for col in range(int(os.getenv("VOTER_GRID_COLUMNS", "3")))
         ]
+    language = os.getenv("OCR_LANGUAGES", "hin+eng")
+    page_data = pytesseract.image_to_data(
+        image,
+        lang=language,
+        config="--psm 6",
+        output_type=pytesseract.Output.DICT,
+    )
+    words = []
+    for index, value in enumerate(page_data.get("text", [])):
+        value = clean(value)
+        try:
+            confidence = float(page_data["conf"][index])
+        except (TypeError, ValueError):
+            confidence = -1
+        if not value or confidence < 15:
+            continue
+        words.append({
+            "text": value,
+            "left": int(page_data["left"][index]),
+            "top": int(page_data["top"][index]),
+            "width": int(page_data["width"][index]),
+            "height": int(page_data["height"][index]),
+            "line": (
+                page_data["block_num"][index],
+                page_data["par_num"][index],
+                page_data["line_num"][index],
+            ),
+        })
+
     records = []
+    fallback_limit = max(0, int(os.getenv("OCR_CARD_FALLBACKS_PER_PAGE", "3")))
+    fallbacks_used = 0
     for cell_no, (x, y, card_w, card_h) in enumerate(boxes, start=1):
             card = image[y:y + card_h, x:x + card_w]
             if card.size == 0:
@@ -255,27 +286,31 @@ def process_page(page_path, output_dir, page_no):
             if photo.size:
                 cv2.imwrite(str(photo_file), photo, [cv2.IMWRITE_JPEG_QUALITY, 92])
 
-            gray = cv2.cvtColor(card, cv2.COLOR_BGR2GRAY)
-            gray = cv2.resize(gray, None, fx=2.2, fy=2.2, interpolation=cv2.INTER_CUBIC)
-            gray = cv2.fastNlMeansDenoising(gray, None, 8, 7, 21)
-            gray = cv2.createCLAHE(2.0, (8, 8)).apply(gray)
-            language = os.getenv("OCR_LANGUAGES", "hin+eng")
-            text = pytesseract.image_to_string(gray, lang=language, config="--psm 6")
+            card_words = [word for word in words if (
+                x <= word["left"] + word["width"] / 2 <= x + card_w
+                and y <= word["top"] + word["height"] / 2 <= y + card_h
+            )]
+            grouped = {}
+            for word in card_words:
+                grouped.setdefault(word["line"], []).append(word)
+            text = "\n".join(
+                " ".join(word["text"] for word in sorted(line, key=lambda item: item["left"]))
+                for line in sorted(grouped.values(), key=lambda line: (line[0]["top"], line[0]["left"]))
+            )
+            if not text and fallbacks_used < fallback_limit:
+                gray = cv2.cvtColor(card, cv2.COLOR_BGR2GRAY)
+                gray = cv2.resize(gray, None, fx=1.6, fy=1.6, interpolation=cv2.INTER_CUBIC)
+                text = pytesseract.image_to_string(gray, lang=language, config="--psm 6")
+                fallbacks_used += 1
 
-            # The full-card OCR often reads EPIC correctly. Running the
-            # expensive focused EPIC passes for every card multiplies OCR time
-            # on low-CPU hosts, so use them only when the first pass missed it.
-            epic_text = "" if epic_from(text) else ocr_epic(card)
+            epic_text = ""
             record = parse_card(text, epic_text, str(photo_file), page_no, cell_no)
-            house_digits = re.sub(r"\D", "", record["houseNumber"] or "")
-            if not house_digits or set(house_digits).issubset({"1", "7"}):
-                focused_house = ocr_house(card)
-                if focused_house:
-                    record["houseNumber"] = focused_house
-            if not record["name"] or not record["voterId"]:
+            if os.getenv("OCR_DEEP_RETRY", "false").lower() == "true" and (not record["name"] or not record["voterId"]):
+                gray = cv2.cvtColor(card, cv2.COLOR_BGR2GRAY)
+                gray = cv2.resize(gray, None, fx=1.8, fy=1.8, interpolation=cv2.INTER_CUBIC)
                 threshold = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
                 alternate_text = pytesseract.image_to_string(threshold, lang=language, config="--psm 11")
-                alternate = parse_card(alternate_text, epic_text, str(photo_file), page_no, cell_no, record["houseNumber"])
+                alternate = parse_card(alternate_text, "", str(photo_file), page_no, cell_no, record["houseNumber"])
                 if alternate["confidence"] > record["confidence"]:
                     record = alternate
             if record["name"] or record["voterId"] or record["guardianName"] or record["houseNumber"] or record["age"]:

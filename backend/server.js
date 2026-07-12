@@ -38,6 +38,9 @@ app.use('/uploads', express.static(uploadRoot()));
 app.use('/party-logos', express.static(path.join(__dirname, 'src/public/party-logos')));
 
 app.get('/', (req, res) => res.json({ name: 'Political Booth Management CRM API', status: 'ok' }));
+// Render calls this endpoint frequently. Keep it dependency-free so a health
+// probe never starts five OCR processes or marks a busy OCR server unhealthy.
+app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 app.get('/api/system/ocr', async (req, res, next) => {
   try {
     const result = await checkOcrRuntime();
