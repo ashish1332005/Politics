@@ -24,6 +24,12 @@ services:
         value: 200
       - key: OCR_CELL_CONCURRENCY
         value: 2
+      - key: OCR_PAGE_CONCURRENCY
+        value: 2
+      - key: OCR_CARD_FALLBACKS_PER_PAGE
+        value: 3
+      - key: OCR_DEEP_RETRY
+        value: false
       - key: IMAGE_CROP_CONCURRENCY
         value: 2
       - key: USE_PYTHON_OCR
