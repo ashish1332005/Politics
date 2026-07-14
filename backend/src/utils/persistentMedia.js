@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const MediaAsset = require('../models/MediaAsset');
+const { resolveUploadPublicPath } = require('./uploadPath');
 
 const contentTypes = {
   '.jpg': 'image/jpeg',
@@ -10,7 +11,10 @@ const contentTypes = {
 };
 
 const persistLocalImage = async (filePath, userId, removeOriginal = false) => {
-  const source = String(filePath || '');
+  const original = String(filePath || '');
+  const source = /^[/\\]?uploads[/\\]/i.test(original)
+    ? resolveUploadPublicPath(original)
+    : original;
   if (!source || !fs.existsSync(source)) return source;
   const stat = fs.statSync(source);
   if (!stat.isFile() || stat.size < 1 || stat.size > 5 * 1024 * 1024) {
