@@ -6,15 +6,16 @@ exports.get = async (req, res, next) => {
     if (!mongoose.isValidObjectId(req.params.id)) {
       return res.status(404).end();
     }
-    const asset = await MediaAsset.findById(req.params.id).select('+data').lean();
+    const asset = await MediaAsset.findById(req.params.id).select('+data');
     if (!asset?.data) return res.status(404).end();
+    const data = Buffer.from(asset.data);
     res.set({
       'Content-Type': asset.contentType || 'image/jpeg',
-      'Content-Length': asset.data.length,
+      'Content-Length': data.length,
       'Cache-Control': 'public, max-age=31536000, immutable',
       'X-Content-Type-Options': 'nosniff',
     });
-    return res.send(asset.data);
+    return res.send(data);
   } catch (error) {
     return next(error);
   }
