@@ -6,6 +6,7 @@ const { applyMemberScope, assertBoothAccess, assertWardAccess } = require('../ut
 const { writeActivity } = require('../middleware/activityLogger');
 const { requireValidEpic } = require('../utils/epic');
 const { syncMemberFamily, removeMemberFromFamilies } = require('../utils/familySync');
+const { persistLocalImage } = require('../utils/persistentMedia');
 
 const populate = 'party ward booth area createdBy updatedBy';
 const maskMobile = (value) => {
@@ -73,7 +74,7 @@ exports.create = async (req, res, next) => {
   try {
     const data = { ...req.body };
     data.voterId = requireValidEpic(data.voterId);
-    if (req.file) data.photo = `/uploads/${req.file.filename}`;
+    if (req.file) data.photo = await persistLocalImage(req.file.path, req.currentUser._id, true);
     await attachBoothWard(data, req.currentUser);
     assertBoothAccess(req.currentUser, data.booth);
     assertWardAccess(req.currentUser, data.ward);
@@ -306,7 +307,7 @@ exports.update = async (req, res, next) => {
     }
     delete updates.voterId;
     Object.assign(member, updates);
-    if (req.file) member.photo = `/uploads/${req.file.filename}`;
+    if (req.file) member.photo = await persistLocalImage(req.file.path, req.currentUser._id, true);
     member.updatedBy = req.currentUser._id;
     member.duplicateWarnings = await duplicateWarnings(member, member._id);
     if (member.duplicateWarnings.length && member.verificationStatus !== 'verified') member.verificationStatus = 'duplicate';

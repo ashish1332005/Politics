@@ -15,6 +15,7 @@ const { ocrPdf } = require('../utils/pdfOcr');
 const { normalizeEpic, isValidEpic } = require('../utils/epic');
 const { convertKrutiDevToUnicode } = require('../utils/legacyHindi');
 const { uploadFilePath } = require('../utils/uploadPath');
+const { persistLocalImage } = require('../utils/persistentMedia');
 const importProgress = new Map();
 const progressWrites = new Map();
 
@@ -1210,6 +1211,9 @@ const runPdfImport = async ({ file, body, currentUser }, uploadId) => {
         processed += 1;
         setProgress(uploadId, { processed, imported: created.length, skipped: skipped.length });
         continue;
+      }
+      if (item.photo && fs.existsSync(item.photo)) {
+        item.photo = await persistLocalImage(item.photo, currentUser._id, true);
       }
       const itemArea = await enrichPdfAreaHierarchy(item, assemblyArea);
       const existing = await Member.findOne({ voterId: item.voterId });

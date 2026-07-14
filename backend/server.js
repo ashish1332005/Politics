@@ -37,6 +37,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static(uploadRoot()));
 app.use('/party-logos', express.static(path.join(__dirname, 'src/public/party-logos')));
+app.get('/media/:id', require('./src/controllers/mediaController').get);
 
 app.get('/', (req, res) => res.json({ name: 'Political Booth Management CRM API', status: 'ok' }));
 // Render calls this endpoint frequently. Keep it dependency-free so a health
