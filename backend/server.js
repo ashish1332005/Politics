@@ -10,6 +10,8 @@ const { restoreWebSessions } = require('./src/services/whatsappWeb');
 const { uploadRoot } = require('./src/utils/uploadPath');
 const { checkOcrRuntime } = require('./src/utils/ocrRuntime');
 const ImportJob = require('./src/models/ImportJob');
+const Member = require('./src/models/Member');
+const { ensureMemberSearchData } = require('./src/utils/memberSearch');
 
 const app = express();
 const configuredOrigins = (process.env.CORS_ORIGIN || '*')
@@ -77,6 +79,8 @@ const serverTimeoutMs = Number(process.env.UPLOAD_TIMEOUT_MINUTES || 30) * 60 * 
 
 connectDB()
   .then(async () => {
+    const indexedMembers = await ensureMemberSearchData(Member);
+    if (indexedMembers) console.log('Prepared ' + indexedMembers + ' voter record(s) for easy search.');
     await ImportJob.updateMany(
       { status: { $in: ['uploading', 'processing'] } },
       {

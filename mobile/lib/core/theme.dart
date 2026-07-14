@@ -17,6 +17,7 @@ const softBlue = Color(0xffedf4ff);
 ThemeData buildAppTheme() {
   return ThemeData(
     useMaterial3: true,
+    fontFamily: 'NotoSansDevanagari',
     scaffoldBackgroundColor: bg,
     colorScheme: ColorScheme.fromSeed(
       seedColor: blue,

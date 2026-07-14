@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
@@ -52,6 +54,7 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
   int currentPage = 1;
   late Future<Map<String, dynamic>> dashboardFuture;
   late Future<VoterPageResult> votersFuture;
+  Timer? searchDebounce;
   static const int pageSize = 100;
 
   void refreshVoters() {
@@ -67,6 +70,14 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
         refreshVoters();
       });
 
+  void searchChanged(String _) {
+    searchDebounce?.cancel();
+    setState(() {});
+    searchDebounce = Timer(const Duration(milliseconds: 450), () {
+      if (mounted) filtersChanged();
+    });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -76,6 +87,7 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
 
   @override
   void dispose() {
+    searchDebounce?.cancel();
     search.dispose();
     sectionNumber.dispose();
     boothNumber.dispose();
@@ -153,7 +165,8 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
       onResult: (result) {
         search.text = result.recognizedWords;
         search.selection = TextSelection.collapsed(offset: search.text.length);
-        filtersChanged();
+        setState(() {});
+        if (result.finalResult) filtersChanged();
       },
     );
   }
@@ -331,20 +344,40 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
           final compact = constraints.maxWidth < 620;
           final searchBox = TextField(
             controller: search,
-            onChanged: (_) => filtersChanged(),
+            onChanged: searchChanged,
             textInputAction: TextInputAction.search,
+            onSubmitted: (_) {
+              searchDebounce?.cancel();
+              filtersChanged();
+            },
             decoration: InputDecoration(
               prefixIcon: const Icon(Icons.search_rounded),
               hintText: compact
-                  ? 'नाम, मोबाइल, EPIC...'
-                  : 'नाम, मोबाइल, EPIC, घर, गाँव, पंचायत या पता खोजें...',
-              suffixIcon: IconButton(
-                tooltip: listening ? 'सुनना बंद करें' : 'बोलकर खोजें',
-                onPressed: toggleVoiceSearch,
-                icon: Icon(
-                  listening ? Icons.mic_rounded : Icons.mic_none_rounded,
-                  color: listening ? Colors.red : blue,
-                ),
+                  ? 'नाम, पिता/पति, मोबाइल, EPIC...'
+                  : 'नाम, पिता/पति, मोबाइल, EPIC, घर, गाँव, पंचायत या पता खोजें...',
+              helperText: 'एक या अधिक शब्द लिखें—जैसे नाम + पिता का नाम + गाँव',
+              suffixIcon: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (search.text.isNotEmpty)
+                    IconButton(
+                      tooltip: 'खोज साफ करें',
+                      onPressed: () {
+                        searchDebounce?.cancel();
+                        search.clear();
+                        filtersChanged();
+                      },
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                  IconButton(
+                    tooltip: listening ? 'सुनना बंद करें' : 'बोलकर खोजें',
+                    onPressed: toggleVoiceSearch,
+                    icon: Icon(
+                      listening ? Icons.mic_rounded : Icons.mic_none_rounded,
+                      color: listening ? Colors.red : blue,
+                    ),
+                  ),
+                ],
               ),
             ),
           );

@@ -7,6 +7,7 @@ const { writeActivity } = require('../middleware/activityLogger');
 const { requireValidEpic } = require('../utils/epic');
 const { syncMemberFamily, removeMemberFromFamilies } = require('../utils/familySync');
 const { persistLocalImage } = require('../utils/persistentMedia');
+const { buildSearchConditions, searchExactCandidates } = require('../utils/memberSearch');
 
 const populate = 'party ward booth area createdBy updatedBy';
 const maskMobile = (value) => {
@@ -95,53 +96,31 @@ exports.create = async (req, res, next) => {
 
 exports.list = async (req, res, next) => {
   try {
-    const { q, qMode, party, supportLevel, gender, booth, ward, area, verificationStatus, location, village, gramPanchayat, tehsil, municipality, caste, organizationPost, sectionNumber, sectionName, assemblyNumber, assemblyName, partNumber, letter } = req.query;
+    const { q, party, supportLevel, gender, booth, ward, area, verificationStatus, location, village, gramPanchayat, tehsil, municipality, caste, organizationPost, sectionNumber, sectionName, assemblyNumber, assemblyName, partNumber, letter } = req.query;
     const limit = Math.min(Number(req.query.limit) || 100, 500);
     const page = Math.max(Number(req.query.page) || 1, 1);
     const paged = String(req.query.paged || '').toLowerCase() === 'true' || req.query.page !== undefined;
     const filter = applyMemberScope(req.currentUser, {});
     if (q) {
-      const regex = searchRegex(q);
-      filter.$or = qMode === 'name'
-        ? [
-            { name: regex },
-            { surname: regex },
-          ]
-        : [
-            { name: regex },
-            { surname: regex },
-            { mobile: regex },
-            { voterId: regex },
-            { guardianName: regex },
-            { houseNumber: regex },
-            { address: regex },
-            { location: regex },
-            { village: regex },
-            { gramPanchayat: regex },
-            { tehsil: regex },
-            { caste: regex },
-            { organizationPost: regex },
-            { sectionName: regex },
-            { assemblyName: regex },
-            { partNumber: regex },
-          ];
+      const conditions = buildSearchConditions(q);
+      filter.$and = [...(filter.$and || []), ...conditions];
     }
     if (party) filter.party = party;
     if (supportLevel) filter.supportLevel = supportLevel;
     if (gender) filter.gender = gender;
     if (ward) filter.ward = ward;
     if (area) filter.area = area;
-    if (location) filter.location = new RegExp(location, 'i');
-    if (village) filter.village = new RegExp(village, 'i');
-    if (gramPanchayat) filter.gramPanchayat = new RegExp(gramPanchayat, 'i');
-    if (tehsil) filter.tehsil = new RegExp(tehsil, 'i');
-    if (municipality) filter.municipality = new RegExp(municipality, 'i');
-    if (caste) filter.caste = new RegExp(caste, 'i');
-    if (organizationPost) filter.organizationPost = new RegExp(organizationPost, 'i');
+    if (location) filter.location = searchRegex(location);
+    if (village) filter.village = searchRegex(village);
+    if (gramPanchayat) filter.gramPanchayat = searchRegex(gramPanchayat);
+    if (tehsil) filter.tehsil = searchRegex(tehsil);
+    if (municipality) filter.municipality = searchRegex(municipality);
+    if (caste) filter.caste = searchRegex(caste);
+    if (organizationPost) filter.organizationPost = searchRegex(organizationPost);
     if (sectionNumber) filter.sectionNumber = new RegExp(`^${String(sectionNumber).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
-    if (sectionName) filter.sectionName = new RegExp(sectionName, 'i');
+    if (sectionName) filter.sectionName = searchRegex(sectionName);
     if (assemblyNumber) filter.assemblyNumber = assemblyNumber;
-    if (assemblyName) filter.assemblyName = new RegExp(assemblyName, 'i');
+    if (assemblyName) filter.assemblyName = searchRegex(assemblyName);
     if (partNumber) filter.partNumber = partNumber;
     if (verificationStatus) filter.verificationStatus = verificationStatus;
     if (letter) {
@@ -151,17 +130,46 @@ exports.list = async (req, res, next) => {
     if (req.query.missingMobile === 'true') filter.$and = [...(filter.$and || []), { $or: [{ mobile: '' }, { mobile: null }, { mobile: { $exists: false } }] }];
     if (req.query.missingHouse === 'true') filter.$and = [...(filter.$and || []), { $or: [{ houseNumber: '' }, { houseNumber: null }, { houseNumber: { $exists: false } }] }];
     if (booth && req.currentUser.role === 'admin') filter.booth = booth;
-    const members = await Member.find(filter)
-      .select('photo name surname mobile altMobile voterId guardianName houseNumber address location area tehsil gramPanchayat village municipality caste subCaste organizationPost organizationLevel influenceLevel occupation education extraDetails supportLevel ward booth updatedAt age gender sectionNumber sectionName assemblyNumber assemblyName partNumber')
+    const listQuery = (query) => Member.find(query)
+      .select('photo name surname mobile altMobile voterId voterSerial guardianName houseNumber address location area tehsil gramPanchayat village municipality caste subCaste organizationPost organizationLevel influenceLevel occupation education extraDetails supportLevel ward booth updatedAt age gender sectionNumber sectionName assemblyNumber assemblyName partNumber')
       .populate(populate)
       .sort(req.query.sort === 'recent' ? { updatedAt: -1 } : { name: 1, surname: 1, houseNumber: 1 })
-      .collation({ locale: 'en', numericOrdering: true, strength: 1 })
-      .skip(paged ? (page - 1) * limit : 0)
-      .limit(limit)
-      .lean();
+      .collation({ locale: 'en', numericOrdering: true, strength: 1 });
+    const start = paged ? (page - 1) * limit : 0;
+    let members;
+    let total;
+    if (q) {
+      const exactValues = searchExactCandidates(q);
+      const exactFilter = exactValues.length ? { ...filter, searchExact: { $in: exactValues } } : null;
+      const [matchingTotal, exactTotal] = await Promise.all([
+        Member.countDocuments(filter),
+        exactFilter ? Member.countDocuments(exactFilter) : 0,
+      ]);
+      total = matchingTotal;
+      const exactMembers = start < exactTotal
+        ? await listQuery(exactFilter).skip(start).limit(limit).lean()
+        : [];
+      const remaining = Math.max(0, limit - exactMembers.length);
+      let generalMembers = [];
+      if (remaining) {
+        const generalFilter = exactValues.length
+          ? {
+              ...filter,
+              $and: [...(filter.$and || []), { searchExact: { $nin: exactValues } }],
+            }
+          : filter;
+        generalMembers = await listQuery(generalFilter)
+          .skip(Math.max(0, start - exactTotal))
+          .limit(remaining)
+          .lean();
+      }
+      members = [...exactMembers, ...generalMembers];
+    } else {
+      members = await listQuery(filter).skip(start).limit(limit).lean();
+      if (paged) total = await Member.countDocuments(filter);
+    }
     const items = members.map((member) => maskMemberMobile(member, req.currentUser));
     if (!paged) return res.json(items);
-    const total = await Member.countDocuments(filter);
     res.json({
       items,
       total,

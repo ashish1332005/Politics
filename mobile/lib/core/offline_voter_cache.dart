@@ -53,10 +53,17 @@ class OfflineVoterCache {
     try {
       final online = await api.getQuery('/api/members', pagedQuery);
       final items = List<dynamic>.from(online['items'] as List? ?? []);
-      if (page == 1) await save(items);
+      final total = ((online['total'] ?? items.length) as num).toInt();
+      if (!_hasActiveFilters(query)) {
+        if (page == 1 && total <= items.length) {
+          await save(items);
+        } else {
+          await merge(items);
+        }
+      }
       return VoterPageResult(
         items: items,
-        total: ((online['total'] ?? items.length) as num).toInt(),
+        total: total,
         page: ((online['page'] ?? page) as num).toInt(),
         limit: ((online['limit'] ?? limit) as num).toInt(),
         pages: ((online['pages'] ?? 1) as num).toInt(),
@@ -86,6 +93,19 @@ class OfflineVoterCache {
     await prefs.setString(_updatedKey, DateTime.now().toIso8601String());
   }
 
+  static Future<void> merge(List<dynamic> voters) async {
+    final byId = <String, dynamic>{};
+    for (final item in await read()) {
+      final id = '${item['_id'] ?? ''}';
+      if (id.isNotEmpty) byId[id] = item;
+    }
+    for (final item in voters) {
+      final id = '${item['_id'] ?? ''}';
+      if (id.isNotEmpty) byId[id] = item;
+    }
+    await save(byId.values.toList());
+  }
+
   static Future<List<dynamic>> read() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_key);
@@ -106,20 +126,39 @@ class OfflineVoterCache {
 
   static List<dynamic> _filter(
       List<dynamic> items, Map<String, String?> query) {
-    final q = (query['q'] ?? '').toLowerCase();
+    final q = _normalize(query['q'] ?? '');
+    final queryTokens =
+        q.split(' ').where((token) => token.isNotEmpty).toList();
     return items.where((raw) {
       final item = Map<String, dynamic>.from(raw);
-      if (q.isNotEmpty) {
-        final text = [
+      if (queryTokens.isNotEmpty) {
+        final details = List<dynamic>.from(item['extraDetails'] as List? ?? []);
+        final text = _normalize([
           item['name'],
           item['surname'],
           item['mobile'],
+          item['altMobile'],
           item['voterId'],
+          item['voterSerial'],
+          item['guardianName'],
+          item['houseNumber'],
+          item['address'],
           item['village'],
+          item['gramPanchayat'],
+          item['tehsil'],
+          item['municipality'],
           item['location'],
+          item['caste'],
+          item['subCaste'],
           item['organizationPost'],
-        ].join(' ').toLowerCase();
-        if (!text.contains(q)) return false;
+          item['sectionNumber'],
+          item['sectionName'],
+          item['assemblyNumber'],
+          item['assemblyName'],
+          item['partNumber'],
+          ...details.expand((detail) => [detail['label'], detail['value']]),
+        ].join(' '));
+        if (!queryTokens.every(text.contains)) return false;
       }
       for (final key in [
         'supportLevel',
@@ -146,5 +185,21 @@ class OfflineVoterCache {
       }
       return true;
     }).toList();
+  }
+
+  static bool _hasActiveFilters(Map<String, String?> query) =>
+      query.values.any((value) => value != null && value.trim().isNotEmpty);
+
+  static String _normalize(String value) {
+    const hindi = '०१२३४५६७८९';
+    var normalized = value;
+    for (var index = 0; index < hindi.length; index++) {
+      normalized = normalized.replaceAll(hindi[index], '$index');
+    }
+    return normalized
+        .toLowerCase()
+        .replaceAll(RegExp(r'[\u200b-\u200f\u2060\ufeff]'), '')
+        .replaceAll(RegExp(r'[\s,./:;|_()+\-]+'), ' ')
+        .trim();
   }
 }

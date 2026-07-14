@@ -1,5 +1,7 @@
 ﻿const mongoose = require('mongoose');
 
+const { buildMemberSearchData } = require('../utils/memberSearch');
+
 const FamilyMemberSchema = new mongoose.Schema({
   name: { type: String, trim: true },
   relation: { type: String, trim: true },
@@ -129,7 +131,16 @@ const MemberSchema = new mongoose.Schema({
   followUps: [FollowUpSchema],
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  searchVersion: { type: Number, default: 0, select: false },
+  searchText: { type: String, default: '', select: false },
+  searchKeys: { type: [String], default: [], select: false },
+  searchExact: { type: [String], default: [], select: false },
 }, { timestamps: true });
+
+MemberSchema.pre('validate', function updateSearchData(next) {
+  Object.assign(this, buildMemberSearchData(this));
+  next();
+});
 
 MemberSchema.index({ mobile: 1 });
 MemberSchema.index({ voterId: 1 }, { unique: true });
@@ -137,8 +148,9 @@ MemberSchema.index({ address: 'text', name: 'text', surname: 'text', location: '
 MemberSchema.index({ booth: 1, supportLevel: 1 });
 MemberSchema.index({ assemblyNumber: 1, partNumber: 1, sectionName: 1 });
 MemberSchema.index({ area: 1, organizationPost: 1, caste: 1 });
+MemberSchema.index({ searchKeys: 1 });
+MemberSchema.index({ searchExact: 1 });
 
 module.exports = mongoose.model('Member', MemberSchema);
-
 
 
