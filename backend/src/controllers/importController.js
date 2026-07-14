@@ -324,17 +324,37 @@ const getOrCreateArea = async ({ name, type, parent = null, assemblyNumber = '',
   const cacheIdentity = type === 'assembly' && cleanAssemblyNumber ? cleanAssemblyNumber : cleanName.toLowerCase();
   const cacheKey = `${String(parent || 'root')}|${type}|${cacheIdentity}`;
   if (areaImportCache.has(cacheKey)) return areaImportCache.get(cacheKey);
+  const identityQuery = { parent, type, name: cleanName };
   const query = type === 'assembly' && cleanAssemblyNumber
-    ? { parent, type, assemblyNumber: cleanAssemblyNumber }
-    : { parent, type, name: cleanName };
-  const area = await Area.findOneAndUpdate(
-    query,
-    {
-      $set: { name: cleanName, active: true },
-      $setOnInsert: { type, parent, assemblyNumber: cleanAssemblyNumber, createdBy: userId },
-    },
-    { upsert: true, new: true, setDefaultsOnInsert: true },
-  );
+    ? { parent, type, $or: [{ assemblyNumber: cleanAssemblyNumber }, { name: cleanName }] }
+    : identityQuery;
+  let area = await Area.findOne(query);
+  if (area) {
+    area.active = true;
+    if (cleanAssemblyNumber && !area.assemblyNumber) area.assemblyNumber = cleanAssemblyNumber;
+    await area.save();
+  } else {
+    try {
+      area = await Area.findOneAndUpdate(
+        identityQuery,
+        {
+          $set: { active: true },
+          $setOnInsert: {
+            name: cleanName,
+            type,
+            parent,
+            assemblyNumber: cleanAssemblyNumber,
+            createdBy: userId,
+          },
+        },
+        { upsert: true, new: true, setDefaultsOnInsert: true },
+      );
+    } catch (error) {
+      if (error?.code !== 11000) throw error;
+      area = await Area.findOne(query);
+      if (!area) throw error;
+    }
+  }
   areaImportCache.set(cacheKey, area._id);
   return area._id;
 };
