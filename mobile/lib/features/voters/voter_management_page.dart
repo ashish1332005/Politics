@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
@@ -7,6 +8,7 @@ import '../../core/api_client.dart';
 import '../../core/contact_actions.dart';
 import '../../core/download_helper.dart';
 import '../../core/offline_voter_cache.dart';
+import '../../core/picked_file_source.dart';
 import '../../core/print_helper.dart';
 import '../../core/theme.dart';
 import '../../layout/app_layout.dart';
@@ -2809,6 +2811,8 @@ class VoterForm extends StatefulWidget {
 class _VoterFormState extends State<VoterForm> {
   final ctrls = <String, TextEditingController>{};
   String support = 'undecided';
+  PlatformFile? selectedPhoto;
+  bool saving = false;
 
   @override
   void initState() {
@@ -2827,8 +2831,10 @@ class _VoterFormState extends State<VoterForm> {
       'occupation',
       'education',
       'notes',
-      'ward',
-      'booth'
+      'village',
+      'gramPanchayat',
+      'tehsil',
+      'partNumber',
     ]) {
       ctrls[f] = TextEditingController(text: '${widget.voter?[f] ?? ''}');
     }
@@ -2836,18 +2842,70 @@ class _VoterFormState extends State<VoterForm> {
   }
 
   Future<void> save() async {
+    if (saving) return;
+    if (ctrls['name']!.text.trim().isEmpty) {
+      _showError('मतदाता का नाम भरना जरूरी है।');
+      return;
+    }
+    if (ctrls['voterId']!.text.trim().isEmpty) {
+      _showError('सही EPIC नंबर भरना जरूरी है।');
+      return;
+    }
+    setState(() => saving = true);
     final body = {
-      for (final e in ctrls.entries) e.key: e.value.text,
+      for (final e in ctrls.entries) e.key: e.value.text.trim(),
       'supportLevel': support
     };
-    if (widget.voter == null) {
-      await api.post('/api/members', body);
-    } else {
-      await api.put('/api/members/${widget.voter!['_id']}', body);
+    try {
+      if (selectedPhoto != null) {
+        await api.uploadFile(
+          widget.voter == null
+              ? '/api/members'
+              : '/api/members/${widget.voter!['_id']}',
+          method: widget.voter == null ? 'POST' : 'PUT',
+          filename: selectedPhoto!.name,
+          fileField: 'photo',
+          bytes: pickedFileBytes(selectedPhoto!),
+          fields: body.map((key, value) => MapEntry(key, value)),
+        );
+      } else if (widget.voter == null) {
+        await api.post('/api/members', body);
+      } else {
+        await api.put('/api/members/${widget.voter!['_id']}', body);
+      }
+      widget.onSaved();
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.of(context);
+      Navigator.pop(context);
+      messenger.showSnackBar(
+        const SnackBar(content: Text('मतदाता और photo सफलतापूर्वक सहेजे गए')),
+      );
+    } catch (error) {
+      if (mounted) {
+        _showError(error.toString().replaceFirst('Exception: ', ''));
+      }
+    } finally {
+      if (mounted) setState(() => saving = false);
     }
-    widget.onSaved();
-    if (mounted) Navigator.pop(context);
   }
+
+  Future<void> pickPhoto() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.image,
+      withData: true,
+      withReadStream: false,
+    );
+    if (result == null || !mounted) return;
+    final file = result.files.single;
+    if (file.size > 10 * 1024 * 1024) {
+      _showError('Photo 10 MB से छोटी होनी चाहिए।');
+      return;
+    }
+    setState(() => selectedPhoto = file);
+  }
+
+  void _showError(String message) => ScaffoldMessenger.of(context)
+      .showSnackBar(SnackBar(content: Text(message)));
 
   @override
   void dispose() {
@@ -2908,8 +2966,13 @@ class _VoterFormState extends State<VoterForm> {
             actions: [
               IconButton(
                 tooltip: 'सहेजें',
-                onPressed: save,
-                icon: const Icon(Icons.check_rounded, color: blue),
+                onPressed: saving ? null : save,
+                icon: saving
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.check_rounded, color: blue),
               ),
             ],
           ),
@@ -2917,19 +2980,57 @@ class _VoterFormState extends State<VoterForm> {
             padding: const EdgeInsets.fromLTRB(16, 22, 16, 32),
             children: [
               Center(
-                child: Container(
-                  width: 82,
-                  height: 82,
-                  decoration: const BoxDecoration(
-                      shape: BoxShape.circle, color: Color(0xffeef1f6)),
-                  child: const Icon(Icons.add_a_photo_outlined,
-                      color: muted, size: 30),
+                child: InkWell(
+                  onTap: saving ? null : pickPhoto,
+                  borderRadius: BorderRadius.circular(60),
+                  child: Stack(clipBehavior: Clip.none, children: [
+                    Container(
+                      width: 96,
+                      height: 96,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: const Color(0xffeef1f6),
+                        border: Border.all(color: Colors.white, width: 4),
+                        boxShadow: const [
+                          BoxShadow(
+                              color: Color(0x1a071b4b),
+                              blurRadius: 18,
+                              offset: Offset(0, 7)),
+                        ],
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: selectedPhoto?.bytes != null
+                          ? Image.memory(selectedPhoto!.bytes!,
+                              fit: BoxFit.cover)
+                          : const Icon(Icons.person_rounded,
+                              color: muted, size: 46),
+                    ),
+                    Positioned(
+                      right: -2,
+                      bottom: 2,
+                      child: Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: blue,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 3),
+                        ),
+                        child: const Icon(Icons.camera_alt_rounded,
+                            color: Colors.white, size: 16),
+                      ),
+                    ),
+                  ]),
                 ),
               ),
               const SizedBox(height: 8),
-              const Center(
-                child: Text('मतदाता की जानकारी भरें',
-                    style: TextStyle(color: muted, fontSize: 12)),
+              Center(
+                child: Text(
+                    selectedPhoto == null
+                        ? 'Photo जोड़ने के लिए tap करें'
+                        : '${selectedPhoto!.name} · बदलने के लिए tap करें',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: muted, fontSize: 12)),
               ),
               const SizedBox(height: 22),
               Container(
@@ -2945,10 +3046,19 @@ class _VoterFormState extends State<VoterForm> {
               SizedBox(
                 height: 52,
                 child: FilledButton.icon(
-                  onPressed: save,
-                  icon: const Icon(Icons.person_add_alt_1_rounded),
-                  label: Text(
-                      widget.voter == null ? 'मतदाता जोड़ें' : 'बदलाव सहेजें'),
+                  onPressed: saving ? null : save,
+                  icon: saving
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.person_add_alt_1_rounded),
+                  label: Text(saving
+                      ? 'सहेज रहे हैं...'
+                      : widget.voter == null
+                          ? 'मतदाता जोड़ें'
+                          : 'बदलाव सहेजें'),
                 ),
               ),
             ],
@@ -2965,7 +3075,7 @@ class _VoterFormState extends State<VoterForm> {
             onPressed: () => Navigator.pop(context),
             child: const Text('रद्द करें')),
         FilledButton.icon(
-            onPressed: save,
+            onPressed: saving ? null : save,
             icon: const Icon(Icons.save),
             label: const Text('सहेजें')),
       ],
@@ -2988,8 +3098,10 @@ String voterFieldLabel(String key) =>
       'occupation': 'व्यवसाय',
       'education': 'शिक्षा',
       'notes': 'टिप्पणी',
-      'ward': 'वार्ड ID',
-      'booth': 'बूथ ID',
+      'village': 'गाँव',
+      'gramPanchayat': 'ग्राम पंचायत',
+      'tehsil': 'तहसील / ब्लॉक',
+      'partNumber': 'भाग / बूथ संख्या',
     }[key] ??
     key;
 

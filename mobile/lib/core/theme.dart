@@ -13,6 +13,8 @@ const purple = Color(0xff7a3ff2);
 const rose = Color(0xffff3868);
 const sky = Color(0xff35b8ff);
 const softBlue = Color(0xffedf4ff);
+const softGreen = Color(0xffeaf8f0);
+const softOrange = Color(0xfffff4e7);
 
 ThemeData buildAppTheme() {
   return ThemeData(
@@ -32,6 +34,25 @@ ThemeData buildAppTheme() {
       centerTitle: false,
       titleTextStyle:
           TextStyle(color: navy, fontSize: 18, fontWeight: FontWeight.w900),
+      surfaceTintColor: Colors.transparent,
+    ),
+    dividerTheme: const DividerThemeData(color: Color(0xffedf0f5), space: 1),
+    bottomSheetTheme: const BottomSheetThemeData(
+      backgroundColor: Colors.white,
+      surfaceTintColor: Colors.transparent,
+      showDragHandle: false,
+    ),
+    dialogTheme: DialogThemeData(
+      backgroundColor: Colors.white,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+    ),
+    snackBarTheme: SnackBarThemeData(
+      behavior: SnackBarBehavior.floating,
+      backgroundColor: deepNavy,
+      contentTextStyle:
+          const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
     ),
     navigationBarTheme: const NavigationBarThemeData(
       backgroundColor: Colors.white,
@@ -48,28 +69,33 @@ ThemeData buildAppTheme() {
     ),
     cardTheme: CardThemeData(
       color: Colors.white,
-      elevation: 0.5,
+      elevation: 0,
       shadowColor: const Color(0x14071b4b),
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: const BorderSide(color: border),
+        borderRadius: BorderRadius.circular(20),
+        side: const BorderSide(color: Color(0xffe8edf5)),
       ),
+    ),
+    listTileTheme: const ListTileThemeData(
+      iconColor: navy,
+      textColor: navy,
+      contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 3),
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: Colors.white,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(15),
         borderSide: const BorderSide(color: border),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(15),
         borderSide: const BorderSide(color: border),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(15),
         borderSide: const BorderSide(color: blue, width: 1.5),
       ),
     ),
@@ -79,7 +105,7 @@ ThemeData buildAppTheme() {
         foregroundColor: Colors.white,
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
         textStyle: const TextStyle(fontWeight: FontWeight.w800),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
@@ -88,7 +114,7 @@ ThemeData buildAppTheme() {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         side: const BorderSide(color: border),
         textStyle: const TextStyle(fontWeight: FontWeight.w800),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
       ),
     ),
     chipTheme: ChipThemeData(
