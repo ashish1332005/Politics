@@ -76,20 +76,25 @@ const parseTsv = (tsv) => {
   return { text, words };
 };
 
-const renderPages = async (pdfPath, outputDir, { firstPage, lastPage } = {}) => {
-  const prefix = path.join(outputDir, 'page');
-  const args = ['-png', '-r', process.env.OCR_DPI || '200'];
-  if (firstPage) args.push('-f', String(firstPage));
-  if (lastPage) args.push('-l', String(lastPage));
-  args.push(pdfPath, prefix);
-  await run(commandFromEnv('PDFTOPPM_PATH', 'pdftoppm'), args);
-  return fs.readdirSync(outputDir)
-    .filter((file) => /^page-\d+\.png$/i.test(file))
-    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
-    .map((file) => path.join(outputDir, file));
+const pdfPageCount = async (pdfPath) => {
+  const output = await run(commandFromEnv('PDFINFO_PATH', 'pdfinfo'), [pdfPath]);
+  const match = output.match(/^Pages:\s+(\d+)/mi);
+  if (!match) throw new Error('Could not determine PDF page count.');
+  return Number(match[1]);
 };
 
-const runPythonWorker = (pages, outputDir, onProgress) => new Promise((resolve, reject) => {
+const renderPage = async (pdfPath, outputDir, pageNumber) => {
+  const prefix = path.join(outputDir, `render-${pageNumber}`);
+  await run(commandFromEnv('PDFTOPPM_PATH', 'pdftoppm'), [
+    '-png', '-singlefile', '-r', process.env.OCR_DPI || '180',
+    '-f', String(pageNumber), '-l', String(pageNumber), pdfPath, prefix,
+  ]);
+  const rendered = `${prefix}.png`;
+  if (!fs.existsSync(rendered)) throw new Error(`OCR page ${pageNumber} rendering produced no image.`);
+  return rendered;
+};
+
+const runPythonWorker = (pages, outputDir, pageNumbers, onProgress) => new Promise((resolve, reject) => {
   const python = process.env.PYTHON_PATH || 'python';
   const script = path.join(__dirname, '../../python/ocr_worker.py');
   const child = spawn(python, [script], {
@@ -129,7 +134,7 @@ const runPythonWorker = (pages, outputDir, onProgress) => new Promise((resolve, 
       return reject(new Error(`Python OCR returned invalid JSON: ${error.message}`));
     }
   });
-  child.stdin.end(JSON.stringify({ pages, outputDir }));
+  child.stdin.end(JSON.stringify({ pages, pageNumbers, outputDir }));
 });
 
 const cropVoterPage = async (page, pageIndex, outputDir) => {
@@ -340,3 +345,95 @@ exports.ocrPdf = async (pdfPath, importFileName, pageRange = {}) => {
     status: `OCR processed ${pages.length} page(s). ${photoStatus}`,
   };
 };
+
+// Render and OCR one page at a time. Keeping every rendered PNG plus multiple
+// OpenCV/Tesseract page buffers alive was enough to exceed a 512 MB instance.
+// A fresh Python process per page also guarantees native memory is returned to
+// the OS before the next page starts.
+const lowMemoryOcrPdf = async (pdfPath, importFileName, pageRange = {}) => {
+  const { onProgress, firstPage, lastPage } = pageRange;
+  const documentPages = await pdfPageCount(pdfPath);
+  const startPage = Math.max(1, Number(firstPage) || 1);
+  const endPage = Math.min(documentPages, Number(lastPage) || documentPages);
+  if (startPage > endPage) throw new Error('PDF page range is invalid.');
+
+  const totalPages = endPage - startPage + 1;
+  const rows = Number(process.env.VOTER_GRID_ROWS || 10);
+  const columns = Number(process.env.VOTER_GRID_COLUMNS || 3);
+  const totalCards = totalPages * rows * columns;
+  const safeBase = path.basename(importFileName, path.extname(importFileName))
+    .replace(/[^a-z0-9_-]/gi, '-');
+  const workId = `${Date.now()}-${safeBase}`;
+  const workDir = uploadFilePath('ocr', workId);
+  fs.mkdirSync(workDir, { recursive: true });
+
+  const records = [];
+  const headerTexts = [];
+  const header = {};
+  let processedCards = 0;
+  onProgress?.({ phase: 'rendering', processedPages: 0, totalPages, processedCards: 0, totalCards });
+
+  for (let offset = 0; offset < totalPages; offset += 1) {
+    const pageNumber = startPage + offset;
+    let rendered;
+    try {
+      rendered = await renderPage(pdfPath, workDir, pageNumber);
+      onProgress?.({
+        phase: 'ocr',
+        processedPages: offset,
+        totalPages,
+        processedCards,
+        totalCards,
+      });
+      const result = await runPythonWorker(
+        [rendered],
+        workDir,
+        [pageNumber],
+        (event) => {
+          if (event.type !== 'card_progress') return;
+          processedCards += 1;
+          onProgress?.({
+            phase: 'ocr',
+            processedPages: offset,
+            totalPages,
+            processedCards,
+            totalCards,
+          });
+        },
+      );
+      records.push(...(result.records || []));
+      if (headerTexts.length < 3 && result.headerText) headerTexts.push(result.headerText);
+      for (const [key, value] of Object.entries(result.header || {})) {
+        if (!header[key] && value) header[key] = value;
+      }
+      onProgress?.({
+        phase: 'ocr',
+        processedPages: offset + 1,
+        totalPages,
+        processedCards,
+        totalCards,
+      });
+    } catch (error) {
+      throw new Error(`OCR failed on PDF page ${pageNumber}: ${error.message}`);
+    } finally {
+      if (rendered) fs.rmSync(rendered, { force: true });
+    }
+  }
+
+  const photos = records.map((record) => record.photo).filter(Boolean);
+  keepOnlyVoterPhotos(workDir, photos);
+  const headerText = headerTexts.join('\n');
+  return {
+    text: `${headerText}\n${records.map((record) => record.rawText || '').join('\n')}`,
+    words: [],
+    voterRecords: records.map((record) => ({
+      ...record,
+      photo: uploadPublicPath('ocr', workId, path.basename(record.photo)),
+    })),
+    images: photos.map((photo) => uploadPublicPath('ocr', workId, path.basename(photo))),
+    header,
+    status: `Low-memory OCR processed ${totalPages} page(s) sequentially and accepted ${records.length} confidence-checked voter record(s).`,
+  };
+};
+
+exports.ocrPdf = lowMemoryOcrPdf;

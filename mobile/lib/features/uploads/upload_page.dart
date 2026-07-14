@@ -37,7 +37,20 @@ class _UploadPageState extends State<UploadPage> {
   Future<Map<String, dynamic>> waitForImportCompletion(String uploadId) async {
     final deadline = DateTime.now().add(const Duration(minutes: 90));
     while (DateTime.now().isBefore(deadline)) {
-      final progress = await api.get('/api/import/status/$uploadId');
+      Map<String, dynamic> progress;
+      try {
+        progress = await api.get('/api/import/status/$uploadId');
+      } catch (error) {
+        if (!api.isTemporaryFailure(error)) rethrow;
+        if (mounted) {
+          setState(() {
+            serverProcessing = true;
+            processingStage = 'Server reconnecting. OCR will continue automatically';
+          });
+        }
+        await Future.delayed(const Duration(seconds: 5));
+        continue;
+      }
       if (!mounted) return progress;
       setState(() {
         processingStage = (progress['stage'] ?? '').toString();

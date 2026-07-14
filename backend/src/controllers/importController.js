@@ -8,6 +8,7 @@ const Ward = require('../models/Ward');
 const Booth = require('../models/Booth');
 const Family = require('../models/Family');
 const ImportReview = require('../models/ImportReview');
+const ImportJob = require('../models/ImportJob');
 const { assertBoothAccess, assertWardAccess } = require('../utils/boothAccess');
 const { findPartyFromText } = require('../utils/partySeed');
 const { ocrPdf } = require('../utils/pdfOcr');
@@ -15,6 +16,7 @@ const { normalizeEpic, isValidEpic } = require('../utils/epic');
 const { convertKrutiDevToUnicode } = require('../utils/legacyHindi');
 const { uploadFilePath } = require('../utils/uploadPath');
 const importProgress = new Map();
+const progressWrites = new Map();
 
 const isWindows = process.platform === 'win32';
 const isWindowsExecutablePath = (value = '') => /^[a-z]:\\/i.test(String(value));
@@ -28,18 +30,43 @@ const commandFromEnv = (envName, fallback) => {
 const progressId = (req) => String(req.body?.uploadId || req.params?.uploadId || req.query?.uploadId || '').replace(/[^a-z0-9_-]/gi, '').slice(0, 80);
 const safeUploadId = (value) => String(value || '').replace(/[^a-z0-9_-]/gi, '').slice(0, 80);
 const chunkDirectory = (id) => uploadFilePath('chunks', safeUploadId(id));
-const setProgress = (id, patch) => {
+const persistProgress = (id, value, owner) => {
   if (!id) return;
-  importProgress.set(id, { id, ...importProgress.get(id), ...patch, updatedAt: new Date().toISOString() });
+  const previous = progressWrites.get(id) || Promise.resolve();
+  const write = previous.catch(() => {}).then(() => {
+    const update = {
+      $set: {
+        ...value,
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      },
+    };
+    const options = {};
+    if (owner) {
+      update.$setOnInsert = { uploadId: id, owner };
+      options.upsert = true;
+    }
+    return ImportJob.updateOne({ uploadId: id }, update, options);
+  }).catch((error) => console.error('Import progress persistence failed:', error.message));
+  progressWrites.set(id, write);
 };
-const finishProgressSoon = (id, patch) => {
-  setProgress(id, patch);
+const setProgress = (id, patch, owner) => {
+  if (!id) return;
+  const value = { id, ...importProgress.get(id), ...patch, updatedAt: new Date().toISOString() };
+  importProgress.set(id, value);
+  persistProgress(id, value, owner);
+};
+const finishProgressSoon = (id, patch, owner) => {
+  setProgress(id, patch, owner);
   if (id) setTimeout(() => importProgress.delete(id), 15 * 60 * 1000).unref?.();
 };
 
-exports.importStatus = (req, res) => {
-  const current = importProgress.get(progressId(req));
-  res.json(current || { status: 'waiting', stage: 'Waiting for upload', imported: 0, skipped: 0, total: 0, processed: 0, uploadBytes: 0, uploadTotalBytes: 0, ocrPagesProcessed: 0, ocrPagesTotal: 0, ocrCardsProcessed: 0, ocrCardsTotal: 0 });
+exports.importStatus = async (req, res, next) => {
+  try {
+    const id = progressId(req);
+    const current = importProgress.get(id)
+      || await ImportJob.findOne({ uploadId: id, owner: req.currentUser._id }).lean();
+    res.json(current || { status: 'waiting', stage: 'Waiting for upload', imported: 0, skipped: 0, total: 0, processed: 0, uploadBytes: 0, uploadTotalBytes: 0, ocrPagesProcessed: 0, ocrPagesTotal: 0, ocrCardsProcessed: 0, ocrCardsTotal: 0 });
+  } catch (error) { next(error); }
 };
 exports.trackUploadProgress = (req, res, next) => {
   const id = progressId(req);
@@ -59,7 +86,7 @@ exports.trackUploadProgress = (req, res, next) => {
     ocrPagesTotal: 0,
     ocrCardsProcessed: 0,
     ocrCardsTotal: 0,
-  });
+  }, req.currentUser._id);
   req.on('data', (chunk) => {
     receivedBytes += chunk.length;
     setProgress(id, {
@@ -114,7 +141,7 @@ exports.uploadPdfChunk = (req, res, next) => {
     const receivedBytes = fs.readdirSync(dir).filter((name) => /^\d+\.part$/.test(name))
       .reduce((sum, name) => sum + fs.statSync(path.join(dir, name)).size, 0);
     setProgress(id, { status: 'uploading', stage: 'Receiving file on server', uploadBytes: receivedBytes,
-      uploadTotalBytes: totalBytes, imported: 0, skipped: 0, processed: 0, total: 0 });
+      uploadTotalBytes: totalBytes, imported: 0, skipped: 0, processed: 0, total: 0 }, req.currentUser._id);
     res.json({ received: index, receivedBytes, totalBytes });
   } catch (error) { next(error); }
 };
@@ -152,12 +179,12 @@ exports.completePdfChunks = (req, res, next) => {
     fs.rmSync(dir, { recursive: true, force: true });
     const file = { path: finalPath, filename: finalName, originalname: filename, size: assembledBytes };
     setProgress(id, { status: 'processing', stage: 'Upload received. PDF/OCR import running in background',
-      uploadBytes: assembledBytes, uploadTotalBytes: assembledBytes });
+      uploadBytes: assembledBytes, uploadTotalBytes: assembledBytes }, req.currentUser._id);
     setImmediate(() => runPdfImport({ file, body: { ...req.body, uploadId: id }, currentUser: req.currentUser }, id)
       .catch((error) => console.error('Background chunked PDF import failed:', error)));
     res.status(202).json({ processing: true, uploadId: id, message: 'PDF upload complete. OCR/import started.' });
   } catch (error) {
-    finishProgressSoon(id, { status: 'failed', stage: error.message || 'PDF upload failed' }); next(error);
+    finishProgressSoon(id, { status: 'failed', stage: error.message || 'PDF upload failed' }, req.currentUser?._id); next(error);
   }
 };
 
@@ -1069,7 +1096,7 @@ exports.importMembers = async (req, res, next) => {
 
 const runPdfImport = async ({ file, body, currentUser }, uploadId) => {
   try {
-    setProgress(uploadId, { status: 'processing', stage: 'Reading PDF/OCR text', imported: 0, skipped: 0, processed: 0, total: 0, ocrPagesProcessed: 0, ocrPagesTotal: 0, ocrCardsProcessed: 0, ocrCardsTotal: 0 });
+    setProgress(uploadId, { status: 'processing', stage: 'Reading PDF/OCR text', imported: 0, skipped: 0, processed: 0, total: 0, ocrPagesProcessed: 0, ocrPagesTotal: 0, ocrCardsProcessed: 0, ocrCardsTotal: 0 }, currentUser._id);
     if (!file) {
       const err = new Error('PDF file required');
       err.status = 400;
@@ -1285,13 +1312,13 @@ const runPdfImport = async ({ file, body, currentUser }, uploadId) => {
       imported: created.length,
       skipped: skipped.length,
       result,
-    });
+    }, currentUser._id);
     return result;
   } catch (e) {
     finishProgressSoon(uploadId, {
       status: 'failed',
       stage: e.message || 'PDF import failed',
-    });
+    }, currentUser?._id);
     throw e;
   } finally {
     if (file?.path) fs.rmSync(file.path, { force: true });

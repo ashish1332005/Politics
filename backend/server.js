@@ -9,6 +9,7 @@ const { startMessageWorker } = require('./src/services/messageQueue');
 const { restoreWebSessions } = require('./src/services/whatsappWeb');
 const { uploadRoot } = require('./src/utils/uploadPath');
 const { checkOcrRuntime } = require('./src/utils/ocrRuntime');
+const ImportJob = require('./src/models/ImportJob');
 
 const app = express();
 const configuredOrigins = (process.env.CORS_ORIGIN || '*')
@@ -74,7 +75,17 @@ const PORT = process.env.PORT || 5000;
 const serverTimeoutMs = Number(process.env.UPLOAD_TIMEOUT_MINUTES || 30) * 60 * 1000;
 
 connectDB()
-  .then(() => {
+  .then(async () => {
+    await ImportJob.updateMany(
+      { status: { $in: ['uploading', 'processing'] } },
+      {
+        $set: {
+          status: 'failed',
+          stage: 'Server restarted during PDF import. Please upload the PDF again.',
+          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        },
+      },
+    );
     const server = app.listen(PORT, () => console.log(`Political Booth Management CRM API running on ${PORT}`));
     server.requestTimeout = serverTimeoutMs;
     server.headersTimeout = serverTimeoutMs + 5000;

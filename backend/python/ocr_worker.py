@@ -1,12 +1,14 @@
 ﻿import json
+import gc
 import os
 import re
 import sys
 from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor
 
 import cv2
 import pytesseract
+
+cv2.setNumThreads(1)
 
 sys.stdin.reconfigure(encoding="utf-8")
 sys.stdout.reconfigure(encoding="utf-8")
@@ -396,12 +398,13 @@ def parse_header_numbers(text):
 def main():
     payload = json.loads(sys.stdin.read())
     pages = [Path(item) for item in payload["pages"]]
+    page_numbers = payload.get("pageNumbers") or list(range(1, len(pages) + 1))
+    if len(page_numbers) != len(pages):
+        raise ValueError("pageNumbers must match pages")
     output_dir = Path(payload["outputDir"])
     output_dir.mkdir(parents=True, exist_ok=True)
     if os.getenv("TESSERACT_PATH"):
         pytesseract.pytesseract.tesseract_cmd = os.getenv("TESSERACT_PATH")
-    workers = max(1, min(int(os.getenv("OCR_PAGE_CONCURRENCY", "2")), len(pages)))
-
     def process_page_bundle(item):
         page_no, page = item
         # Header OCR used to run sequentially for every page before any voter
@@ -411,11 +414,10 @@ def main():
         header = read_header(page)
         return header, process_page(page, output_dir, page_no)
 
-    with ThreadPoolExecutor(max_workers=workers) as executor:
-        page_bundles = list(executor.map(
-            process_page_bundle,
-            enumerate(pages, start=1),
-        ))
+    page_bundles = []
+    for item in zip(page_numbers, pages):
+        page_bundles.append(process_page_bundle(item))
+        gc.collect()
     headers = [bundle[0] for bundle in page_bundles]
     page_records = [bundle[1] for bundle in page_bundles]
     page_headers = [parse_header_numbers(header) for header in headers]

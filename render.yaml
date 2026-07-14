@@ -12,6 +12,8 @@ services:
         value: python3
       - key: PDFTOPPM_PATH
         value: pdftoppm
+      - key: PDFINFO_PATH
+        value: pdfinfo
       - key: PDFIMAGES_PATH
         value: pdfimages
       - key: TESSERACT_PATH
@@ -21,17 +23,19 @@ services:
       - key: OCR_LANGUAGES
         value: hin+eng
       - key: OCR_DPI
-        value: 200
+        value: 180
       - key: OCR_CELL_CONCURRENCY
-        value: 2
+        value: 1
       - key: OCR_PAGE_CONCURRENCY
-        value: 2
+        value: 1
       - key: OCR_CARD_FALLBACKS_PER_PAGE
-        value: 3
+        value: 1
       - key: OCR_DEEP_RETRY
         value: false
       - key: IMAGE_CROP_CONCURRENCY
-        value: 2
+        value: 1
+      - key: OMP_THREAD_LIMIT
+        value: 1
       - key: USE_PYTHON_OCR
         value: true
       - key: MONGO_URI

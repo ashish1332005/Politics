@@ -103,6 +103,9 @@ class Api {
             message.contains('504'));
   }
 
+  bool isTemporaryFailure(Object error) =>
+      _isTransientNetworkError(error) || _isTemporaryServerError(error);
+
   NetworkRequestException _friendlyNetworkError(Object error) {
     final message = error.toString().toLowerCase();
     if (message.contains('failed host lookup')) {
@@ -131,7 +134,7 @@ class Api {
       try {
         return await operation();
       } catch (error) {
-        if (!_isTransientNetworkError(error)) rethrow;
+        if (!isTemporaryFailure(error)) rethrow;
         lastError = error;
         final message = error.toString().toLowerCase();
         if (!retryConnectionReset &&
@@ -149,6 +152,12 @@ class Api {
 
   Future<dynamic> _send(Future<http.Response> future) async {
     final res = await future;
+    if (res.statusCode == 502 ||
+        res.statusCode == 503 ||
+        res.statusCode == 504) {
+      throw NetworkRequestException(
+          'Server is restarting or temporarily unavailable (${res.statusCode}).');
+    }
     dynamic body;
     final contentType = res.headers['content-type'] ?? '';
     if (res.body.isEmpty) {
@@ -427,8 +436,9 @@ class Api {
         await sendChunk(chunk, index++);
       }
     }
-    if (pending.isNotEmpty)
+    if (pending.isNotEmpty) {
       await sendChunk(Uint8List.fromList(pending), index++);
+    }
     if (sent != fileLength || index != totalChunks) {
       throw Exception(
           'PDF could not be read completely. Please select it again.');
