@@ -1212,7 +1212,7 @@ const runPdfImport = async ({ file, body, currentUser }, uploadId) => {
         setProgress(uploadId, { processed, imported: created.length, skipped: skipped.length });
         continue;
       }
-      if (item.photo && fs.existsSync(item.photo)) {
+      if (item.photo) {
         item.photo = await persistLocalImage(item.photo, currentUser._id, true);
       }
       const itemArea = await enrichPdfAreaHierarchy(item, assemblyArea);
