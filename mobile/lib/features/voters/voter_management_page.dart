@@ -10,7 +10,6 @@ import '../../core/offline_voter_cache.dart';
 import '../../core/print_helper.dart';
 import '../../core/theme.dart';
 import '../../layout/app_layout.dart';
-import '../../widgets/common.dart';
 import '../../widgets/mobile_components.dart';
 import '../families/family_members.dart';
 import '../reports/configurable_print_page.dart';
@@ -312,384 +311,681 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) => AppPage(children: [
-        PageHeading(
-          title: 'मतदाता प्रबंधन',
-          subtitle: 'नाम, EPIC, मोबाइल, गाँव या घर संख्या से तेजी से खोजें',
-          action: Builder(builder: (context) {
-            final compact = MediaQuery.sizeOf(context).width < 520;
-            return Wrap(spacing: 8, runSpacing: 8, children: [
-              OutlinedButton.icon(
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const ConfigurablePrintPage()),
+  Future<void> openPhoneFilters() async {
+    var nextSupport = support;
+    var nextGender = gender;
+    var nextVerification = verificationStatus;
+    final nextVillage = TextEditingController(text: village.text);
+    final nextBooth = TextEditingController(text: boothNumber.text);
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) => Padding(
+          padding: EdgeInsets.fromLTRB(
+            20,
+            12,
+            20,
+            MediaQuery.viewInsetsOf(context).bottom + 20,
+          ),
+          child: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Container(
+                width: 42,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: border,
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                icon: const Icon(Icons.print_rounded),
-                label: Text(compact ? 'Bulk Print' : 'Smart Bulk Print'),
               ),
-              FilledButton.icon(
-                onPressed: () => showDialog(
-                    context: context,
-                    builder: (_) =>
-                        VoterForm(onSaved: () => setState(refreshVoters))),
-                icon: const Icon(Icons.add),
-                label: Text(compact ? 'नया मतदाता' : 'नया मतदाता जोड़ें'),
+              const SizedBox(height: 18),
+              Row(children: [
+                const Expanded(
+                  child: Text('मतदाता फ़िल्टर',
+                      style: TextStyle(
+                          color: navy,
+                          fontSize: 19,
+                          fontWeight: FontWeight.w900)),
+                ),
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(sheetContext);
+                    clearFilters();
+                  },
+                  child: const Text('Reset'),
+                ),
+              ]),
+              const SizedBox(height: 14),
+              DropdownButtonFormField<String>(
+                initialValue: nextSupport,
+                decoration: const InputDecoration(
+                    labelText: 'श्रेणी',
+                    prefixIcon: Icon(Icons.groups_rounded)),
+                items: const [
+                  DropdownMenuItem(value: '', child: Text('सभी मतदाता')),
+                  DropdownMenuItem(value: 'supporter', child: Text('समर्थक')),
+                  DropdownMenuItem(value: 'neutral', child: Text('तटस्थ')),
+                  DropdownMenuItem(value: 'opposite', child: Text('विरोधी')),
+                  DropdownMenuItem(value: 'undecided', child: Text('अनिर्णीत')),
+                ],
+                onChanged: (value) =>
+                    setSheetState(() => nextSupport = value ?? ''),
               ),
-            ]);
-          }),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: nextGender,
+                decoration: const InputDecoration(
+                    labelText: 'लिंग', prefixIcon: Icon(Icons.person_outline)),
+                items: const [
+                  DropdownMenuItem(value: '', child: Text('सभी')),
+                  DropdownMenuItem(value: 'male', child: Text('पुरुष')),
+                  DropdownMenuItem(value: 'female', child: Text('महिला')),
+                  DropdownMenuItem(value: 'other', child: Text('अन्य')),
+                ],
+                onChanged: (value) =>
+                    setSheetState(() => nextGender = value ?? ''),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: nextVillage,
+                decoration: const InputDecoration(
+                    labelText: 'गाँव / क्षेत्र',
+                    prefixIcon: Icon(Icons.location_on_outlined)),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: nextBooth,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                    labelText: 'भाग / बूथ संख्या',
+                    prefixIcon: Icon(Icons.how_to_vote_outlined)),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: nextVerification,
+                decoration: const InputDecoration(
+                    labelText: 'डेटा स्थिति',
+                    prefixIcon: Icon(Icons.fact_check_outlined)),
+                items: const [
+                  DropdownMenuItem(value: '', child: Text('सभी')),
+                  DropdownMenuItem(value: 'verified', child: Text('सत्यापित')),
+                  DropdownMenuItem(
+                      value: 'needs_review', child: Text('Review आवश्यक')),
+                  DropdownMenuItem(value: 'pending', child: Text('लंबित')),
+                ],
+                onChanged: (value) =>
+                    setSheetState(() => nextVerification = value ?? ''),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: FilledButton.icon(
+                  onPressed: () {
+                    setState(() {
+                      support = nextSupport;
+                      gender = nextGender;
+                      verificationStatus = nextVerification;
+                      village.text = nextVillage.text.trim();
+                      boothNumber.text = nextBooth.text.trim();
+                      currentPage = 1;
+                      refreshVoters();
+                    });
+                    Navigator.pop(sheetContext);
+                  },
+                  icon: const Icon(Icons.check_rounded),
+                  label: const Text('फ़िल्टर लागू करें'),
+                ),
+              ),
+            ]),
+          ),
         ),
-        LayoutBuilder(builder: (context, constraints) {
-          final compact = constraints.maxWidth < 620;
-          final searchBox = TextField(
-            controller: search,
-            onChanged: searchChanged,
-            textInputAction: TextInputAction.search,
-            onSubmitted: (_) {
-              searchDebounce?.cancel();
-              filtersChanged();
-            },
-            decoration: InputDecoration(
-              prefixIcon: const Icon(Icons.search_rounded),
-              hintText: compact
-                  ? 'नाम, पिता/पति, मोबाइल, EPIC...'
-                  : 'नाम, पिता/पति, मोबाइल, EPIC, घर, गाँव, पंचायत या पता खोजें...',
-              helperText: 'एक या अधिक शब्द लिखें—जैसे नाम + पिता का नाम + गाँव',
-              suffixIcon: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
+      ),
+    );
+    nextVillage.dispose();
+    nextBooth.dispose();
+  }
+
+  Widget buildPhoneBookMobile(BuildContext context) => RefreshIndicator(
+        onRefresh: () async {
+          setState(refreshVoters);
+          await votersFuture;
+        },
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 110),
+          children: [
+            TextField(
+              controller: search,
+              onChanged: searchChanged,
+              textInputAction: TextInputAction.search,
+              onSubmitted: (_) => filtersChanged(),
+              decoration: InputDecoration(
+                hintText: 'नाम, मोबाइल, EPIC, गाँव खोजें...',
+                prefixIcon: const Icon(Icons.search_rounded),
+                suffixIcon: Row(mainAxisSize: MainAxisSize.min, children: [
                   if (search.text.isNotEmpty)
                     IconButton(
-                      tooltip: 'खोज साफ करें',
                       onPressed: () {
-                        searchDebounce?.cancel();
                         search.clear();
                         filtersChanged();
                       },
                       icon: const Icon(Icons.close_rounded),
                     ),
                   IconButton(
-                    tooltip: listening ? 'सुनना बंद करें' : 'बोलकर खोजें',
                     onPressed: toggleVoiceSearch,
-                    icon: Icon(
-                      listening ? Icons.mic_rounded : Icons.mic_none_rounded,
-                      color: listening ? Colors.red : blue,
-                    ),
+                    icon: Icon(listening ? Icons.mic : Icons.mic_none_rounded,
+                        color: listening ? Colors.red : blue),
                   ),
-                ],
-              ),
-            ),
-          );
-          final filterButton = OutlinedButton.icon(
-            onPressed: () =>
-                setState(() => showAdvancedFilters = !showAdvancedFilters),
-            icon: Icon(
-              showAdvancedFilters
-                  ? Icons.filter_alt_rounded
-                  : Icons.tune_rounded,
-              color: blue,
-            ),
-            label:
-                Text(showAdvancedFilters ? 'फ़िल्टर छिपाएँ' : 'एडवांस फ़िल्टर'),
-          );
-          if (compact) {
-            return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  searchBox,
-                  const SizedBox(height: 10),
-                  filterButton,
-                ]);
-          }
-          return Row(children: [
-            Expanded(child: searchBox),
-            const SizedBox(width: 10),
-            filterButton,
-          ]);
-        }),
-        if (listening)
-          const Padding(
-            padding: EdgeInsets.only(top: 6),
-            child: Text('सुन रहा हूँ… नाम, मोबाइल, EPIC या गाँव बोलें',
-                style:
-                    TextStyle(color: Colors.red, fontWeight: FontWeight.w700)),
-          ),
-        _SmartSearchPanel(
-          selectedLabels: selectedOptionLabels,
-          onPick: openSmartFilter,
-          onClear: clearSmartFilter,
-          onClearAll: selectedOptionLabels.isEmpty
-              ? null
-              : () => setState(() {
-                    selectedOptionFilters.clear();
-                    selectedOptionLabels.clear();
-                    currentPage = 1;
-                    selectedIds.clear();
-                  }),
-        ),
-        if (showAdvancedFilters) ...[
-          const SizedBox(height: 10),
-          SectionCard(
-            title: 'एडवांस खोज',
-            action: TextButton.icon(
-              onPressed: clearFilters,
-              icon: const Icon(Icons.clear_all),
-              label: const Text('सभी साफ करें'),
-            ),
-            child: Wrap(spacing: 10, runSpacing: 10, children: [
-              _SearchFilter(
-                  controller: assemblyNumber,
-                  label: 'विधानसभा संख्या',
-                  icon: Icons.account_balance_outlined,
-                  onChanged: (_) => filtersChanged()),
-              _SearchFilter(
-                  controller: boothNumber,
-                  label: 'भाग / बूथ संख्या',
-                  icon: Icons.how_to_vote_outlined,
-                  onChanged: (_) => filtersChanged()),
-              _SearchFilter(
-                  controller: sectionNumber,
-                  label: 'अनुभाग संख्या',
-                  icon: Icons.format_list_numbered,
-                  onChanged: (_) => filtersChanged()),
-              _SearchFilter(
-                  controller: sectionName,
-                  label: 'अनुभाग नाम',
-                  icon: Icons.segment,
-                  onChanged: (_) => filtersChanged()),
-              _SearchFilter(
-                  controller: village,
-                  label: 'गाँव',
-                  icon: Icons.home_work_outlined,
-                  onChanged: (_) => filtersChanged()),
-              _SearchFilter(
-                  controller: gramPanchayat,
-                  label: 'ग्राम पंचायत',
-                  icon: Icons.holiday_village_outlined,
-                  onChanged: (_) => filtersChanged()),
-              _SearchFilter(
-                  controller: tehsil,
-                  label: 'तहसील',
-                  icon: Icons.location_city_outlined,
-                  onChanged: (_) => filtersChanged()),
-              _SearchFilter(
-                  controller: municipality,
-                  label: 'नगर पालिका',
-                  icon: Icons.apartment_outlined,
-                  onChanged: (_) => filtersChanged()),
-              _SearchFilter(
-                  controller: location,
-                  label: 'पता / स्थान',
-                  icon: Icons.location_on_outlined,
-                  onChanged: (_) => filtersChanged()),
-              _SearchFilter(
-                  controller: caste,
-                  label: 'जाति',
-                  icon: Icons.groups_2_outlined,
-                  onChanged: (_) => filtersChanged()),
-              _SearchFilter(
-                  controller: organizationPost,
-                  label: 'राजनीतिक पद',
-                  icon: Icons.badge_outlined,
-                  onChanged: (_) => filtersChanged()),
-              _FilterDropdown(
-                label: 'समर्थन स्तर',
-                value: support,
-                items: const {
-                  '': 'सभी',
-                  'supporter': 'समर्थक',
-                  'neutral': 'तटस्थ',
-                  'opposite': 'विरोधी',
-                  'undecided': 'अनिर्णीत',
-                },
-                onChanged: (value) => setState(() {
-                  support = value;
-                  currentPage = 1;
-                  refreshVoters();
-                }),
-              ),
-              _FilterDropdown(
-                label: 'लिंग',
-                value: gender,
-                items: const {
-                  '': 'सभी',
-                  'male': 'पुरुष',
-                  'female': 'महिला',
-                  'other': 'अन्य',
-                },
-                onChanged: (value) => setState(() {
-                  gender = value;
-                  currentPage = 1;
-                  refreshVoters();
-                }),
-              ),
-              _FilterDropdown(
-                label: 'सत्यापन',
-                value: verificationStatus,
-                items: const {
-                  '': 'सभी',
-                  'pending': 'लंबित',
-                  'verified': 'सत्यापित',
-                  'needs_review': 'Review आवश्यक',
-                  'duplicate': 'डुप्लीकेट',
-                },
-                onChanged: (value) => setState(() {
-                  verificationStatus = value;
-                  currentPage = 1;
-                  refreshVoters();
-                }),
-              ),
-            ]),
-          ),
-        ],
-        FutureBuilder<Map<String, dynamic>>(
-          future: dashboardFuture,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState != ConnectionState.done) {
-              return const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(30),
-                  child: CircularProgressIndicator(),
+                ]),
+                filled: true,
+                fillColor: const Color(0xfff7f8fb),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(15),
+                  borderSide: const BorderSide(color: border),
                 ),
-              );
-            }
-            if (snapshot.hasError) {
-              return Padding(
-                padding: const EdgeInsets.all(24),
-                child: Text('${snapshot.error}',
-                    style: const TextStyle(color: Colors.red)),
-              );
-            }
-            final d = snapshot.data ?? const <String, dynamic>{};
-            return LayoutBuilder(builder: (context, constraints) {
-              final columns = constraints.maxWidth >= 720
-                  ? 3
-                  : constraints.maxWidth >= 360
-                      ? 2
-                      : 1;
-              final width =
-                  (constraints.maxWidth - (columns - 1) * 10) / columns;
-              final items = [
-                MetricCard(
-                    label: 'कुल मतदाता',
-                    value: '${d['members'] ?? 0}',
-                    icon: Icons.groups,
-                    color: blue),
-                MetricCard(
-                    label: 'समर्थक मतदाता',
-                    value: '${_supportCount(d, 'supporter')}',
-                    icon: Icons.group,
-                    color: green),
-                MetricCard(
-                    label: 'विरोधी मतदाता',
-                    value: '${_supportCount(d, 'opposite')}',
-                    icon: Icons.local_florist,
-                    color: orange),
-              ];
-              return Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: items
-                    .map((card) => SizedBox(width: width, child: card))
-                    .toList(),
-              );
-            });
-          },
-        ),
-        _AlphabetFilterBar(
-          selected: nameLetter,
-          onChanged: (letter) => setState(() {
-            nameLetter = letter;
-            currentPage = 1;
-            selectedIds.clear();
-            refreshVoters();
-          }),
-        ),
-        FutureBuilder<VoterPageResult>(
-          future: votersFuture,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState != ConnectionState.done) {
-              return const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(30),
-                  child: CircularProgressIndicator(),
-                ),
-              );
-            }
-            if (snapshot.hasError) {
-              return Padding(
-                padding: const EdgeInsets.all(24),
-                child: Text('${snapshot.error}',
-                    style: const TextStyle(color: Colors.red)),
-              );
-            }
-            final result = snapshot.data!;
-            return VoterTable(
-              items: result.items
-                  .map((e) => Map<String, dynamic>.from(e))
-                  .toList(),
-              refresh: () => setState(refreshVoters),
-              onDeleteAll: deleteAll,
-              total: result.total,
-              page: result.page,
-              pages: result.pages,
-              onPageChanged: (page) => setState(() {
-                currentPage = page;
+              ),
+            ),
+            if (listening)
+              const Padding(
+                padding: EdgeInsets.only(top: 7),
+                child: Text('सुन रहा हूँ…',
+                    style: TextStyle(color: Colors.red, fontSize: 12)),
+              ),
+            const SizedBox(height: 16),
+            _PhoneCategoryStrip(
+              selected: support,
+              reviewSelected: verificationStatus == 'needs_review',
+              onChanged: (value) => setState(() {
+                support = value;
+                verificationStatus = '';
+                currentPage = 1;
                 refreshVoters();
               }),
-              pageSize: result.limit,
-              selectedIds: selectedIds,
-              onSelectionChanged: (id, selected) => setState(() {
-                if (selected) {
-                  selectedIds.add(id);
-                } else {
-                  selectedIds.remove(id);
-                }
+              onReview: () => setState(() {
+                support = '';
+                verificationStatus = 'needs_review';
+                currentPage = 1;
+                refreshVoters();
               }),
-              onSelectPage: (ids, selected) => setState(() {
-                if (selected) {
-                  selectedIds.addAll(ids);
-                } else {
-                  selectedIds.removeAll(ids);
-                }
-              }),
-            );
-          },
-        ),
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-              color: const Color(0xfff2f6ff),
-              borderRadius: BorderRadius.circular(10)),
-          child: Wrap(spacing: 8, runSpacing: 8, children: [
-            if (selectedIds.isNotEmpty)
-              Chip(
-                avatar: const Icon(Icons.check_circle, color: green, size: 18),
-                label: Text('${selectedIds.length} मतदाता चयनित'),
-                onDeleted: () => setState(selectedIds.clear),
+            ),
+            const SizedBox(height: 18),
+            Row(children: [
+              const Expanded(
+                  child: Text('सभी संपर्क',
+                      style: TextStyle(
+                          color: navy,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900))),
+              IconButton.outlined(
+                tooltip: 'फ़िल्टर',
+                onPressed: openPhoneFilters,
+                icon: const Icon(Icons.tune_rounded, size: 20),
               ),
+              const SizedBox(width: 7),
+              IconButton.outlined(
+                tooltip: 'नाम क्रम',
+                onPressed: () => showModalBottomSheet<void>(
+                  context: context,
+                  backgroundColor: Colors.white,
+                  builder: (_) => SafeArea(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: _AlphabetFilterBar(
+                        selected: nameLetter,
+                        onChanged: (letter) {
+                          Navigator.pop(context);
+                          setState(() {
+                            nameLetter = letter;
+                            currentPage = 1;
+                            refreshVoters();
+                          });
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+                icon: const Icon(Icons.sort_by_alpha_rounded, size: 20),
+              ),
+            ]),
+            if (nameLetter.isNotEmpty ||
+                support.isNotEmpty ||
+                verificationStatus.isNotEmpty ||
+                gender.isNotEmpty ||
+                village.text.isNotEmpty ||
+                boothNumber.text.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: ActionChip(
+                    avatar: const Icon(Icons.close_rounded, size: 17),
+                    label: const Text('सभी फ़िल्टर हटाएँ'),
+                    onPressed: clearFilters,
+                  ),
+                ),
+              ),
+            const SizedBox(height: 8),
+            FutureBuilder<VoterPageResult>(
+              future: votersFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState != ConnectionState.done) {
+                  return const Padding(
+                      padding: EdgeInsets.all(36),
+                      child: Center(child: CircularProgressIndicator()));
+                }
+                if (snapshot.hasError) {
+                  return _PhoneMessage(
+                    icon: Icons.cloud_off_rounded,
+                    title: 'डेटा लोड नहीं हुआ',
+                    subtitle: '${snapshot.error}',
+                    onRetry: () => setState(refreshVoters),
+                  );
+                }
+                final result = snapshot.data!;
+                if (result.items.isEmpty) {
+                  return _PhoneMessage(
+                    icon: Icons.person_search_rounded,
+                    title: 'कोई मतदाता नहीं मिला',
+                    subtitle: 'नाम की spelling बदलें या फ़िल्टर हटाकर खोजें।',
+                    onRetry: clearFilters,
+                  );
+                }
+                return _PhoneContactList(
+                  result: result,
+                  onChanged: () => setState(refreshVoters),
+                  onPageChanged: (page) => setState(() {
+                    currentPage = page;
+                    refreshVoters();
+                  }),
+                );
+              },
+            ),
+          ],
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    if (MediaQuery.sizeOf(context).width < 700) {
+      return buildPhoneBookMobile(context);
+    }
+    return AppPage(children: [
+      PageHeading(
+        title: 'मतदाता प्रबंधन',
+        subtitle: 'नाम, EPIC, मोबाइल, गाँव या घर संख्या से तेजी से खोजें',
+        action: Builder(builder: (context) {
+          final compact = MediaQuery.sizeOf(context).width < 520;
+          return Wrap(spacing: 8, runSpacing: 8, children: [
             OutlinedButton.icon(
-                onPressed: () => saveApiFile(context,
-                        path: '/api/export/members.xlsx',
-                        fallbackName: 'voters.xlsx',
-                        query: {
-                          ...filterQuery,
-                          if (selectedIds.isNotEmpty)
-                            'ids': selectedIds.join(','),
-                        }),
-                icon: const Icon(Icons.table_view, color: green),
-                label: Text(
-                    selectedIds.isEmpty ? 'फ़िल्टर Excel' : 'चयनित Excel')),
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => const ConfigurablePrintPage()),
+              ),
+              icon: const Icon(Icons.print_rounded),
+              label: Text(compact ? 'Bulk Print' : 'Smart Bulk Print'),
+            ),
             FilledButton.icon(
-                onPressed: openCustomPrint,
-                icon: const Icon(Icons.print),
-                label: Text(selectedIds.isEmpty
-                    ? 'कस्टम Bulk Print'
-                    : 'चयनित (${selectedIds.length}) Print')),
+              onPressed: () => showDialog(
+                  context: context,
+                  builder: (_) =>
+                      VoterForm(onSaved: () => setState(refreshVoters))),
+              icon: const Icon(Icons.add),
+              label: Text(compact ? 'नया मतदाता' : 'नया मतदाता जोड़ें'),
+            ),
+          ]);
+        }),
+      ),
+      LayoutBuilder(builder: (context, constraints) {
+        final compact = constraints.maxWidth < 620;
+        final searchBox = TextField(
+          controller: search,
+          onChanged: searchChanged,
+          textInputAction: TextInputAction.search,
+          onSubmitted: (_) {
+            searchDebounce?.cancel();
+            filtersChanged();
+          },
+          decoration: InputDecoration(
+            prefixIcon: const Icon(Icons.search_rounded),
+            hintText: compact
+                ? 'नाम, पिता/पति, मोबाइल, EPIC...'
+                : 'नाम, पिता/पति, मोबाइल, EPIC, घर, गाँव, पंचायत या पता खोजें...',
+            helperText: 'एक या अधिक शब्द लिखें—जैसे नाम + पिता का नाम + गाँव',
+            suffixIcon: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (search.text.isNotEmpty)
+                  IconButton(
+                    tooltip: 'खोज साफ करें',
+                    onPressed: () {
+                      searchDebounce?.cancel();
+                      search.clear();
+                      filtersChanged();
+                    },
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                IconButton(
+                  tooltip: listening ? 'सुनना बंद करें' : 'बोलकर खोजें',
+                  onPressed: toggleVoiceSearch,
+                  icon: Icon(
+                    listening ? Icons.mic_rounded : Icons.mic_none_rounded,
+                    color: listening ? Colors.red : blue,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+        final filterButton = OutlinedButton.icon(
+          onPressed: () =>
+              setState(() => showAdvancedFilters = !showAdvancedFilters),
+          icon: Icon(
+            showAdvancedFilters ? Icons.filter_alt_rounded : Icons.tune_rounded,
+            color: blue,
+          ),
+          label:
+              Text(showAdvancedFilters ? 'फ़िल्टर छिपाएँ' : 'एडवांस फ़िल्टर'),
+        );
+        if (compact) {
+          return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                searchBox,
+                const SizedBox(height: 10),
+                filterButton,
+              ]);
+        }
+        return Row(children: [
+          Expanded(child: searchBox),
+          const SizedBox(width: 10),
+          filterButton,
+        ]);
+      }),
+      if (listening)
+        const Padding(
+          padding: EdgeInsets.only(top: 6),
+          child: Text('सुन रहा हूँ… नाम, मोबाइल, EPIC या गाँव बोलें',
+              style: TextStyle(color: Colors.red, fontWeight: FontWeight.w700)),
+        ),
+      _SmartSearchPanel(
+        selectedLabels: selectedOptionLabels,
+        onPick: openSmartFilter,
+        onClear: clearSmartFilter,
+        onClearAll: selectedOptionLabels.isEmpty
+            ? null
+            : () => setState(() {
+                  selectedOptionFilters.clear();
+                  selectedOptionLabels.clear();
+                  currentPage = 1;
+                  selectedIds.clear();
+                }),
+      ),
+      if (showAdvancedFilters) ...[
+        const SizedBox(height: 10),
+        SectionCard(
+          title: 'एडवांस खोज',
+          action: TextButton.icon(
+            onPressed: clearFilters,
+            icon: const Icon(Icons.clear_all),
+            label: const Text('सभी साफ करें'),
+          ),
+          child: Wrap(spacing: 10, runSpacing: 10, children: [
+            _SearchFilter(
+                controller: assemblyNumber,
+                label: 'विधानसभा संख्या',
+                icon: Icons.account_balance_outlined,
+                onChanged: (_) => filtersChanged()),
+            _SearchFilter(
+                controller: boothNumber,
+                label: 'भाग / बूथ संख्या',
+                icon: Icons.how_to_vote_outlined,
+                onChanged: (_) => filtersChanged()),
+            _SearchFilter(
+                controller: sectionNumber,
+                label: 'अनुभाग संख्या',
+                icon: Icons.format_list_numbered,
+                onChanged: (_) => filtersChanged()),
+            _SearchFilter(
+                controller: sectionName,
+                label: 'अनुभाग नाम',
+                icon: Icons.segment,
+                onChanged: (_) => filtersChanged()),
+            _SearchFilter(
+                controller: village,
+                label: 'गाँव',
+                icon: Icons.home_work_outlined,
+                onChanged: (_) => filtersChanged()),
+            _SearchFilter(
+                controller: gramPanchayat,
+                label: 'ग्राम पंचायत',
+                icon: Icons.holiday_village_outlined,
+                onChanged: (_) => filtersChanged()),
+            _SearchFilter(
+                controller: tehsil,
+                label: 'तहसील',
+                icon: Icons.location_city_outlined,
+                onChanged: (_) => filtersChanged()),
+            _SearchFilter(
+                controller: municipality,
+                label: 'नगर पालिका',
+                icon: Icons.apartment_outlined,
+                onChanged: (_) => filtersChanged()),
+            _SearchFilter(
+                controller: location,
+                label: 'पता / स्थान',
+                icon: Icons.location_on_outlined,
+                onChanged: (_) => filtersChanged()),
+            _SearchFilter(
+                controller: caste,
+                label: 'जाति',
+                icon: Icons.groups_2_outlined,
+                onChanged: (_) => filtersChanged()),
+            _SearchFilter(
+                controller: organizationPost,
+                label: 'राजनीतिक पद',
+                icon: Icons.badge_outlined,
+                onChanged: (_) => filtersChanged()),
+            _FilterDropdown(
+              label: 'समर्थन स्तर',
+              value: support,
+              items: const {
+                '': 'सभी',
+                'supporter': 'समर्थक',
+                'neutral': 'तटस्थ',
+                'opposite': 'विरोधी',
+                'undecided': 'अनिर्णीत',
+              },
+              onChanged: (value) => setState(() {
+                support = value;
+                currentPage = 1;
+                refreshVoters();
+              }),
+            ),
+            _FilterDropdown(
+              label: 'लिंग',
+              value: gender,
+              items: const {
+                '': 'सभी',
+                'male': 'पुरुष',
+                'female': 'महिला',
+                'other': 'अन्य',
+              },
+              onChanged: (value) => setState(() {
+                gender = value;
+                currentPage = 1;
+                refreshVoters();
+              }),
+            ),
+            _FilterDropdown(
+              label: 'सत्यापन',
+              value: verificationStatus,
+              items: const {
+                '': 'सभी',
+                'pending': 'लंबित',
+                'verified': 'सत्यापित',
+                'needs_review': 'Review आवश्यक',
+                'duplicate': 'डुप्लीकेट',
+              },
+              onChanged: (value) => setState(() {
+                verificationStatus = value;
+                currentPage = 1;
+                refreshVoters();
+              }),
+            ),
           ]),
-        )
-      ]);
+        ),
+      ],
+      FutureBuilder<Map<String, dynamic>>(
+        future: dashboardFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.all(30),
+                child: CircularProgressIndicator(),
+              ),
+            );
+          }
+          if (snapshot.hasError) {
+            return Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text('${snapshot.error}',
+                  style: const TextStyle(color: Colors.red)),
+            );
+          }
+          final d = snapshot.data ?? const <String, dynamic>{};
+          return LayoutBuilder(builder: (context, constraints) {
+            final columns = constraints.maxWidth >= 720
+                ? 3
+                : constraints.maxWidth >= 360
+                    ? 2
+                    : 1;
+            final width = (constraints.maxWidth - (columns - 1) * 10) / columns;
+            final items = [
+              MetricCard(
+                  label: 'कुल मतदाता',
+                  value: '${d['members'] ?? 0}',
+                  icon: Icons.groups,
+                  color: blue),
+              MetricCard(
+                  label: 'समर्थक मतदाता',
+                  value: '${_supportCount(d, 'supporter')}',
+                  icon: Icons.group,
+                  color: green),
+              MetricCard(
+                  label: 'विरोधी मतदाता',
+                  value: '${_supportCount(d, 'opposite')}',
+                  icon: Icons.local_florist,
+                  color: orange),
+            ];
+            return Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: items
+                  .map((card) => SizedBox(width: width, child: card))
+                  .toList(),
+            );
+          });
+        },
+      ),
+      _AlphabetFilterBar(
+        selected: nameLetter,
+        onChanged: (letter) => setState(() {
+          nameLetter = letter;
+          currentPage = 1;
+          selectedIds.clear();
+          refreshVoters();
+        }),
+      ),
+      FutureBuilder<VoterPageResult>(
+        future: votersFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.all(30),
+                child: CircularProgressIndicator(),
+              ),
+            );
+          }
+          if (snapshot.hasError) {
+            return Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text('${snapshot.error}',
+                  style: const TextStyle(color: Colors.red)),
+            );
+          }
+          final result = snapshot.data!;
+          return VoterTable(
+            items:
+                result.items.map((e) => Map<String, dynamic>.from(e)).toList(),
+            refresh: () => setState(refreshVoters),
+            onDeleteAll: deleteAll,
+            total: result.total,
+            page: result.page,
+            pages: result.pages,
+            onPageChanged: (page) => setState(() {
+              currentPage = page;
+              refreshVoters();
+            }),
+            pageSize: result.limit,
+            selectedIds: selectedIds,
+            onSelectionChanged: (id, selected) => setState(() {
+              if (selected) {
+                selectedIds.add(id);
+              } else {
+                selectedIds.remove(id);
+              }
+            }),
+            onSelectPage: (ids, selected) => setState(() {
+              if (selected) {
+                selectedIds.addAll(ids);
+              } else {
+                selectedIds.removeAll(ids);
+              }
+            }),
+          );
+        },
+      ),
+      Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+            color: const Color(0xfff2f6ff),
+            borderRadius: BorderRadius.circular(10)),
+        child: Wrap(spacing: 8, runSpacing: 8, children: [
+          if (selectedIds.isNotEmpty)
+            Chip(
+              avatar: const Icon(Icons.check_circle, color: green, size: 18),
+              label: Text('${selectedIds.length} मतदाता चयनित'),
+              onDeleted: () => setState(selectedIds.clear),
+            ),
+          OutlinedButton.icon(
+              onPressed: () => saveApiFile(context,
+                      path: '/api/export/members.xlsx',
+                      fallbackName: 'voters.xlsx',
+                      query: {
+                        ...filterQuery,
+                        if (selectedIds.isNotEmpty)
+                          'ids': selectedIds.join(','),
+                      }),
+              icon: const Icon(Icons.table_view, color: green),
+              label:
+                  Text(selectedIds.isEmpty ? 'फ़िल्टर Excel' : 'चयनित Excel')),
+          FilledButton.icon(
+              onPressed: openCustomPrint,
+              icon: const Icon(Icons.print),
+              label: Text(selectedIds.isEmpty
+                  ? 'कस्टम Bulk Print'
+                  : 'चयनित (${selectedIds.length}) Print')),
+        ]),
+      )
+    ]);
+  }
 }
 
 class _SmartSearchPanel extends StatelessWidget {
@@ -769,6 +1065,284 @@ class _SmartSearchPanel extends StatelessWidget {
       );
 }
 
+class _PhoneCategoryStrip extends StatelessWidget {
+  const _PhoneCategoryStrip({
+    required this.selected,
+    required this.reviewSelected,
+    required this.onChanged,
+    required this.onReview,
+  });
+
+  final String selected;
+  final bool reviewSelected;
+  final ValueChanged<String> onChanged;
+  final VoidCallback onReview;
+
+  @override
+  Widget build(BuildContext context) => SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(children: [
+          _PhoneCategory(
+            label: 'सभी',
+            icon: Icons.contacts_rounded,
+            color: blue,
+            selected: selected.isEmpty && !reviewSelected,
+            onTap: () => onChanged(''),
+          ),
+          _PhoneCategory(
+            label: 'समर्थक',
+            icon: Icons.thumb_up_rounded,
+            color: green,
+            selected: selected == 'supporter',
+            onTap: () => onChanged('supporter'),
+          ),
+          _PhoneCategory(
+            label: 'तटस्थ',
+            icon: Icons.people_alt_rounded,
+            color: orange,
+            selected: selected == 'neutral',
+            onTap: () => onChanged('neutral'),
+          ),
+          _PhoneCategory(
+            label: 'विरोधी',
+            icon: Icons.trending_down_rounded,
+            color: rose,
+            selected: selected == 'opposite',
+            onTap: () => onChanged('opposite'),
+          ),
+          _PhoneCategory(
+            label: 'Review',
+            icon: Icons.fact_check_rounded,
+            color: purple,
+            selected: reviewSelected,
+            onTap: onReview,
+          ),
+        ]),
+      );
+}
+
+class _PhoneCategory extends StatelessWidget {
+  const _PhoneCategory({
+    required this.label,
+    required this.icon,
+    required this.color,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final Color color;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(right: 16),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(18),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+            child: Column(children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  color: selected ? color : color.withValues(alpha: .11),
+                  shape: BoxShape.circle,
+                  boxShadow: selected
+                      ? [
+                          BoxShadow(
+                              color: color.withValues(alpha: .22),
+                              blurRadius: 12)
+                        ]
+                      : null,
+                ),
+                child: Icon(icon, color: selected ? Colors.white : color),
+              ),
+              const SizedBox(height: 6),
+              Text(label,
+                  style: TextStyle(
+                      color: selected ? navy : muted,
+                      fontSize: 11,
+                      fontWeight:
+                          selected ? FontWeight.w900 : FontWeight.w700)),
+            ]),
+          ),
+        ),
+      );
+}
+
+class _PhoneContactList extends StatelessWidget {
+  const _PhoneContactList({
+    required this.result,
+    required this.onChanged,
+    required this.onPageChanged,
+  });
+
+  final VoterPageResult result;
+  final VoidCallback onChanged;
+  final ValueChanged<int> onPageChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final contacts = result.items
+        .map((item) => Map<String, dynamic>.from(item as Map))
+        .toList();
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Padding(
+        padding: const EdgeInsets.only(bottom: 4),
+        child: Text('${result.total} मतदाता मिले',
+            style: const TextStyle(color: muted, fontSize: 12)),
+      ),
+      ...contacts.map((voter) => _PhoneContactTile(
+            voter: voter,
+            onChanged: onChanged,
+          )),
+      if (result.pages > 1)
+        Padding(
+          padding: const EdgeInsets.only(top: 12),
+          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            IconButton.outlined(
+              onPressed:
+                  result.page > 1 ? () => onPageChanged(result.page - 1) : null,
+              icon: const Icon(Icons.chevron_left_rounded),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              child: Text('${result.page} / ${result.pages}',
+                  style: const TextStyle(
+                      color: navy, fontWeight: FontWeight.w900)),
+            ),
+            IconButton.outlined(
+              onPressed: result.page < result.pages
+                  ? () => onPageChanged(result.page + 1)
+                  : null,
+              icon: const Icon(Icons.chevron_right_rounded),
+            ),
+          ]),
+        ),
+    ]);
+  }
+}
+
+class _PhoneContactTile extends StatelessWidget {
+  const _PhoneContactTile({required this.voter, required this.onChanged});
+
+  final Map<String, dynamic> voter;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final mobile = '${voter['mobile'] ?? ''}'.trim();
+    final village = '${voter['village'] ?? ''}'.trim();
+    final ward = voter['ward'] is Map ? '${voter['ward']['number'] ?? ''}' : '';
+    final place = [
+      if (ward.isNotEmpty) 'वार्ड $ward',
+      if (village.isNotEmpty) village,
+    ].join(' · ');
+    return Material(
+      color: Colors.white,
+      child: InkWell(
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => VoterDetailPage(voter: voter, onChanged: onChanged),
+          ),
+        ),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: const BoxDecoration(
+            border: Border(bottom: BorderSide(color: Color(0xffedf0f5))),
+          ),
+          child: Row(children: [
+            _VoterPhoto(photo: voter['photo'], radius: 25),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('${voter['name'] ?? '-'}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            color: navy,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w900)),
+                    const SizedBox(height: 3),
+                    Text(
+                        mobile.isEmpty
+                            ? 'EPIC: ${voter['voterId'] ?? '-'}'
+                            : mobile,
+                        style: const TextStyle(color: muted, fontSize: 12)),
+                    if (place.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(place,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: muted, fontSize: 11)),
+                    ],
+                    const SizedBox(height: 6),
+                    SupportChip(
+                        value: '${voter['supportLevel'] ?? 'undecided'}'),
+                  ]),
+            ),
+            IconButton(
+              tooltip: 'कॉल करें',
+              onPressed:
+                  mobile.isEmpty ? null : () => callNumber(context, mobile),
+              style: IconButton.styleFrom(
+                backgroundColor: const Color(0xffeaf8f0),
+                foregroundColor: green,
+              ),
+              icon: const Icon(Icons.call_rounded, size: 20),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+class _PhoneMessage extends StatelessWidget {
+  const _PhoneMessage({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onRetry,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 18),
+        child: Column(children: [
+          Icon(icon, size: 48, color: blue),
+          const SizedBox(height: 12),
+          Text(title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                  color: navy, fontSize: 16, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 5),
+          Text(subtitle,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: muted, fontSize: 12)),
+          const SizedBox(height: 14),
+          OutlinedButton.icon(
+            onPressed: onRetry,
+            icon: const Icon(Icons.refresh_rounded),
+            label: const Text('फिर कोशिश करें'),
+          ),
+        ]),
+      );
+}
+
 class _SmartFilterDef {
   const _SmartFilterDef(this.field, this.label, this.icon);
   final String field;
@@ -812,46 +1386,47 @@ class _AlphabetFilterBar extends StatelessWidget {
   ];
 
   static const hindi = <String>[
-    '?',
-    '?',
-    '?',
-    '?',
-    '?',
-    '?',
-    '?',
-    '?',
-    '?',
-    '?',
-    '?',
-    '?',
-    '?',
-    '?',
-    '?',
-    '?',
-    '?',
-    '?',
-    '?',
-    '?',
-    '?',
-    '?',
-    '?',
-    '?',
-    '?',
-    '?',
-    '?',
-    '?',
-    '?',
-    '?',
-    '?',
-    '?',
-    '?',
-    '?',
-    '?',
-    '?',
-    '?',
-    '?',
-    '?',
-    '?',
+    'अ',
+    'आ',
+    'इ',
+    'ई',
+    'उ',
+    'ऊ',
+    'ए',
+    'ऐ',
+    'ओ',
+    'औ',
+    'क',
+    'ख',
+    'ग',
+    'घ',
+    'च',
+    'छ',
+    'ज',
+    'झ',
+    'ट',
+    'ठ',
+    'ड',
+    'ढ',
+    'ण',
+    'त',
+    'थ',
+    'द',
+    'ध',
+    'न',
+    'प',
+    'फ',
+    'ब',
+    'भ',
+    'म',
+    'य',
+    'र',
+    'ल',
+    'व',
+    'श',
+    'ष',
+    'स',
+    'ह',
   ];
 
   @override
@@ -1913,87 +2488,261 @@ class VoterDetailPage extends StatelessWidget {
   final VoidCallback onChanged;
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(
-          backgroundColor: royalBlue,
-          foregroundColor: Colors.white,
-          title: const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('मतदाता विवरण पृष्ठ',
-                    style:
-                        TextStyle(fontSize: 19, fontWeight: FontWeight.w900)),
-                Text('मतदाता की विस्तृत जानकारी',
-                    style: TextStyle(fontSize: 11)),
-              ]),
-          actions: [
-            IconButton(
-                onPressed: () => printApiPdf(context,
+  Widget build(BuildContext context) {
+    final mobile = '${voter['mobile'] ?? ''}'.trim();
+    final place = [
+      '${voter['village'] ?? ''}'.trim(),
+      '${voter['gramPanchayat'] ?? ''}'.trim(),
+    ].where((value) => value.isNotEmpty).join(', ');
+    return Scaffold(
+      backgroundColor: const Color(0xfff7f8fb),
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        foregroundColor: navy,
+        elevation: 0,
+        title: const Text('मतदाता प्रोफाइल',
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
+        centerTitle: true,
+        actions: [
+          PopupMenuButton<String>(
+            onSelected: (action) {
+              if (action == 'print') {
+                printApiPdf(context,
                     path: '/api/export/members/${voter['_id']}.pdf',
-                    jobName: 'मतदाता प्रोफाइल'),
-                icon: const Icon(Icons.print)),
-          ],
-        ),
-        body: AppPage(children: [
-          SectionCard(
-            title: '${voter['name'] ?? '-'}',
-            child: Row(children: [
-              CircleAvatar(
-                  radius: 58,
-                  backgroundImage: voter['photo'] != null
-                      ? NetworkImage('${api.baseUrl}${voter['photo']}')
-                      : null,
-                  child: voter['photo'] == null
-                      ? const Icon(Icons.person, size: 48)
-                      : null),
-              const SizedBox(width: 16),
-              Expanded(
-                  child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                    const Text('मतदाता पहचान पत्र (EPIC)',
-                        style: TextStyle(color: muted)),
-                    Text('${voter['voterId'] ?? '-'}',
-                        style: const TextStyle(
-                            color: blue, fontWeight: FontWeight.w900)),
-                    const Divider(),
-                    Text('अंतिम अपडेट: ${voter['updatedAt'] ?? '-'}',
-                        style: const TextStyle(color: muted, fontSize: 11)),
-                  ])),
+                    jobName: 'मतदाता प्रोफाइल');
+              } else if (action == 'edit') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        VoterEditPage(voter: voter, onSaved: onChanged),
+                  ),
+                );
+              }
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'edit', child: Text('संपादित करें')),
+              PopupMenuItem(
+                  value: 'print', child: Text('प्रोफाइल प्रिंट करें')),
+            ],
+          ),
+        ],
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 20, 16, 36),
+        children: [
+          Center(
+            child: ClipOval(
+              child: _VoterPhoto(photo: voter['photo'], radius: 55),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text('${voter['name'] ?? '-'}',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                  color: navy, fontSize: 23, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 7),
+          Center(
+            child:
+                SupportChip(value: '${voter['supportLevel'] ?? 'undecided'}'),
+          ),
+          const SizedBox(height: 20),
+          Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
+            _ProfileAction(
+              icon: Icons.call_rounded,
+              label: 'Call',
+              color: green,
+              onTap: () => callNumber(context, mobile),
+            ),
+            _ProfileAction(
+              icon: Icons.chat_rounded,
+              label: 'WhatsApp',
+              color: const Color(0xff25d366),
+              onTap: () => openWhatsApp(context, mobile,
+                  message: 'नमस्ते ${voter['name'] ?? ''}'),
+            ),
+            _ProfileAction(
+              icon: Icons.edit_rounded,
+              label: 'Edit',
+              color: blue,
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) =>
+                      VoterEditPage(voter: voter, onSaved: onChanged),
+                ),
+              ),
+            ),
+            _ProfileAction(
+              icon: Icons.print_rounded,
+              label: 'Print',
+              color: purple,
+              onTap: () => printApiPdf(context,
+                  path: '/api/export/members/${voter['_id']}.pdf',
+                  jobName: 'मतदाता प्रोफाइल'),
+            ),
+          ]),
+          const SizedBox(height: 22),
+          _ProfileCard(children: [
+            _ProfileInfoRow(
+                icon: Icons.phone_rounded,
+                title: mobile.isEmpty ? 'मोबाइल उपलब्ध नहीं' : mobile,
+                subtitle: 'मोबाइल नंबर'),
+            _ProfileInfoRow(
+                icon: Icons.badge_outlined,
+                title: '${voter['voterId'] ?? '-'}',
+                subtitle: 'EPIC नंबर'),
+            _ProfileInfoRow(
+                icon: Icons.location_on_rounded,
+                title: place.isEmpty ? '${voter['address'] ?? '-'}' : place,
+                subtitle: 'पता / क्षेत्र'),
+            _ProfileInfoRow(
+                icon: Icons.cake_outlined,
+                title:
+                    '${voter['age'] ?? '-'} वर्ष · ${voter['gender'] ?? '-'}',
+                subtitle: 'उम्र / लिंग'),
+            _ProfileInfoRow(
+                icon: Icons.family_restroom_rounded,
+                title: '${voter['guardianName'] ?? '-'}',
+                subtitle: 'पिता / पति का नाम',
+                last: true),
+          ]),
+          const SizedBox(height: 18),
+          _ProfileSection(
+              title: 'पूरी जानकारी', child: DetailList(voter: voter)),
+          const SizedBox(height: 12),
+          _ProfileSection(
+            title: 'परिवार',
+            child: FamilyMembers(voter: voter, onChanged: onChanged),
+          ),
+          const SizedBox(height: 12),
+          _ProfileSection(
+            title: 'नोट्स और संपर्क',
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('${voter['notes'] ?? 'कोई टिप्पणी नहीं'}',
+                  style: const TextStyle(color: muted)),
+              const SizedBox(height: 12),
+              VoterContactActions(voter: voter),
             ]),
           ),
-          Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-            OutlinedButton.icon(
-                onPressed: () => Navigator.pop(context),
-                icon: const Icon(Icons.arrow_back),
-                label: const Text('वापस जाएं')),
-            const SizedBox(width: 10),
-            FilledButton.icon(
-                onPressed: () => printApiPdf(context,
-                    path: '/api/export/members/${voter['_id']}.pdf',
-                    jobName: 'मतदाता प्रोफाइल'),
-                icon: const Icon(Icons.print),
-                label: const Text('प्रिंट करें')),
-            const SizedBox(width: 10),
-            FilledButton.icon(
-                onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) =>
-                            VoterEditPage(voter: voter, onSaved: onChanged))),
-                icon: const Icon(Icons.edit),
-                label: const Text('संपादित करें')),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfileAction extends StatelessWidget {
+  const _ProfileAction({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Padding(
+          padding: const EdgeInsets.all(4),
+          child: Column(children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: color.withValues(alpha: .10),
+                border: Border.all(color: color.withValues(alpha: .20)),
+              ),
+              child: Icon(icon, color: color, size: 22),
+            ),
+            const SizedBox(height: 6),
+            Text(label,
+                style: const TextStyle(
+                    color: navy, fontSize: 11, fontWeight: FontWeight.w700)),
           ]),
-          SectionCard(
-              title: 'व्यक्तिगत जानकारी', child: DetailList(voter: voter)),
-          VoterContactActions(voter: voter),
-          Panel(
-              title: 'परिवार विवरण',
-              child: FamilyMembers(voter: voter, onChanged: onChanged)),
-          Panel(
-              title: 'राजनीतिक जानकारी',
-              child: Text(
-                  'समर्थन: ${voter['supportLevel'] ?? '-'}\nटिप्पणी: ${voter['notes'] ?? '-'}')),
+        ),
+      );
+}
+
+class _ProfileCard extends StatelessWidget {
+  const _ProfileCard({required this.children});
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: border),
+        ),
+        child: Column(children: children),
+      );
+}
+
+class _ProfileInfoRow extends StatelessWidget {
+  const _ProfileInfoRow({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    this.last = false,
+  });
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final bool last;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          border: last
+              ? null
+              : const Border(bottom: BorderSide(color: Color(0xffedf0f5))),
+        ),
+        child: Row(children: [
+          Icon(icon, color: muted, size: 21),
+          const SizedBox(width: 14),
+          Expanded(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(title,
+                  style: const TextStyle(
+                      color: navy, fontSize: 14, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 2),
+              Text(subtitle,
+                  style: const TextStyle(color: muted, fontSize: 11)),
+            ]),
+          ),
+        ]),
+      );
+}
+
+class _ProfileSection extends StatelessWidget {
+  const _ProfileSection({required this.title, required this.child});
+  final String title;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: border),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(title,
+              style: const TextStyle(
+                  color: navy, fontSize: 16, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 10),
+          child,
         ]),
       );
 }
@@ -2101,48 +2850,127 @@ class _VoterFormState extends State<VoterForm> {
   }
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
-        title: Text(
-            widget.voter == null ? 'नया मतदाता जोड़ें' : 'मतदाता संपादित करें'),
-        content: SizedBox(
-            width: 760,
-            child: SingleChildScrollView(
-                child: Wrap(spacing: 12, runSpacing: 12, children: [
-              for (final e in ctrls.entries)
-                SizedBox(
-                    width: 340,
-                    child: TextField(
-                        controller: e.value,
-                        decoration: InputDecoration(
-                            labelText: voterFieldLabel(e.key)))),
-              SizedBox(
-                  width: 340,
-                  child: DropdownButtonFormField(
-                      initialValue: support,
-                      decoration:
-                          const InputDecoration(labelText: 'समर्थन स्तर'),
-                      items: const [
-                        DropdownMenuItem(
-                            value: 'supporter', child: Text('समर्थक मतदाता')),
-                        DropdownMenuItem(
-                            value: 'opposite', child: Text('विरोधी मतदाता')),
-                        DropdownMenuItem(
-                            value: 'neutral', child: Text('तटस्थ')),
-                        DropdownMenuItem(
-                            value: 'undecided', child: Text('अनिर्णीत')),
-                      ],
-                      onChanged: (v) => setState(() => support = '$v'))),
-            ]))),
-        actions: [
-          TextButton(
+  void dispose() {
+    for (final controller in ctrls.values) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final mobile = MediaQuery.sizeOf(context).width < 700;
+    final title =
+        widget.voter == null ? 'नया मतदाता जोड़ें' : 'मतदाता संपादित करें';
+    final fields = Wrap(spacing: 12, runSpacing: 12, children: [
+      for (final e in ctrls.entries)
+        SizedBox(
+          width: mobile ? double.infinity : 340,
+          child: TextField(
+            controller: e.value,
+            keyboardType: ['mobile', 'altMobile', 'age'].contains(e.key)
+                ? TextInputType.number
+                : TextInputType.text,
+            decoration: InputDecoration(labelText: voterFieldLabel(e.key)),
+          ),
+        ),
+      SizedBox(
+        width: mobile ? double.infinity : 340,
+        child: DropdownButtonFormField<String>(
+          initialValue: support,
+          decoration: const InputDecoration(labelText: 'समर्थन स्तर'),
+          items: const [
+            DropdownMenuItem(value: 'supporter', child: Text('समर्थक मतदाता')),
+            DropdownMenuItem(value: 'opposite', child: Text('विरोधी मतदाता')),
+            DropdownMenuItem(value: 'neutral', child: Text('तटस्थ')),
+            DropdownMenuItem(value: 'undecided', child: Text('अनिर्णीत')),
+          ],
+          onChanged: (value) => setState(() => support = value ?? 'undecided'),
+        ),
+      ),
+    ]);
+    if (mobile) {
+      return Dialog.fullscreen(
+        child: Scaffold(
+          backgroundColor: const Color(0xfff7f8fb),
+          appBar: AppBar(
+            backgroundColor: Colors.white,
+            foregroundColor: navy,
+            elevation: 0,
+            leading: IconButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('रद्द करें')),
-          FilledButton.icon(
-              onPressed: save,
-              icon: const Icon(Icons.save),
-              label: const Text('सहेजें')),
-        ],
+              icon: const Icon(Icons.close_rounded),
+            ),
+            title: Text(title,
+                style:
+                    const TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
+            centerTitle: true,
+            actions: [
+              IconButton(
+                tooltip: 'सहेजें',
+                onPressed: save,
+                icon: const Icon(Icons.check_rounded, color: blue),
+              ),
+            ],
+          ),
+          body: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 22, 16, 32),
+            children: [
+              Center(
+                child: Container(
+                  width: 82,
+                  height: 82,
+                  decoration: const BoxDecoration(
+                      shape: BoxShape.circle, color: Color(0xffeef1f6)),
+                  child: const Icon(Icons.add_a_photo_outlined,
+                      color: muted, size: 30),
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Center(
+                child: Text('मतदाता की जानकारी भरें',
+                    style: TextStyle(color: muted, fontSize: 12)),
+              ),
+              const SizedBox(height: 22),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: border),
+                ),
+                child: fields,
+              ),
+              const SizedBox(height: 18),
+              SizedBox(
+                height: 52,
+                child: FilledButton.icon(
+                  onPressed: save,
+                  icon: const Icon(Icons.person_add_alt_1_rounded),
+                  label: Text(
+                      widget.voter == null ? 'मतदाता जोड़ें' : 'बदलाव सहेजें'),
+                ),
+              ),
+            ],
+          ),
+        ),
       );
+    }
+    return AlertDialog(
+      title: Text(title),
+      content:
+          SizedBox(width: 760, child: SingleChildScrollView(child: fields)),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('रद्द करें')),
+        FilledButton.icon(
+            onPressed: save,
+            icon: const Icon(Icons.save),
+            label: const Text('सहेजें')),
+      ],
+    );
+  }
 }
 
 String voterFieldLabel(String key) =>

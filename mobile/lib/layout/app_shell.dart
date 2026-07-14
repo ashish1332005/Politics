@@ -82,7 +82,10 @@ class _AppShellState extends State<AppShell> {
               items: currentItems, selected: selected, onSelect: select),
         Expanded(
           child: Column(children: [
-            const MobileHeader(),
+            MobileHeader(
+              title: currentItems[selected].label,
+              onSearch: () => select(1),
+            ),
             Expanded(
               child: IndexedStack(
                 index: selected,
@@ -92,45 +95,106 @@ class _AppShellState extends State<AppShell> {
           ]),
         ),
       ]),
-      bottomNavigationBar: wide
+      floatingActionButton: wide
           ? null
-          : Container(
-              margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                border: Border.all(color: border),
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x1a071b4b),
-                    blurRadius: 22,
-                    offset: Offset(0, 10),
-                  ),
-                ],
-              ),
-              child: SafeArea(
-                top: false,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(24),
-                  child: NavigationBar(
-                    height: 66,
-                    backgroundColor: Colors.white,
-                    indicatorColor: softBlue,
-                    selectedIndex: selected,
-                    labelBehavior:
-                        NavigationDestinationLabelBehavior.alwaysShow,
-                    onDestinationSelected: select,
-                    destinations: currentItems
-                        .map((e) => NavigationDestination(
-                              icon: Icon(e.icon, color: muted),
-                              selectedIcon: Icon(e.icon, color: blue),
-                              label: e.label,
-                            ))
-                        .toList(),
-                  ),
+          : FloatingActionButton(
+              tooltip: 'नया मतदाता जोड़ें',
+              backgroundColor: blue,
+              foregroundColor: Colors.white,
+              shape: const CircleBorder(),
+              onPressed: () => showDialog(
+                context: context,
+                builder: (_) => VoterForm(
+                  onSaved: () {
+                    api.notifyDataChanged();
+                    select(1);
+                  },
                 ),
               ),
+              child: const Icon(Icons.add_rounded, size: 32),
             ),
+      floatingActionButtonLocation:
+          wide ? null : FloatingActionButtonLocation.centerDocked,
+      bottomNavigationBar:
+          wide ? null : _PhoneBottomBar(selected: selected, onSelect: select),
     );
   }
+}
+
+class _PhoneBottomBar extends StatelessWidget {
+  const _PhoneBottomBar({required this.selected, required this.onSelect});
+
+  final int selected;
+  final ValueChanged<int> onSelect;
+
+  @override
+  Widget build(BuildContext context) => BottomAppBar(
+        height: 72,
+        padding: EdgeInsets.zero,
+        color: Colors.white,
+        elevation: 12,
+        shadowColor: const Color(0x26071b4b),
+        shape: const CircularNotchedRectangle(),
+        notchMargin: 9,
+        child: SafeArea(
+          top: false,
+          child: Row(children: [
+            _PhoneNavButton(
+              label: 'होम',
+              icon: Icons.home_rounded,
+              selected: selected == 0,
+              onTap: () => onSelect(0),
+            ),
+            _PhoneNavButton(
+              label: 'संपर्क',
+              icon: Icons.people_alt_rounded,
+              selected: selected == 1,
+              onTap: () => onSelect(1),
+            ),
+            const SizedBox(width: 68),
+            _PhoneNavButton(
+              label: 'रिपोर्ट',
+              icon: Icons.bar_chart_rounded,
+              selected: selected == 3,
+              onTap: () => onSelect(3),
+            ),
+            _PhoneNavButton(
+              label: 'अधिक',
+              icon: Icons.menu_rounded,
+              selected: selected == 4,
+              onTap: () => onSelect(4),
+            ),
+          ]),
+        ),
+      );
+}
+
+class _PhoneNavButton extends StatelessWidget {
+  const _PhoneNavButton({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Expanded(
+        child: InkWell(
+          onTap: onTap,
+          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Icon(icon, color: selected ? blue : muted, size: 23),
+            const SizedBox(height: 3),
+            Text(label,
+                style: TextStyle(
+                    color: selected ? blue : muted,
+                    fontSize: 10,
+                    fontWeight: selected ? FontWeight.w900 : FontWeight.w700)),
+          ]),
+        ),
+      );
 }

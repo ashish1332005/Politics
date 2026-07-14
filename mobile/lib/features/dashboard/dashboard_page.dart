@@ -19,6 +19,9 @@ class DashboardPage extends StatelessWidget {
   Widget build(BuildContext context) => FutureBlock<Map<String, dynamic>>(
         load: () => api.get('/api/reports/dashboard'),
         builder: (data) {
+          if (MediaQuery.sizeOf(context).width < 700) {
+            return _PhoneDashboard(data: data, onNavigate: onNavigate);
+          }
           if (api.user?['role'] == 'booth') {
             return _BoothManagerHome(data: data, onNavigate: onNavigate);
           }
@@ -175,6 +178,238 @@ class DashboardPage extends StatelessWidget {
             ],
           );
         },
+      );
+}
+
+class _PhoneDashboard extends StatelessWidget {
+  const _PhoneDashboard({required this.data, required this.onNavigate});
+
+  final Map<String, dynamic> data;
+  final ValueChanged<int> onNavigate;
+
+  @override
+  Widget build(BuildContext context) {
+    final total = _number(data['members']);
+    final today = _number(data['createdToday']);
+    final families = _number(data['families']);
+    final review = _group(data, 'verification', 'needs_review') +
+        _group(data, 'verification', 'duplicate');
+    final activities = List.from(data['recentActivity'] ?? const []);
+    return RefreshIndicator(
+      onRefresh: () async => api.notifyDataChanged(),
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 110),
+        children: [
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xff1769e8), Color(0xff377ff0)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(18),
+              boxShadow: const [
+                BoxShadow(
+                    color: Color(0x291769e8),
+                    blurRadius: 22,
+                    offset: Offset(0, 10)),
+              ],
+            ),
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Expanded(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Overview',
+                            style:
+                                TextStyle(color: Colors.white70, fontSize: 12)),
+                        const SizedBox(height: 4),
+                        Text('नमस्ते, ${api.user?['name'] ?? 'Admin'}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 20,
+                                fontWeight: FontWeight.w900)),
+                      ]),
+                ),
+                const Icon(Icons.insights_rounded,
+                    color: Colors.white, size: 28),
+              ]),
+              const SizedBox(height: 20),
+              Row(children: [
+                _PhoneMetric(value: '$total', label: 'मतदाता'),
+                _PhoneMetric(value: '$today', label: 'आज जोड़े'),
+                _PhoneMetric(value: '$families', label: 'परिवार'),
+                _PhoneMetric(value: '$review', label: 'Review'),
+              ]),
+            ]),
+          ),
+          const SizedBox(height: 22),
+          const Text('Quick Actions',
+              style: TextStyle(
+                  color: navy, fontSize: 17, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: border),
+            ),
+            child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _PhoneQuickAction(
+                    icon: Icons.person_search_rounded,
+                    label: 'खोजें',
+                    color: blue,
+                    onTap: () => onNavigate(1),
+                  ),
+                  _PhoneQuickAction(
+                    icon: Icons.person_add_alt_1_rounded,
+                    label: 'नया संपर्क',
+                    color: green,
+                    onTap: () => showDialog(
+                      context: context,
+                      builder: (_) => VoterForm(onSaved: api.notifyDataChanged),
+                    ),
+                  ),
+                  _PhoneQuickAction(
+                    icon: Icons.upload_file_rounded,
+                    label: 'PDF Upload',
+                    color: orange,
+                    onTap: () => Navigator.push(context,
+                        MaterialPageRoute(builder: (_) => const UploadPage())),
+                  ),
+                  _PhoneQuickAction(
+                    icon: Icons.family_restroom_rounded,
+                    label: 'परिवार',
+                    color: purple,
+                    onTap: () => Navigator.push(context,
+                        MaterialPageRoute(builder: (_) => const FamilyPage())),
+                  ),
+                ]),
+          ),
+          const SizedBox(height: 22),
+          Row(children: [
+            const Expanded(
+              child: Text('Recent Activities',
+                  style: TextStyle(
+                      color: navy, fontSize: 17, fontWeight: FontWeight.w900)),
+            ),
+            TextButton(
+                onPressed: () => onNavigate(3), child: const Text('View All')),
+          ]),
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: border),
+            ),
+            child: activities.isEmpty
+                ? const Padding(
+                    padding: EdgeInsets.all(28),
+                    child: Center(
+                      child: Text('अभी कोई नई activity नहीं है',
+                          style: TextStyle(color: muted)),
+                    ),
+                  )
+                : Column(
+                    children: activities.take(6).map((activity) {
+                      final item = activity is Map ? activity : const {};
+                      final action =
+                          '${item['action'] ?? item['type'] ?? 'Update'}';
+                      final description =
+                          '${item['description'] ?? item['message'] ?? item['name'] ?? ''}';
+                      return ListTile(
+                        leading: const CircleAvatar(
+                          backgroundColor: softBlue,
+                          foregroundColor: blue,
+                          child: Icon(Icons.history_rounded, size: 20),
+                        ),
+                        title: Text(action,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                color: navy, fontWeight: FontWeight.w800)),
+                        subtitle: description.isEmpty
+                            ? null
+                            : Text(description,
+                                maxLines: 2, overflow: TextOverflow.ellipsis),
+                      );
+                    }).toList(),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PhoneMetric extends StatelessWidget {
+  const _PhoneMetric({required this.value, required this.label});
+  final String value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Expanded(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(value,
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 19,
+                  fontWeight: FontWeight.w900)),
+          const SizedBox(height: 2),
+          Text(label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Colors.white70, fontSize: 10)),
+        ]),
+      );
+}
+
+class _PhoneQuickAction extends StatelessWidget {
+  const _PhoneQuickAction({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Expanded(
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Column(children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: color.withValues(alpha: .10),
+                ),
+                child: Icon(icon, color: color, size: 21),
+              ),
+              const SizedBox(height: 7),
+              Text(label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      color: navy, fontSize: 10, fontWeight: FontWeight.w700)),
+            ]),
+          ),
+        ),
       );
 }
 

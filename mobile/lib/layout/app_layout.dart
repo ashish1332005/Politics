@@ -45,77 +45,71 @@ class CongressMark extends StatelessWidget {
 }
 
 class MobileHeader extends StatelessWidget {
-  const MobileHeader({super.key, this.blueStyle = true});
-  final bool blueStyle;
+  const MobileHeader({
+    super.key,
+    this.title = 'मतदाता फोन बुक',
+    this.onSearch,
+  });
+  final String title;
+  final VoidCallback? onSearch;
 
   @override
   Widget build(BuildContext context) {
-    final foreground = blueStyle ? Colors.white : navy;
     final isPhone = MediaQuery.sizeOf(context).width < 640;
     return Container(
-      padding: EdgeInsets.fromLTRB(isPhone ? 10 : 18, 8, isPhone ? 10 : 18, 10),
-      decoration: BoxDecoration(
-        gradient: blueStyle
-            ? const LinearGradient(
-                colors: [Color(0xff062c8f), royalBlue, blue],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              )
-            : null,
-        color: blueStyle ? null : Colors.white,
-        boxShadow: const [
-          BoxShadow(
-              color: Color(0x12071b4b), blurRadius: 18, offset: Offset(0, 8)),
-        ],
+      padding: EdgeInsets.fromLTRB(isPhone ? 8 : 18, 5, isPhone ? 8 : 18, 7),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(bottom: BorderSide(color: border)),
       ),
       child: SafeArea(
         bottom: false,
         child: Row(children: [
           if (Scaffold.maybeOf(context)?.hasDrawer ?? false)
             IconButton(
-              tooltip: 'मेनू',
+              tooltip: 'मेनू खोलें',
               onPressed: () => Scaffold.of(context).openDrawer(),
-              icon: Icon(Icons.menu_rounded, color: foreground, size: 27),
+              icon: const Icon(Icons.menu_rounded, color: navy, size: 26),
             ),
-          CongressMark(size: isPhone ? 38 : 42),
-          const SizedBox(width: 10),
           Expanded(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('कांग्रेस संगठन',
+                Text(title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                        color: foreground,
-                        fontSize: isPhone ? 16 : 18,
+                    style: const TextStyle(
+                        color: navy,
+                        fontSize: 18,
                         fontWeight: FontWeight.w900)),
-                Text('संगठन ही शक्ति है',
-                    style: TextStyle(
-                        color: foreground.withValues(alpha: .78),
-                        fontSize: 11)),
+                const Text('आसान मतदाता संपर्क और प्रबंधन',
+                    style: TextStyle(color: muted, fontSize: 10)),
               ],
             ),
           ),
+          if (onSearch != null)
+            IconButton(
+              tooltip: 'मतदाता खोजें',
+              onPressed: onSearch,
+              icon: const Icon(Icons.search_rounded, color: navy),
+            ),
           FutureBuilder<Map<String, dynamic>>(
             future: api.get('/api/notifications/today'),
             builder: (context, snapshot) {
               final count = snapshot.data?['count'] ?? 0;
               return Stack(clipBehavior: Clip.none, children: [
                 IconButton.filledTonal(
-                  tooltip: 'आज के Birthday / Anniversary',
+                  tooltip: 'आज की सूचनाएँ',
                   style: IconButton.styleFrom(
-                    backgroundColor: blueStyle
-                        ? Colors.white.withValues(alpha: .14)
-                        : softBlue,
+                    backgroundColor: softBlue,
                   ),
                   onPressed: () => Navigator.push(
                       context,
                       MaterialPageRoute(
                           builder: (_) => const CelebrationsPage())),
                   icon: Icon(Icons.notifications_none_rounded,
-                      color: foreground, size: 24),
+                      color: navy, size: 23),
                 ),
                 if (count > 0)
                   Positioned(
@@ -139,14 +133,6 @@ class MobileHeader extends StatelessWidget {
               ]);
             },
           ),
-          if (!isPhone) ...[
-            const SizedBox(width: 8),
-            CircleAvatar(
-              radius: 20,
-              backgroundColor: blueStyle ? Colors.white : softBlue,
-              child: const Icon(Icons.person_rounded, color: navy),
-            ),
-          ],
         ]),
       ),
     );
