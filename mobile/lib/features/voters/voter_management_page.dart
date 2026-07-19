@@ -2811,18 +2811,26 @@ class VoterForm extends StatefulWidget {
 class _VoterFormState extends State<VoterForm> {
   final ctrls = <String, TextEditingController>{};
   String support = 'undecided';
+  String gender = '';
+  String boothId = '';
+  String? formError;
+  late final Future<List<dynamic>> boothsFuture;
   PlatformFile? selectedPhoto;
   bool saving = false;
 
   @override
   void initState() {
     super.initState();
+    boothsFuture = api.list('/api/booths');
+    final assignedBooth = api.user?['assignedBooth'];
+    boothId = assignedBooth is Map
+        ? '${assignedBooth['_id'] ?? ''}'
+        : '${assignedBooth ?? ''}';
     for (final f in [
       'name',
       'guardianName',
       'age',
       'dob',
-      'gender',
       'mobile',
       'altMobile',
       'voterId',
@@ -2839,6 +2847,13 @@ class _VoterFormState extends State<VoterForm> {
       ctrls[f] = TextEditingController(text: '${widget.voter?[f] ?? ''}');
     }
     support = widget.voter?['supportLevel'] ?? 'undecided';
+    gender = '${widget.voter?['gender'] ?? ''}';
+    final existingBooth = widget.voter?['booth'];
+    if (existingBooth is Map) {
+      boothId = '${existingBooth['_id'] ?? boothId}';
+    } else if (existingBooth != null) {
+      boothId = '$existingBooth';
+    }
   }
 
   Future<void> save() async {
@@ -2847,15 +2862,42 @@ class _VoterFormState extends State<VoterForm> {
       _showError('मतदाता का नाम भरना जरूरी है।');
       return;
     }
-    if (ctrls['voterId']!.text.trim().isEmpty) {
-      _showError('सही EPIC नंबर भरना जरूरी है।');
+    final epic = ctrls['voterId']!
+        .text
+        .trim()
+        .toUpperCase()
+        .replaceAll(RegExp(r'[^A-Z0-9/]'), '');
+    if (!RegExp(r'^[A-Z]{3}[0-9]{7}$').hasMatch(epic) &&
+        !RegExp(r'^RJ/[0-9]{1,3}/[0-9]{1,3}/[0-9]{5,8}$').hasMatch(epic)) {
+      _showError('सही EPIC लिखें, जैसे ABC1234567।');
+      return;
+    }
+    final isAdmin = api.user?['role'] == 'admin';
+    if (isAdmin && boothId.isEmpty) {
+      _showError('मतदाता के लिए बूथ चुनना जरूरी है।');
+      return;
+    }
+    final ageText = ctrls['age']!.text.trim();
+    if (ageText.isNotEmpty &&
+        (int.tryParse(ageText) == null || int.parse(ageText) < 0)) {
+      _showError('उम्र केवल सही संख्या में भरें।');
+      return;
+    }
+    final dobText = ctrls['dob']!.text.trim();
+    if (dobText.isNotEmpty && DateTime.tryParse(dobText) == null) {
+      _showError('जन्म तिथि YYYY-MM-DD format में भरें।');
       return;
     }
     setState(() => saving = true);
-    final body = {
+    final body = <String, dynamic>{
       for (final e in ctrls.entries) e.key: e.value.text.trim(),
-      'supportLevel': support
+      'voterId': epic,
+      'gender': gender,
+      'supportLevel': support,
+      if (boothId.isNotEmpty) 'booth': boothId,
     };
+    body.removeWhere((key, value) =>
+        value is String && value.isEmpty && key != 'name' && key != 'voterId');
     try {
       if (selectedPhoto != null) {
         await api.uploadFile(
@@ -2866,7 +2908,7 @@ class _VoterFormState extends State<VoterForm> {
           filename: selectedPhoto!.name,
           fileField: 'photo',
           bytes: pickedFileBytes(selectedPhoto!),
-          fields: body.map((key, value) => MapEntry(key, value)),
+          fields: body.map((key, value) => MapEntry(key, '$value')),
         );
       } else if (widget.voter == null) {
         await api.post('/api/members', body);
@@ -2882,7 +2924,7 @@ class _VoterFormState extends State<VoterForm> {
       );
     } catch (error) {
       if (mounted) {
-        _showError(error.toString().replaceFirst('Exception: ', ''));
+        _showError(_friendlyCreateError(error));
       }
     } finally {
       if (mounted) setState(() => saving = false);
@@ -2904,8 +2946,29 @@ class _VoterFormState extends State<VoterForm> {
     setState(() => selectedPhoto = file);
   }
 
-  void _showError(String message) => ScaffoldMessenger.of(context)
-      .showSnackBar(SnackBar(content: Text(message)));
+  void _showError(String message) {
+    if (mounted) setState(() => formError = message);
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  String _friendlyCreateError(Object error) {
+    final message = error.toString().replaceFirst('Exception: ', '');
+    final lower = message.toLowerCase();
+    if (lower.contains('duplicate') || lower.contains('e11000')) {
+      return 'यह EPIC नंबर पहले से मौजूद है। दूसरा EPIC जांचें।';
+    }
+    if (lower.contains('valid epic')) {
+      return 'EPIC सही format में नहीं है। उदाहरण: ABC1234567';
+    }
+    if (lower.contains('booth') && lower.contains('required')) {
+      return 'मतदाता के लिए सही बूथ चुनना जरूरी है।';
+    }
+    if (lower.contains('network') || lower.contains('connection')) {
+      return 'Server से connection नहीं हुआ। Internet जांचकर फिर कोशिश करें।';
+    }
+    return message;
+  }
 
   @override
   void dispose() {
@@ -2946,6 +3009,61 @@ class _VoterFormState extends State<VoterForm> {
           onChanged: (value) => setState(() => support = value ?? 'undecided'),
         ),
       ),
+      SizedBox(
+        width: mobile ? double.infinity : 340,
+        child: DropdownButtonFormField<String>(
+          initialValue: gender,
+          decoration: const InputDecoration(labelText: 'लिंग'),
+          items: const [
+            DropdownMenuItem(value: '', child: Text('लिंग चुनें')),
+            DropdownMenuItem(value: 'male', child: Text('पुरुष')),
+            DropdownMenuItem(value: 'female', child: Text('महिला')),
+            DropdownMenuItem(value: 'other', child: Text('अन्य')),
+          ],
+          onChanged: (value) => setState(() => gender = value ?? ''),
+        ),
+      ),
+      if (api.user?['role'] == 'admin')
+        SizedBox(
+          width: mobile ? double.infinity : 340,
+          child: FutureBuilder<List<dynamic>>(
+            future: boothsFuture,
+            builder: (context, snapshot) {
+              final booths = snapshot.data ?? const [];
+              final ids = booths
+                  .whereType<Map>()
+                  .map((booth) => '${booth['_id']}')
+                  .toSet();
+              final selected = ids.contains(boothId) ? boothId : null;
+              return DropdownButtonFormField<String>(
+                initialValue: selected,
+                decoration: InputDecoration(
+                  labelText: 'बूथ *',
+                  prefixIcon: const Icon(Icons.how_to_vote_outlined),
+                  suffixIcon: snapshot.connectionState != ConnectionState.done
+                      ? const Padding(
+                          padding: EdgeInsets.all(14),
+                          child: SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2)))
+                      : null,
+                ),
+                items: booths.whereType<Map>().map((booth) {
+                  final ward = booth['ward'] is Map
+                      ? ' · वार्ड ${booth['ward']['number'] ?? '-'}'
+                      : '';
+                  return DropdownMenuItem(
+                    value: '${booth['_id']}',
+                    child: Text('बूथ ${booth['number'] ?? '-'}$ward',
+                        overflow: TextOverflow.ellipsis),
+                  );
+                }).toList(),
+                onChanged: (value) => setState(() => boothId = value ?? ''),
+              );
+            },
+          ),
+        ),
     ]);
     if (mobile) {
       return Dialog.fullscreen(
@@ -3033,6 +3151,31 @@ class _VoterFormState extends State<VoterForm> {
                     style: const TextStyle(color: muted, fontSize: 12)),
               ),
               const SizedBox(height: 22),
+              if (formError != null) ...[
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(13),
+                  decoration: BoxDecoration(
+                    color: const Color(0xfffff0f3),
+                    borderRadius: BorderRadius.circular(15),
+                    border: Border.all(color: rose.withValues(alpha: .25)),
+                  ),
+                  child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.error_outline_rounded,
+                            color: rose, size: 20),
+                        const SizedBox(width: 9),
+                        Expanded(
+                            child: Text(formError!,
+                                style: const TextStyle(
+                                    color: navy,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700))),
+                      ]),
+                ),
+                const SizedBox(height: 12),
+              ],
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -3101,7 +3244,7 @@ String voterFieldLabel(String key) =>
       'village': 'गाँव',
       'gramPanchayat': 'ग्राम पंचायत',
       'tehsil': 'तहसील / ब्लॉक',
-      'partNumber': 'भाग / बूथ संख्या',
+      'partNumber': 'भाग संख्या',
     }[key] ??
     key;
 
