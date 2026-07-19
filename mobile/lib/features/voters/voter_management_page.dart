@@ -317,8 +317,21 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
     var nextSupport = support;
     var nextGender = gender;
     var nextVerification = verificationStatus;
-    final nextVillage = TextEditingController(text: village.text);
-    final nextBooth = TextEditingController(text: boothNumber.text);
+    final nextOptionFilters = <String, Map<String, String>>{
+      for (final entry in selectedOptionFilters.entries)
+        entry.key: Map<String, String>.from(entry.value),
+    };
+    final nextOptionLabels = Map<String, String>.from(selectedOptionLabels);
+    if (village.text.trim().isNotEmpty &&
+        !nextOptionFilters.containsKey('village')) {
+      nextOptionFilters['village'] = {'village': village.text.trim()};
+      nextOptionLabels['village'] = village.text.trim();
+    }
+    if (boothNumber.text.trim().isNotEmpty &&
+        !nextOptionFilters.containsKey('partNumber')) {
+      nextOptionFilters['partNumber'] = {'partNumber': boothNumber.text.trim()};
+      nextOptionLabels['partNumber'] = boothNumber.text.trim();
+    }
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -392,20 +405,39 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
                     setSheetState(() => nextGender = value ?? ''),
               ),
               const SizedBox(height: 12),
-              TextField(
-                controller: nextVillage,
-                decoration: const InputDecoration(
-                    labelText: 'गाँव / क्षेत्र',
-                    prefixIcon: Icon(Icons.location_on_outlined)),
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text('क्षेत्र और संगठन',
+                    style: TextStyle(
+                        color: navy,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w900)),
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: nextBooth,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                    labelText: 'भाग / बूथ संख्या',
-                    prefixIcon: Icon(Icons.how_to_vote_outlined)),
-              ),
+              const SizedBox(height: 10),
+              for (final definition in _PhoneDropdownDefinition.fields) ...[
+                _PhoneDatabaseDropdown(
+                  definition: definition,
+                  selectedLabel: nextOptionLabels[definition.field],
+                  selectedFilters: nextOptionFilters[definition.field],
+                  currentFilters: _phoneDropdownQuery(
+                    support: nextSupport,
+                    gender: nextGender,
+                    verification: nextVerification,
+                    optionFilters: nextOptionFilters,
+                    excludeField: definition.field,
+                  ),
+                  onChanged: (option) => setSheetState(() {
+                    if (option == null) {
+                      nextOptionFilters.remove(definition.field);
+                      nextOptionLabels.remove(definition.field);
+                    } else {
+                      nextOptionFilters[definition.field] = option.filters;
+                      nextOptionLabels[definition.field] = option.label;
+                    }
+                  }),
+                ),
+                const SizedBox(height: 12),
+              ],
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 initialValue: nextVerification,
@@ -432,9 +464,16 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
                       support = nextSupport;
                       gender = nextGender;
                       verificationStatus = nextVerification;
-                      village.text = nextVillage.text.trim();
-                      boothNumber.text = nextBooth.text.trim();
+                      village.clear();
+                      boothNumber.clear();
+                      selectedOptionFilters
+                        ..clear()
+                        ..addAll(nextOptionFilters);
+                      selectedOptionLabels
+                        ..clear()
+                        ..addAll(nextOptionLabels);
                       currentPage = 1;
+                      selectedIds.clear();
                       refreshVoters();
                     });
                     Navigator.pop(sheetContext);
@@ -448,8 +487,24 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
         ),
       ),
     );
-    nextVillage.dispose();
-    nextBooth.dispose();
+  }
+
+  Map<String, String?> _phoneDropdownQuery({
+    required String support,
+    required String gender,
+    required String verification,
+    required Map<String, Map<String, String>> optionFilters,
+    required String excludeField,
+  }) {
+    final query = <String, String?>{
+      if (support.isNotEmpty) 'supportLevel': support,
+      if (gender.isNotEmpty) 'gender': gender,
+      if (verification.isNotEmpty) 'verificationStatus': verification,
+    };
+    for (final entry in optionFilters.entries) {
+      if (entry.key != excludeField) query.addAll(entry.value);
+    }
+    return query;
   }
 
   Widget buildPhoneBookMobile(BuildContext context) => RefreshIndicator(
@@ -466,7 +521,7 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
               textInputAction: TextInputAction.search,
               onSubmitted: (_) => filtersChanged(),
               decoration: InputDecoration(
-                hintText: 'नाम, मोबाइल, EPIC, गाँव खोजें...',
+                hintText: 'नाम, मोबाइल, EPIC, गाँव या पद खोजें...',
                 prefixIcon: const Icon(Icons.search_rounded),
                 suffixIcon: Row(mainAxisSize: MainAxisSize.min, children: [
                   if (search.text.isNotEmpty)
@@ -557,18 +612,29 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
                 support.isNotEmpty ||
                 verificationStatus.isNotEmpty ||
                 gender.isNotEmpty ||
+                selectedOptionFilters.isNotEmpty ||
                 village.text.isNotEmpty ||
                 boothNumber.text.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: ActionChip(
+                child: Wrap(spacing: 6, runSpacing: 6, children: [
+                  ...selectedOptionLabels.entries.map((entry) => InputChip(
+                        avatar: const Icon(Icons.check_circle_rounded,
+                            color: blue, size: 16),
+                        label: Text(entry.value),
+                        onDeleted: () => setState(() {
+                          selectedOptionFilters.remove(entry.key);
+                          selectedOptionLabels.remove(entry.key);
+                          currentPage = 1;
+                          refreshVoters();
+                        }),
+                      )),
+                  ActionChip(
                     avatar: const Icon(Icons.close_rounded, size: 17),
                     label: const Text('सभी फ़िल्टर हटाएँ'),
                     onPressed: clearFilters,
                   ),
-                ),
+                ]),
               ),
             const SizedBox(height: 8),
             FutureBuilder<VoterPageResult>(
@@ -1342,6 +1408,153 @@ class _PhoneMessage extends StatelessWidget {
             label: const Text('फिर कोशिश करें'),
           ),
         ]),
+      );
+}
+
+class _PhoneDropdownDefinition {
+  const _PhoneDropdownDefinition(this.field, this.label, this.icon);
+  final String field;
+  final String label;
+  final IconData icon;
+
+  static const fields = <_PhoneDropdownDefinition>[
+    _PhoneDropdownDefinition(
+        'assembly', 'विधानसभा', Icons.account_balance_rounded),
+    _PhoneDropdownDefinition('village', 'गाँव', Icons.location_city_rounded),
+    _PhoneDropdownDefinition(
+        'gramPanchayat', 'ग्राम पंचायत', Icons.holiday_village_rounded),
+    _PhoneDropdownDefinition(
+        'tehsil', 'तहसील / ब्लॉक', Icons.apartment_rounded),
+    _PhoneDropdownDefinition(
+        'municipality', 'नगर पालिका', Icons.domain_rounded),
+    _PhoneDropdownDefinition(
+        'partNumber', 'भाग संख्या', Icons.how_to_vote_rounded),
+    _PhoneDropdownDefinition(
+        'section', 'अनुभाग', Icons.format_list_numbered_rounded),
+    _PhoneDropdownDefinition(
+        'organizationPost', 'संगठन पद', Icons.badge_rounded),
+    _PhoneDropdownDefinition('caste', 'जाति', Icons.groups_2_rounded),
+  ];
+}
+
+class _PhoneDatabaseDropdown extends StatelessWidget {
+  const _PhoneDatabaseDropdown({
+    required this.definition,
+    required this.selectedLabel,
+    required this.selectedFilters,
+    required this.currentFilters,
+    required this.onChanged,
+  });
+
+  final _PhoneDropdownDefinition definition;
+  final String? selectedLabel;
+  final Map<String, String>? selectedFilters;
+  final Map<String, String?> currentFilters;
+  final ValueChanged<_FilterOption?> onChanged;
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<Map<String, dynamic>>(
+        future: api.getQuery('/api/members/filter-options', {
+          ...currentFilters,
+          'field': definition.field,
+          'limit': '200',
+        }),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return InputDecorator(
+              decoration: InputDecoration(
+                labelText: definition.label,
+                prefixIcon: Icon(definition.icon),
+              ),
+              child: const Row(children: [
+                SizedBox(
+                    width: 17,
+                    height: 17,
+                    child: CircularProgressIndicator(strokeWidth: 2)),
+                SizedBox(width: 9),
+                Text('Database से options लोड हो रहे हैं…',
+                    style: TextStyle(color: muted, fontSize: 12)),
+              ]),
+            );
+          }
+          if (snapshot.hasError) {
+            return InputDecorator(
+              decoration: InputDecoration(
+                labelText: definition.label,
+                prefixIcon: Icon(definition.icon),
+                errorText: 'Options लोड नहीं हुए',
+              ),
+              child: const Text('Internet या server connection जांचें',
+                  style: TextStyle(color: muted, fontSize: 12)),
+            );
+          }
+          final options = List<Map<String, dynamic>>.from(
+            (snapshot.data?['items'] as List? ?? const [])
+                .map((item) => Map<String, dynamic>.from(item)),
+          ).map(_FilterOption.fromMap).toList();
+          final selected = (selectedLabel ?? '').trim();
+          if (selected.isNotEmpty &&
+              !options.any((option) => option.label == selected)) {
+            options.insert(
+              0,
+              _FilterOption(
+                label: selected,
+                count: 0,
+                filters: Map<String, String>.from(
+                    selectedFilters ?? const <String, String>{}),
+              ),
+            );
+          }
+          return DropdownButtonFormField<String>(
+            key: ValueKey('${definition.field}-$selected-${options.length}'),
+            initialValue: selected.isEmpty ? '' : selected,
+            isExpanded: true,
+            menuMaxHeight: 380,
+            decoration: InputDecoration(
+              labelText: definition.label,
+              prefixIcon: Icon(definition.icon),
+              helperText: options.isEmpty
+                  ? 'Database में कोई option नहीं है'
+                  : '${options.length} उपलब्ध options',
+            ),
+            items: [
+              const DropdownMenuItem<String>(
+                value: '',
+                child: Text('सभी'),
+              ),
+              ...options.map((option) => DropdownMenuItem<String>(
+                    value: option.label,
+                    child: Row(children: [
+                      Expanded(
+                        child: Text(option.label,
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                      ),
+                      if (option.count > 0)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 7, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: softBlue,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text('${option.count}',
+                              style: const TextStyle(
+                                  color: blue,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w900)),
+                        ),
+                    ]),
+                  )),
+            ],
+            onChanged: (label) {
+              if (label == null || label.isEmpty) {
+                onChanged(null);
+                return;
+              }
+              onChanged(options.firstWhere((option) => option.label == label));
+            },
+          );
+        },
       );
 }
 
@@ -2842,7 +3055,15 @@ class _VoterFormState extends State<VoterForm> {
       'village',
       'gramPanchayat',
       'tehsil',
+      'municipality',
+      'assemblyNumber',
+      'assemblyName',
       'partNumber',
+      'sectionNumber',
+      'sectionName',
+      'organizationPost',
+      'organizationLevel',
+      'caste',
     ]) {
       ctrls[f] = TextEditingController(text: '${widget.voter?[f] ?? ''}');
     }
@@ -3244,7 +3465,15 @@ String voterFieldLabel(String key) =>
       'village': 'गाँव',
       'gramPanchayat': 'ग्राम पंचायत',
       'tehsil': 'तहसील / ब्लॉक',
+      'municipality': 'नगर पालिका',
+      'assemblyNumber': 'विधानसभा संख्या',
+      'assemblyName': 'विधानसभा नाम',
       'partNumber': 'भाग संख्या',
+      'sectionNumber': 'अनुभाग संख्या',
+      'sectionName': 'अनुभाग नाम',
+      'organizationPost': 'राजनीतिक / सामाजिक पद',
+      'organizationLevel': 'पद स्तर (गाँव/मंडल/ब्लॉक/जिला)',
+      'caste': 'जाति',
     }[key] ??
     key;
 
