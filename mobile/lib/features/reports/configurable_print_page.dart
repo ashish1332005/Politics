@@ -331,9 +331,12 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
               pageIds.isNotEmpty && pageIds.every(isSelected);
 
           return AppPage(children: [
-            PageHeading(
+            PremiumFeatureHero(
               title: 'Smart Print',
-              subtitle: 'Select voters, choose fields, then preview PDF',
+              subtitle:
+                  'मतदाता चुनें, जरूरी fields और layout तय करें, फिर सुरक्षित PDF बनाएं।',
+              icon: Icons.print_rounded,
+              badges: const ['तेज', 'सटीक', 'सुरक्षित'],
               action: _SelectionBadge(
                   count: selectedCount, allFiltered: selectAllFiltered),
             ),

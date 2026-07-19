@@ -4,15 +4,19 @@ import '../../core/api_client.dart';
 import '../../core/theme.dart';
 import '../../layout/app_layout.dart';
 import '../../widgets/common.dart';
+import '../../widgets/mobile_components.dart';
 
 class PoliticalDashboardPage extends StatelessWidget {
   const PoliticalDashboardPage({super.key});
 
   @override
   Widget build(BuildContext context) => AppPage(children: [
-        const PageHeading(
-            title: 'Political Dashboard',
-            subtitle: 'Strong/weak booth और actionable voter analysis'),
+        const PremiumFeatureHero(
+            title: 'राजनीतिक विश्लेषण',
+            subtitle:
+                'Strong और weak booths के साथ actionable voter insights देखें।',
+            icon: Icons.insights_rounded,
+            badges: ['Booth strength', 'Influence', 'Actionable']),
         FutureBlock<Map<String, dynamic>>(
           load: () => api.get('/api/political-analytics/dashboard'),
           builder: (data) => Column(children: [

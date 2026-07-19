@@ -262,15 +262,39 @@ class _StandalonePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(
+          toolbarHeight: 64,
           title: Text(title),
           backgroundColor: Colors.white,
           foregroundColor: navy,
           surfaceTintColor: Colors.white,
           actions: [
-            IconButton(
-              tooltip: 'बंद करें',
-              onPressed: () => Navigator.pop(context),
-              icon: const Icon(Icons.close_rounded),
+            Padding(
+              padding: const EdgeInsets.only(right: 10),
+              child: TextButton.icon(
+                style: TextButton.styleFrom(
+                  foregroundColor: navy,
+                  backgroundColor: softBlue,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(22)),
+                ),
+                onPressed: () => showDialog<void>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    icon: const Icon(Icons.help_rounded, color: blue, size: 34),
+                    title: Text('$title सहायता'),
+                    content: const Text(
+                        'इस screen के मुख्य विकल्प ऊपर से नीचे आसान steps में दिए गए हैं। किसी action से पहले चुनी हुई जानकारी ध्यान से जांचें।'),
+                    actions: [
+                      FilledButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('समझ गया'),
+                      ),
+                    ],
+                  ),
+                ),
+                icon: const Icon(Icons.help_rounded, size: 18),
+                label: const Text('सहायता'),
+              ),
             ),
           ],
         ),

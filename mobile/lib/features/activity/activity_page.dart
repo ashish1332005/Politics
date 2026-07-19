@@ -4,6 +4,7 @@ import '../../core/api_client.dart';
 import '../../core/theme.dart';
 import '../../layout/app_layout.dart';
 import '../../widgets/common.dart';
+import '../../widgets/mobile_components.dart';
 
 class ActivityPage extends StatelessWidget {
   const ActivityPage({super.key});
@@ -12,9 +13,12 @@ class ActivityPage extends StatelessWidget {
   Widget build(BuildContext context) => FutureBlock<List<dynamic>>(
         load: () => api.list('/api/activity'),
         builder: (items) => AppPage(children: [
-          const PageHeading(
+          const PremiumFeatureHero(
             title: 'गतिविधि इतिहास',
-            subtitle: 'ऐप में हुए जरूरी बदलाव आसान भाषा में देखें',
+            subtitle: 'ऐप में हुए जरूरी बदलाव आसान भाषा और timeline में देखें।',
+            icon: Icons.history_rounded,
+            accent: Color(0xff10a9a0),
+            badges: ['Readable', 'Latest', 'Secure log'],
           ),
           if (items.isEmpty)
             const _ActivityEmpty()
