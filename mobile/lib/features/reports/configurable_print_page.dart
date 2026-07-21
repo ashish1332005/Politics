@@ -40,37 +40,41 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
   bool selectAllFiltered = false;
   bool missingMobile = false;
   bool missingHouse = false;
+  bool votersExpanded = true;
+  bool fieldsExpanded = false;
+  bool layoutExpanded = false;
+  bool generateExpanded = false;
   String fieldCategory = 'identity';
   int refreshKey = 0;
   late Future<Map<String, dynamic>> votersFuture;
   static const pageSize = 50;
 
   static const availableFields = <String, String>{
-    'name': 'Name',
+    'name': 'नाम',
     'voterId': 'EPIC',
-    'mobile': 'Mobile',
-    'altMobile': 'Alt mobile',
-    'guardianName': 'Father / Husband',
-    'relationType': 'Relation',
-    'age': 'Age',
-    'gender': 'Gender',
-    'houseNumber': 'House No.',
-    'address': 'Address',
-    'village': 'Village',
-    'gramPanchayat': 'Gram Panchayat',
-    'tehsil': 'Tehsil',
-    'municipality': 'Municipality',
-    'caste': 'Caste',
-    'subCaste': 'Sub caste',
-    'occupation': 'Occupation',
-    'education': 'Education',
-    'organizationPost': 'Org Post',
-    'supportLevel': 'Support',
-    'assembly': 'Assembly',
-    'partNumber': 'Part / Booth',
-    'section': 'Section',
-    'booth': 'Booth',
-    'ward': 'Ward',
+    'mobile': 'मोबाइल',
+    'altMobile': 'अन्य मोबाइल',
+    'guardianName': 'पिता / पति का नाम',
+    'relationType': 'संबंध',
+    'age': 'उम्र',
+    'gender': 'लिंग',
+    'houseNumber': 'घर संख्या',
+    'address': 'पता',
+    'village': 'गाँव',
+    'gramPanchayat': 'ग्राम पंचायत',
+    'tehsil': 'तहसील',
+    'municipality': 'नगर पालिका',
+    'caste': 'जाति',
+    'subCaste': 'उपजाति',
+    'occupation': 'व्यवसाय',
+    'education': 'शिक्षा',
+    'organizationPost': 'संगठन पद',
+    'supportLevel': 'समर्थन',
+    'assembly': 'विधानसभा',
+    'partNumber': 'भाग / बूथ',
+    'section': 'अनुभाग',
+    'booth': 'बूथ',
+    'ward': 'वार्ड',
   };
 
   static const fieldCategories = <String, List<String>>{
@@ -105,10 +109,10 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
   };
 
   static const fieldCategoryLabels = <String, String>{
-    'identity': 'Identity',
-    'contact': 'Contact',
-    'location': 'Location',
-    'profile': 'Profile',
+    'identity': 'पहचान',
+    'contact': 'संपर्क',
+    'location': 'क्षेत्र',
+    'profile': 'प्रोफ़ाइल',
   };
 
   Map<String, String?> get filters {
@@ -331,13 +335,12 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
               pageIds.isNotEmpty && pageIds.every(isSelected);
 
           return AppPage(children: [
-            PremiumFeatureHero(
+            AppHeroBanner(
               title: 'Smart Print',
               subtitle:
-                  'मतदाता चुनें, जरूरी fields और layout तय करें, फिर सुरक्षित PDF बनाएं।',
+                  'मतदाता चुनें, जरूरी जानकारी और लेआउट तय करें, फिर सुरक्षित PDF बनाएं।',
               icon: Icons.print_rounded,
-              badges: const ['तेज', 'सटीक', 'सुरक्षित'],
-              action: _SelectionBadge(
+              primaryAction: _SelectionBadge(
                   count: selectedCount, allFiltered: selectAllFiltered),
             ),
             _PrintSetupSummary(
@@ -345,19 +348,25 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
               fieldCount: selectedFields.length,
               activeFilterCount: activeFilterCount,
               layout:
-                  '$paper · ${orientation == 'portrait' ? 'Portrait' : 'Landscape'} · $columns/card row',
+                  '$paper · ${orientation == 'portrait' ? 'पोर्ट्रेट' : 'लैंडस्केप'} · $columns कार्ड/पंक्ति',
               ready: selectedCount > 0 && selectedFields.isNotEmpty,
             ),
-            SectionCard(
-              title: '1. Choose Voters',
-              subtitle:
-                  'Search or filter voters, then select one page or all matching voters.',
+            _PrintStepProgress(
+              selectedCount: selectedCount,
+              fieldsReady: selectedFields.isNotEmpty,
+              layoutReady: true,
+            ),
+            _PrintStepCard(
+              title: '1. मतदाता चुनें',
+              subtitle: 'नाम, EPIC या मोबाइल से खोजें और जरूरी मतदाता चुनें।',
               icon: Icons.groups_rounded,
+              expanded: votersExpanded,
+              onToggle: () => setState(() => votersExpanded = !votersExpanded),
               action: selectedCount > 0
                   ? TextButton.icon(
                       onPressed: clearSelection,
                       icon: const Icon(Icons.close_rounded),
-                      label: const Text('Clear selection'))
+                      label: const Text('चयन हटाएं'))
                   : null,
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -377,21 +386,21 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
                       Wrap(spacing: 7, runSpacing: 7, children: [
                         if (missingMobile)
                           InputChip(
-                              label: const Text('Mobile missing'),
+                              label: const Text('मोबाइल नहीं है'),
                               onDeleted: () =>
                                   clearSmartFilter('missingMobile')),
                         if (missingHouse)
                           InputChip(
-                              label: const Text('House missing'),
+                              label: const Text('घर संख्या नहीं है'),
                               onDeleted: () =>
                                   clearSmartFilter('missingHouse')),
                         if (verification == 'needs_review')
                           InputChip(
-                              label: const Text('Needs review'),
+                              label: const Text('समीक्षा जरूरी'),
                               onDeleted: () => clearSmartFilter('review')),
                         if (support == 'supporter')
                           InputChip(
-                              label: const Text('Supporter'),
+                              label: const Text('समर्थक'),
                               onDeleted: () => clearSmartFilter('supporter')),
                       ]),
                     ],
@@ -399,26 +408,26 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
                     Wrap(spacing: 10, runSpacing: 10, children: [
                       _SearchBox(
                           controller: search,
-                          label: 'Name, EPIC or mobile',
+                          label: 'नाम, EPIC या मोबाइल खोजें',
                           icon: Icons.search_rounded,
                           onChanged: (_) => filtersChanged(),
                           width: 260),
                       _DatabaseFilterPicker(
-                        label: 'Assembly',
+                        label: 'विधानसभा',
                         icon: Icons.account_balance_rounded,
                         value: selectedOptionLabels['assembly'],
                         onTap: () => openOptionSelector('assembly', 'Assembly'),
                         onClear: () => clearOption('assembly'),
                       ),
                       _DatabaseFilterPicker(
-                        label: 'Village',
+                        label: 'गाँव',
                         icon: Icons.location_city_rounded,
                         value: selectedOptionLabels['village'],
                         onTap: () => openOptionSelector('village', 'Village'),
                         onClear: () => clearOption('village'),
                       ),
                       _DatabaseFilterPicker(
-                        label: 'Gram Panchayat',
+                        label: 'ग्राम पंचायत',
                         icon: Icons.holiday_village_rounded,
                         value: selectedOptionLabels['gramPanchayat'],
                         onTap: () => openOptionSelector(
@@ -426,14 +435,14 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
                         onClear: () => clearOption('gramPanchayat'),
                       ),
                       _DatabaseFilterPicker(
-                        label: 'Tehsil',
+                        label: 'तहसील',
                         icon: Icons.apartment_rounded,
                         value: selectedOptionLabels['tehsil'],
                         onTap: () => openOptionSelector('tehsil', 'Tehsil'),
                         onClear: () => clearOption('tehsil'),
                       ),
                       _DatabaseFilterPicker(
-                        label: 'Municipality',
+                        label: 'नगर पालिका',
                         icon: Icons.location_city_outlined,
                         value: selectedOptionLabels['municipality'],
                         onTap: () =>
@@ -441,7 +450,7 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
                         onClear: () => clearOption('municipality'),
                       ),
                       _DatabaseFilterPicker(
-                        label: 'Part / Booth',
+                        label: 'भाग / बूथ',
                         icon: Icons.how_to_vote_rounded,
                         value: selectedOptionLabels['partNumber'],
                         onTap: () =>
@@ -449,21 +458,21 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
                         onClear: () => clearOption('partNumber'),
                       ),
                       _DatabaseFilterPicker(
-                        label: 'Section',
+                        label: 'अनुभाग',
                         icon: Icons.format_list_numbered_rounded,
                         value: selectedOptionLabels['section'],
                         onTap: () => openOptionSelector('section', 'Section'),
                         onClear: () => clearOption('section'),
                       ),
                       _DatabaseFilterPicker(
-                        label: 'Caste',
+                        label: 'जाति',
                         icon: Icons.groups_2_rounded,
                         value: selectedOptionLabels['caste'],
                         onTap: () => openOptionSelector('caste', 'Caste'),
                         onClear: () => clearOption('caste'),
                       ),
                       _DatabaseFilterPicker(
-                        label: 'Org Post',
+                        label: 'संगठन पद',
                         icon: Icons.badge_rounded,
                         value: selectedOptionLabels['organizationPost'],
                         onTap: () =>
@@ -471,7 +480,7 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
                         onClear: () => clearOption('organizationPost'),
                       ),
                       _DropFilter(
-                        label: 'Support',
+                        label: 'समर्थन',
                         value: support,
                         items: const {
                           '': 'All',
@@ -514,7 +523,7 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
                                     }),
                           ),
                           Expanded(
-                            child: Text('Voters ($total)',
+                            child: Text('मतदाता ($total)',
                                 style: const TextStyle(
                                     color: navy, fontWeight: FontWeight.w900)),
                           ),
@@ -550,7 +559,8 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
                         else if (items.isEmpty)
                           const Padding(
                               padding: EdgeInsets.all(28),
-                              child: Text('No voters found for these filters.'))
+                              child:
+                                  Text('इन फ़िल्टर में कोई मतदाता नहीं मिला।'))
                         else
                           ...items.map((voter) => _VoterChoice(
                                 voter: voter,
@@ -576,7 +586,7 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
                                   Padding(
                                       padding: const EdgeInsets.symmetric(
                                           horizontal: 14),
-                                      child: Text('Page $page / $pages',
+                                      child: Text('पेज $page / $pages',
                                           style: const TextStyle(
                                               color: navy,
                                               fontWeight: FontWeight.w800))),
@@ -595,10 +605,12 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
                     ),
                   ]),
             ),
-            SectionCard(
-              title: '2. Choose Printed Details',
-              subtitle: 'Use presets, then open only the category you need.',
+            _PrintStepCard(
+              title: '2. फ़ील्ड और जानकारी चुनें',
+              subtitle: 'PDF में कौन-कौन सी जानकारी दिखानी है, उसे चुनें।',
               icon: Icons.fact_check_rounded,
+              expanded: fieldsExpanded,
+              onToggle: () => setState(() => fieldsExpanded = !fieldsExpanded),
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -633,36 +645,38 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
                     ),
                   ]),
             ),
-            SectionCard(
-              title: '3. Layout & Preview',
-              subtitle: 'Choose paper, direction, card density, and photo.',
+            _PrintStepCard(
+              title: '3. लेआउट और प्रीव्यू',
+              subtitle: 'पेपर, दिशा, एक पंक्ति में कार्ड और फोटो चुनें।',
               icon: Icons.preview_rounded,
+              expanded: layoutExpanded,
+              onToggle: () => setState(() => layoutExpanded = !layoutExpanded),
               child: LayoutBuilder(builder: (context, constraints) {
                 final controls = Wrap(spacing: 10, runSpacing: 10, children: [
                   _SimpleDropdown(
-                      label: 'Paper',
+                      label: 'पेपर',
                       value: paper,
                       items: const ['A4', 'A3', 'LETTER'],
                       onChanged: (value) => setState(() => paper = value)),
                   _SimpleDropdown(
-                      label: 'Direction',
+                      label: 'दिशा',
                       value: orientation,
                       items: const ['portrait', 'landscape'],
                       display: const {
-                        'portrait': 'Portrait',
-                        'landscape': 'Landscape'
+                        'portrait': 'पोर्ट्रेट',
+                        'landscape': 'लैंडस्केप'
                       },
                       onChanged: (value) =>
                           setState(() => orientation = value)),
                   _SimpleDropdown(
-                      label: 'Cards / row',
+                      label: 'एक पंक्ति में कार्ड',
                       value: '$columns',
                       items: const ['1', '2', '3'],
                       onChanged: (value) =>
                           setState(() => columns = int.parse(value))),
                   FilterChip(
                       avatar: const Icon(Icons.photo_outlined, size: 18),
-                      label: const Text('Include photo'),
+                      label: const Text('फोटो शामिल करें'),
                       selected: photo,
                       onSelected: (value) => setState(() => photo = value)),
                 ]);
@@ -691,37 +705,247 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
                     ]);
               }),
             ),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                  color: const Color(0xffedf4ff),
-                  border: Border.all(color: const Color(0xffcbdcff)),
-                  borderRadius: BorderRadius.circular(14)),
-              child: Row(children: [
-                const Icon(Icons.print_rounded, color: blue, size: 30),
-                const SizedBox(width: 12),
-                Expanded(
-                    child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                      Text(
-                          '$selectedCount voters · ${selectedFields.length} fields',
-                          style: const TextStyle(
-                              color: navy, fontWeight: FontWeight.w900)),
-                      const Text('PDF preview will open before printing',
-                          style: TextStyle(color: muted, fontSize: 12)),
-                    ])),
-                FilledButton.icon(
-                  onPressed: selectedCount == 0 || selectedFields.isEmpty
-                      ? null
-                      : () => printSelected(total),
-                  icon: const Icon(Icons.picture_as_pdf_rounded),
-                  label: const Text('Preview & Print'),
-                ),
-              ]),
+            _PrintStepCard(
+              title: '4. PDF बनाएं',
+              subtitle:
+                  'अपनी सेटिंग जांचें, फिर PDF बनाकर डाउनलोड या प्रिंट करें।',
+              icon: Icons.picture_as_pdf_rounded,
+              expanded: generateExpanded,
+              onToggle: () =>
+                  setState(() => generateExpanded = !generateExpanded),
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xffedf4ff), Color(0xfff8fbff)],
+                    ),
+                    border: Border.all(color: const Color(0xffcbdcff)),
+                    borderRadius: BorderRadius.circular(14)),
+                child: LayoutBuilder(builder: (context, constraints) {
+                  final summary = Row(children: [
+                    const Icon(Icons.print_rounded, color: blue, size: 30),
+                    const SizedBox(width: 12),
+                    Expanded(
+                        child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                          Text(
+                              '$selectedCount मतदाता · ${selectedFields.length} फ़ील्ड',
+                              style: const TextStyle(
+                                  color: navy, fontWeight: FontWeight.w900)),
+                          const Text('प्रिंट से पहले PDF प्रीव्यू खुलेगा',
+                              style: TextStyle(color: muted, fontSize: 12)),
+                        ])),
+                  ]);
+                  final button = FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size(210, 52),
+                      textStyle: const TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                    onPressed: selectedCount == 0 || selectedFields.isEmpty
+                        ? null
+                        : () => printSelected(total),
+                    icon: const Icon(Icons.print_rounded),
+                    label: const Text('PDF बनाएं और डाउनलोड करें'),
+                  );
+                  if (constraints.maxWidth < 560) {
+                    return Column(children: [
+                      summary,
+                      const SizedBox(height: 14),
+                      SizedBox(width: double.infinity, child: button),
+                    ]);
+                  }
+                  return Row(children: [
+                    Expanded(child: summary),
+                    const SizedBox(width: 14),
+                    button,
+                  ]);
+                }),
+              ),
             ),
           ]);
         },
+      );
+}
+
+class _PrintStepProgress extends StatelessWidget {
+  const _PrintStepProgress({
+    required this.selectedCount,
+    required this.fieldsReady,
+    required this.layoutReady,
+  });
+
+  final int selectedCount;
+  final bool fieldsReady;
+  final bool layoutReady;
+
+  @override
+  Widget build(BuildContext context) {
+    final activeStep = selectedCount == 0
+        ? 0
+        : !fieldsReady
+            ? 1
+            : layoutReady
+                ? 3
+                : 2;
+    const labels = ['मतदाता', 'फ़ील्ड', 'लेआउट', 'PDF'];
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 16, 12, 13),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: border),
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: const [
+          BoxShadow(
+              color: Color(0x0d071b4b), blurRadius: 18, offset: Offset(0, 8)),
+        ],
+      ),
+      child: Row(
+        children: List.generate(labels.length, (index) {
+          final reached = index <= activeStep;
+          return Expanded(
+            child: Row(children: [
+              Expanded(
+                child: Column(children: [
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 220),
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: reached ? blue : const Color(0xffe8edf6),
+                      boxShadow: reached
+                          ? const [
+                              BoxShadow(
+                                  color: Color(0x331457f5),
+                                  blurRadius: 10,
+                                  offset: Offset(0, 4))
+                            ]
+                          : null,
+                    ),
+                    alignment: Alignment.center,
+                    child: Text('${index + 1}',
+                        style: TextStyle(
+                            color: reached ? Colors.white : navy,
+                            fontWeight: FontWeight.w900)),
+                  ),
+                  const SizedBox(height: 7),
+                  Text(labels[index],
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          color: reached ? navy : muted,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800)),
+                ]),
+              ),
+              if (index < labels.length - 1)
+                Container(
+                  width: 10,
+                  height: 2,
+                  margin: const EdgeInsets.only(bottom: 24),
+                  color: index < activeStep ? blue : border,
+                ),
+            ]),
+          );
+        }),
+      ),
+    );
+  }
+}
+
+class _PrintStepCard extends StatelessWidget {
+  const _PrintStepCard({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.expanded,
+    required this.onToggle,
+    required this.child,
+    this.action,
+  });
+
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final bool expanded;
+  final VoidCallback onToggle;
+  final Widget child;
+  final Widget? action;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          border:
+              Border.all(color: expanded ? const Color(0xffcbdcff) : border),
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: const [
+            BoxShadow(
+                color: Color(0x0d071b4b), blurRadius: 18, offset: Offset(0, 8)),
+          ],
+        ),
+        child: Column(children: [
+          InkWell(
+            onTap: onToggle,
+            borderRadius: BorderRadius.circular(18),
+            child: Padding(
+              padding: const EdgeInsets.all(15),
+              child: Row(children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: softBlue,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(icon, color: blue, size: 21),
+                ),
+                const SizedBox(width: 11),
+                Expanded(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(title,
+                            style: const TextStyle(
+                                color: navy,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w900)),
+                        const SizedBox(height: 3),
+                        Text(subtitle,
+                            maxLines: expanded ? 2 : 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(color: muted, fontSize: 11)),
+                      ]),
+                ),
+                if (action != null) ...[
+                  const SizedBox(width: 6),
+                  action!,
+                ],
+                AnimatedRotation(
+                  turns: expanded ? .5 : 0,
+                  duration: const Duration(milliseconds: 220),
+                  child: const Icon(Icons.keyboard_arrow_down_rounded,
+                      color: navy),
+                ),
+              ]),
+            ),
+          ),
+          AnimatedCrossFade(
+            duration: const Duration(milliseconds: 220),
+            crossFadeState:
+                expanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+            firstChild: const SizedBox(width: double.infinity),
+            secondChild: Padding(
+              padding: const EdgeInsets.fromLTRB(15, 0, 15, 15),
+              child: Column(children: [
+                const Divider(height: 1),
+                const SizedBox(height: 15),
+                child,
+              ]),
+            ),
+          ),
+        ]),
       );
 }
 
@@ -743,8 +967,8 @@ class _SelectionBadge extends StatelessWidget {
           const SizedBox(width: 7),
           Text(
               count > 0
-                  ? '$count selected${allFiltered ? ' (filtered)' : ''}'
-                  : 'Select voters',
+                  ? '$count चुने${allFiltered ? ' (फ़िल्टर से)' : ''}'
+                  : 'मतदाता चुनें',
               style: TextStyle(
                   color: count > 0 ? green : muted,
                   fontWeight: FontWeight.w800)),
@@ -762,15 +986,16 @@ class _PresetBar extends StatelessWidget {
   Widget build(BuildContext context) => SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(children: [
-          _PresetButton(Icons.badge_outlined, 'Basic', () => onPreset('basic')),
           _PresetButton(
-              Icons.call_outlined, 'Contact', () => onPreset('contact')),
+              Icons.badge_outlined, 'बुनियादी', () => onPreset('basic')),
           _PresetButton(
-              Icons.map_outlined, 'Location', () => onPreset('location')),
+              Icons.call_outlined, 'संपर्क', () => onPreset('contact')),
           _PresetButton(
-              Icons.groups_outlined, 'Political', () => onPreset('political')),
-          _PresetButton(Icons.done_all_rounded, 'All', () => onPreset('all')),
-          _PresetButton(Icons.clear_all_rounded, 'Clear', onClear),
+              Icons.map_outlined, 'क्षेत्र', () => onPreset('location')),
+          _PresetButton(
+              Icons.groups_outlined, 'राजनीतिक', () => onPreset('political')),
+          _PresetButton(Icons.done_all_rounded, 'सभी', () => onPreset('all')),
+          _PresetButton(Icons.clear_all_rounded, 'हटाएं', onClear),
         ]),
       );
 }
@@ -885,7 +1110,7 @@ class _SelectedFieldSummary extends StatelessWidget {
   Widget build(BuildContext context) {
     final preview = fields.take(6).toList();
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text('$count fields selected',
+      Text('$count फ़ील्ड चुने गए',
           style: const TextStyle(color: muted, fontSize: 12)),
       if (preview.isNotEmpty) ...[
         const SizedBox(height: 6),
@@ -934,7 +1159,7 @@ class _PrintSetupSummary extends StatelessWidget {
         ),
         child: LayoutBuilder(builder: (context, constraints) {
           final itemWidth = constraints.maxWidth < 720
-              ? constraints.maxWidth
+              ? (constraints.maxWidth - 8) / 2
               : (constraints.maxWidth - 24) / 4;
           return Wrap(
             spacing: 8,
@@ -942,28 +1167,28 @@ class _PrintSetupSummary extends StatelessWidget {
             children: [
               _SummaryPill(
                 icon: Icons.groups_rounded,
-                label: 'Voters',
-                value: '$selectedCount selected',
+                label: 'मतदाता',
+                value: '$selectedCount चुने',
                 color: selectedCount > 0 ? green : orange,
                 width: itemWidth,
               ),
               _SummaryPill(
                 icon: Icons.filter_alt_rounded,
-                label: 'Filters',
-                value: '$activeFilterCount active',
+                label: 'फ़िल्टर',
+                value: '$activeFilterCount सक्रिय',
                 color: blue,
                 width: itemWidth,
               ),
               _SummaryPill(
                 icon: Icons.view_list_rounded,
-                label: 'Fields',
-                value: '$fieldCount selected',
+                label: 'फ़ील्ड',
+                value: '$fieldCount चुने',
                 color: fieldCount > 0 ? green : rose,
                 width: itemWidth,
               ),
               _SummaryPill(
                 icon: Icons.description_rounded,
-                label: 'Layout',
+                label: 'लेआउट',
                 value: layout,
                 color: purple,
                 width: itemWidth,
@@ -1037,7 +1262,7 @@ class _QuickSelectPanel extends StatelessWidget {
   Widget build(BuildContext context) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Quick selection',
+          const Text('जल्दी चुनें',
               style: TextStyle(color: navy, fontWeight: FontWeight.w900)),
           const SizedBox(height: 8),
           LayoutBuilder(builder: (context, constraints) {
@@ -1047,40 +1272,40 @@ class _QuickSelectPanel extends StatelessWidget {
             return Wrap(spacing: 8, runSpacing: 8, children: [
               _QuickSelectTile(
                 icon: Icons.select_all_rounded,
-                title: 'All filtered voters',
-                subtitle: 'Select every voter matching the filters',
+                title: 'फ़िल्टर के सभी मतदाता',
+                subtitle: 'मौजूदा फ़िल्टर से मिले सभी मतदाता चुनें',
                 color: blue,
                 width: width,
                 onTap: onAllFiltered,
               ),
               _QuickSelectTile(
                 icon: Icons.phone_disabled_rounded,
-                title: 'Mobile missing',
-                subtitle: 'Print voters without mobile numbers',
+                title: 'मोबाइल नहीं है',
+                subtitle: 'बिना मोबाइल नंबर वाले मतदाता चुनें',
                 color: rose,
                 width: width,
                 onTap: onMissingMobile,
               ),
               _QuickSelectTile(
                 icon: Icons.other_houses_rounded,
-                title: 'House missing',
-                subtitle: 'Print voters without house numbers',
+                title: 'घर संख्या नहीं है',
+                subtitle: 'बिना घर संख्या वाले मतदाता चुनें',
                 color: orange,
                 width: width,
                 onTap: onMissingHouse,
               ),
               _QuickSelectTile(
                 icon: Icons.fact_check_rounded,
-                title: 'Needs review',
-                subtitle: 'Select voters marked for review',
+                title: 'समीक्षा जरूरी',
+                subtitle: 'समीक्षा के लिए चिह्नित मतदाता चुनें',
                 color: purple,
                 width: width,
                 onTap: onReview,
               ),
               _QuickSelectTile(
                 icon: Icons.groups_rounded,
-                title: 'Supporters',
-                subtitle: 'Select supporter voters only',
+                title: 'समर्थक',
+                subtitle: 'केवल समर्थक मतदाता चुनें',
                 color: green,
                 width: width,
                 onTap: onSupporter,
@@ -1194,7 +1419,7 @@ class _FilterOptionDialogState extends State<_FilterOptionDialog> {
         contentPadding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
         title: Row(children: [
           Expanded(
-              child: Text('${widget.title} select',
+              child: Text('${widget.title} चुनें',
                   style: const TextStyle(
                       color: navy, fontWeight: FontWeight.w900))),
           IconButton(
@@ -1211,7 +1436,7 @@ class _FilterOptionDialogState extends State<_FilterOptionDialog> {
               onChanged: (_) => setState(() {}),
               decoration: InputDecoration(
                 prefixIcon: const Icon(Icons.search_rounded),
-                hintText: '${widget.title} search...',
+                hintText: '${widget.title} खोजें...',
                 suffixIcon: search.text.isEmpty
                     ? null
                     : IconButton(
@@ -1247,7 +1472,7 @@ class _FilterOptionDialogState extends State<_FilterOptionDialog> {
                   ).map(_FilterOption.fromMap).toList();
                   if (options.isEmpty) {
                     return const Center(
-                        child: Text('No matching option found in database.',
+                        child: Text('Database में कोई विकल्प नहीं मिला।',
                             style: TextStyle(color: muted)));
                   }
                   return ListView.separated(
@@ -1263,7 +1488,7 @@ class _FilterOptionDialogState extends State<_FilterOptionDialog> {
                         title: Text(option.label,
                             style: const TextStyle(
                                 color: navy, fontWeight: FontWeight.w800)),
-                        subtitle: Text('${option.count} voters'),
+                        subtitle: Text('${option.count} मतदाता'),
                         trailing: const Icon(Icons.chevron_right_rounded),
                         onTap: () => Navigator.pop(context, option),
                       );
