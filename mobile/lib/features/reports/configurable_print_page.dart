@@ -44,6 +44,7 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
   bool fieldsExpanded = false;
   bool layoutExpanded = false;
   bool generateExpanded = false;
+  final bool showInlineVoterDetails = false;
   String fieldCategory = 'identity';
   int refreshKey = 0;
   late Future<Map<String, dynamic>> votersFuture;
@@ -177,6 +178,8 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
         selectAllFiltered = true;
         selectedIds.clear();
         excludedIds.clear();
+        votersExpanded = false;
+        fieldsExpanded = true;
       });
 
   void clearSelection() => setState(() {
@@ -246,6 +249,197 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
         excludedIds.clear();
         refreshVoters();
       });
+
+  void clearAllFilters() => setState(() {
+        search.clear();
+        support = '';
+        verification = '';
+        missingMobile = false;
+        missingHouse = false;
+        selectedOptionFilters.clear();
+        selectedOptionLabels.clear();
+        page = 1;
+        refreshKey++;
+        selectAllFiltered = false;
+        selectedIds.clear();
+        excludedIds.clear();
+        votersExpanded = false;
+        fieldsExpanded = true;
+        refreshVoters();
+      });
+
+  Future<void> openAdvancedFilters() async {
+    const definitions = <({String key, String label, IconData icon})>[
+      (key: 'assembly', label: 'विधानसभा', icon: Icons.account_balance_rounded),
+      (key: 'village', label: 'गाँव', icon: Icons.location_city_rounded),
+      (
+        key: 'gramPanchayat',
+        label: 'ग्राम पंचायत',
+        icon: Icons.holiday_village_rounded
+      ),
+      (key: 'tehsil', label: 'तहसील', icon: Icons.apartment_rounded),
+      (
+        key: 'municipality',
+        label: 'नगर पालिका',
+        icon: Icons.location_city_outlined
+      ),
+      (key: 'partNumber', label: 'भाग / बूथ', icon: Icons.how_to_vote_rounded),
+      (
+        key: 'section',
+        label: 'अनुभाग',
+        icon: Icons.format_list_numbered_rounded
+      ),
+      (key: 'caste', label: 'जाति', icon: Icons.groups_2_rounded),
+      (key: 'organizationPost', label: 'संगठन पद', icon: Icons.badge_rounded),
+    ];
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, sheetSetState) {
+          final count = selectedOptionLabels.length +
+              (support.isEmpty ? 0 : 1) +
+              (verification.isEmpty ? 0 : 1) +
+              (missingMobile ? 1 : 0) +
+              (missingHouse ? 1 : 0);
+          return Container(
+            constraints: const BoxConstraints(maxWidth: 680),
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+            ),
+            child: Column(children: [
+              Container(
+                width: 44,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 14),
+                decoration: BoxDecoration(
+                  color: border,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+              ),
+              Row(children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                      color: softBlue, borderRadius: BorderRadius.circular(13)),
+                  child: const Icon(Icons.filter_alt_rounded, color: blue),
+                ),
+                const SizedBox(width: 11),
+                Expanded(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Advanced फ़िल्टर',
+                            style: TextStyle(
+                                color: navy,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w900)),
+                        Text('$count फ़िल्टर सक्रिय',
+                            style: const TextStyle(color: muted, fontSize: 11)),
+                      ]),
+                ),
+                if (count > 0)
+                  TextButton(
+                    onPressed: () {
+                      clearAllFilters();
+                      sheetSetState(() {});
+                    },
+                    child: const Text('सब हटाएं'),
+                  ),
+                IconButton(
+                  onPressed: () => Navigator.pop(sheetContext),
+                  icon: const Icon(Icons.close_rounded),
+                ),
+              ]),
+              const SizedBox(height: 12),
+              Expanded(
+                child: ListView(
+                  children: [
+                    ...definitions.map((definition) => Padding(
+                          padding: const EdgeInsets.only(bottom: 9),
+                          child: _DatabaseFilterPicker(
+                            width: double.infinity,
+                            label: definition.label,
+                            icon: definition.icon,
+                            value: selectedOptionLabels[definition.key],
+                            onTap: () async {
+                              await openOptionSelector(
+                                  definition.key, definition.label);
+                              if (sheetContext.mounted) {
+                                sheetSetState(() {});
+                              }
+                            },
+                            onClear: () {
+                              clearOption(definition.key);
+                              sheetSetState(() {});
+                            },
+                          ),
+                        )),
+                    _DropFilter(
+                      label: 'समर्थन',
+                      value: support,
+                      width: double.infinity,
+                      items: const {
+                        '': 'सभी',
+                        'supporter': 'समर्थक',
+                        'opposite': 'विरोधी',
+                        'neutral': 'तटस्थ',
+                        'undecided': 'अनिर्णीत',
+                      },
+                      onChanged: (value) {
+                        support = value;
+                        filtersChanged();
+                        sheetSetState(() {});
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: FilledButton.icon(
+                  onPressed: () => Navigator.pop(sheetContext),
+                  icon: const Icon(Icons.check_rounded),
+                  label: Text('$count फ़िल्टर लागू करें'),
+                ),
+              ),
+            ]),
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> openVoterPicker() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _VoterPickerSheet(
+        filters: Map<String, String?>.from(filters),
+        isSelected: isSelected,
+        onToggle: toggleVoter,
+        onSelectAll: chooseAllFiltered,
+        onClear: clearSelection,
+      ),
+    );
+    if (!mounted) return;
+    if (selectAllFiltered || selectedIds.isNotEmpty) {
+      setState(() {
+        votersExpanded = false;
+        fieldsExpanded = true;
+      });
+    }
+  }
+
   void applyFieldPreset(String preset) => setState(() {
         selectedFields
           ..clear()
@@ -341,7 +535,10 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
                   'मतदाता चुनें, जरूरी जानकारी और लेआउट तय करें, फिर सुरक्षित PDF बनाएं।',
               icon: Icons.print_rounded,
               primaryAction: _SelectionBadge(
-                  count: selectedCount, allFiltered: selectAllFiltered),
+                count: selectedCount,
+                allFiltered: selectAllFiltered,
+                onTap: openVoterPicker,
+              ),
             ),
             _PrintSetupSummary(
               selectedCount: selectedCount,
@@ -371,238 +568,260 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _QuickSelectPanel(
+                    _CompactVoterSelectionPanel(
+                      search: search,
+                      selectedCount: selectedCount,
+                      total: total,
+                      activeFilterCount: activeFilterCount,
+                      selectAllFiltered: selectAllFiltered,
+                      onSearch: (_) => filtersChanged(),
+                      onAllFiltered: chooseAllFiltered,
                       onMissingMobile: () => smartSelect('missingMobile'),
-                      onMissingHouse: () => smartSelect('missingHouse'),
                       onReview: () => smartSelect('review'),
                       onSupporter: () => smartSelect('supporter'),
-                      onAllFiltered: chooseAllFiltered,
+                      onOpenFilters: openAdvancedFilters,
+                      onOpenVoters: openVoterPicker,
+                      onOpenFields: () => setState(() {
+                        votersExpanded = false;
+                        fieldsExpanded = true;
+                      }),
                     ),
-                    if (missingMobile ||
-                        missingHouse ||
-                        verification == 'needs_review' ||
-                        support == 'supporter') ...[
-                      const SizedBox(height: 10),
-                      Wrap(spacing: 7, runSpacing: 7, children: [
-                        if (missingMobile)
-                          InputChip(
-                              label: const Text('मोबाइल नहीं है'),
-                              onDeleted: () =>
-                                  clearSmartFilter('missingMobile')),
-                        if (missingHouse)
-                          InputChip(
-                              label: const Text('घर संख्या नहीं है'),
-                              onDeleted: () =>
-                                  clearSmartFilter('missingHouse')),
-                        if (verification == 'needs_review')
-                          InputChip(
-                              label: const Text('समीक्षा जरूरी'),
-                              onDeleted: () => clearSmartFilter('review')),
-                        if (support == 'supporter')
-                          InputChip(
-                              label: const Text('समर्थक'),
-                              onDeleted: () => clearSmartFilter('supporter')),
-                      ]),
-                    ],
-                    const Divider(height: 28),
-                    Wrap(spacing: 10, runSpacing: 10, children: [
-                      _SearchBox(
-                          controller: search,
-                          label: 'नाम, EPIC या मोबाइल खोजें',
-                          icon: Icons.search_rounded,
-                          onChanged: (_) => filtersChanged(),
-                          width: 260),
-                      _DatabaseFilterPicker(
-                        label: 'विधानसभा',
-                        icon: Icons.account_balance_rounded,
-                        value: selectedOptionLabels['assembly'],
-                        onTap: () => openOptionSelector('assembly', 'Assembly'),
-                        onClear: () => clearOption('assembly'),
+                    if (showInlineVoterDetails) ...[
+                      _QuickSelectPanel(
+                        onMissingMobile: () => smartSelect('missingMobile'),
+                        onMissingHouse: () => smartSelect('missingHouse'),
+                        onReview: () => smartSelect('review'),
+                        onSupporter: () => smartSelect('supporter'),
+                        onAllFiltered: chooseAllFiltered,
                       ),
-                      _DatabaseFilterPicker(
-                        label: 'गाँव',
-                        icon: Icons.location_city_rounded,
-                        value: selectedOptionLabels['village'],
-                        onTap: () => openOptionSelector('village', 'Village'),
-                        onClear: () => clearOption('village'),
-                      ),
-                      _DatabaseFilterPicker(
-                        label: 'ग्राम पंचायत',
-                        icon: Icons.holiday_village_rounded,
-                        value: selectedOptionLabels['gramPanchayat'],
-                        onTap: () => openOptionSelector(
-                            'gramPanchayat', 'Gram Panchayat'),
-                        onClear: () => clearOption('gramPanchayat'),
-                      ),
-                      _DatabaseFilterPicker(
-                        label: 'तहसील',
-                        icon: Icons.apartment_rounded,
-                        value: selectedOptionLabels['tehsil'],
-                        onTap: () => openOptionSelector('tehsil', 'Tehsil'),
-                        onClear: () => clearOption('tehsil'),
-                      ),
-                      _DatabaseFilterPicker(
-                        label: 'नगर पालिका',
-                        icon: Icons.location_city_outlined,
-                        value: selectedOptionLabels['municipality'],
-                        onTap: () =>
-                            openOptionSelector('municipality', 'Municipality'),
-                        onClear: () => clearOption('municipality'),
-                      ),
-                      _DatabaseFilterPicker(
-                        label: 'भाग / बूथ',
-                        icon: Icons.how_to_vote_rounded,
-                        value: selectedOptionLabels['partNumber'],
-                        onTap: () =>
-                            openOptionSelector('partNumber', 'Part / Booth'),
-                        onClear: () => clearOption('partNumber'),
-                      ),
-                      _DatabaseFilterPicker(
-                        label: 'अनुभाग',
-                        icon: Icons.format_list_numbered_rounded,
-                        value: selectedOptionLabels['section'],
-                        onTap: () => openOptionSelector('section', 'Section'),
-                        onClear: () => clearOption('section'),
-                      ),
-                      _DatabaseFilterPicker(
-                        label: 'जाति',
-                        icon: Icons.groups_2_rounded,
-                        value: selectedOptionLabels['caste'],
-                        onTap: () => openOptionSelector('caste', 'Caste'),
-                        onClear: () => clearOption('caste'),
-                      ),
-                      _DatabaseFilterPicker(
-                        label: 'संगठन पद',
-                        icon: Icons.badge_rounded,
-                        value: selectedOptionLabels['organizationPost'],
-                        onTap: () =>
-                            openOptionSelector('organizationPost', 'Org Post'),
-                        onClear: () => clearOption('organizationPost'),
-                      ),
-                      _DropFilter(
-                        label: 'समर्थन',
-                        value: support,
-                        items: const {
-                          '': 'All',
-                          'supporter': 'Supporter',
-                          'opposite': 'Opposite',
-                          'neutral': 'Neutral',
-                          'undecided': 'Undecided',
-                        },
-                        onChanged: (value) {
-                          support = value;
-                          filtersChanged();
-                        },
-                      ),
-                    ]),
-                    const SizedBox(height: 16),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                          color: const Color(0xfff5f8fe),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: border)),
-                      child: Column(children: [
-                        Row(children: [
-                          Checkbox(
-                            value: allPageSelected,
-                            onChanged: pageIds.isEmpty
-                                ? null
-                                : (value) => setState(() {
-                                      for (final id in pageIds) {
-                                        if (selectAllFiltered) {
-                                          value == true
-                                              ? excludedIds.remove(id)
-                                              : excludedIds.add(id);
-                                        } else {
-                                          value == true
-                                              ? selectedIds.add(id)
-                                              : selectedIds.remove(id);
-                                        }
-                                      }
-                                    }),
-                          ),
-                          Expanded(
-                            child: Text('मतदाता ($total)',
-                                style: const TextStyle(
-                                    color: navy, fontWeight: FontWeight.w900)),
-                          ),
-                          TextButton.icon(
-                            onPressed: pageIds.isEmpty
-                                ? null
-                                : () => setState(() {
-                                      for (final id in pageIds) {
-                                        allPageSelected
-                                            ? (selectAllFiltered
-                                                ? excludedIds.add(id)
-                                                : selectedIds.remove(id))
-                                            : (selectAllFiltered
-                                                ? excludedIds.remove(id)
-                                                : selectedIds.add(id));
-                                      }
-                                    }),
-                            icon: const Icon(Icons.library_add_check_rounded),
-                            label: Text(allPageSelected
-                                ? 'Unselect this page'
-                                : 'Select this page'),
-                          ),
+                      if (missingMobile ||
+                          missingHouse ||
+                          verification == 'needs_review' ||
+                          support == 'supporter') ...[
+                        const SizedBox(height: 10),
+                        Wrap(spacing: 7, runSpacing: 7, children: [
+                          if (missingMobile)
+                            InputChip(
+                                label: const Text('मोबाइल नहीं है'),
+                                onDeleted: () =>
+                                    clearSmartFilter('missingMobile')),
+                          if (missingHouse)
+                            InputChip(
+                                label: const Text('घर संख्या नहीं है'),
+                                onDeleted: () =>
+                                    clearSmartFilter('missingHouse')),
+                          if (verification == 'needs_review')
+                            InputChip(
+                                label: const Text('समीक्षा जरूरी'),
+                                onDeleted: () => clearSmartFilter('review')),
+                          if (support == 'supporter')
+                            InputChip(
+                                label: const Text('समर्थक'),
+                                onDeleted: () => clearSmartFilter('supporter')),
                         ]),
-                        if (loading)
-                          const Padding(
-                              padding: EdgeInsets.all(28),
-                              child: CircularProgressIndicator())
-                        else if (snapshot.hasError)
-                          Padding(
-                              padding: const EdgeInsets.all(18),
-                              child: Text('${snapshot.error}',
-                                  style: const TextStyle(color: Colors.red)))
-                        else if (items.isEmpty)
-                          const Padding(
-                              padding: EdgeInsets.all(28),
-                              child:
-                                  Text('इन फ़िल्टर में कोई मतदाता नहीं मिला।'))
-                        else
-                          ...items.map((voter) => _VoterChoice(
-                                voter: voter,
-                                selected: isSelected('${voter['_id']}'),
-                                onChanged: (value) =>
-                                    toggleVoter('${voter['_id']}', value),
-                              )),
-                        if (pages > 1)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 12),
-                            child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  IconButton.outlined(
-                                      onPressed: page <= 1
-                                          ? null
-                                          : () => setState(() {
-                                                page--;
-                                                refreshVoters();
-                                              }),
-                                      icon: const Icon(
-                                          Icons.chevron_left_rounded)),
-                                  Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 14),
-                                      child: Text('पेज $page / $pages',
-                                          style: const TextStyle(
-                                              color: navy,
-                                              fontWeight: FontWeight.w800))),
-                                  IconButton.outlined(
-                                      onPressed: page >= pages
-                                          ? null
-                                          : () => setState(() {
-                                                page++;
-                                                refreshVoters();
-                                              }),
-                                      icon: const Icon(
-                                          Icons.chevron_right_rounded)),
-                                ]),
-                          ),
+                      ],
+                      const Divider(height: 28),
+                      Wrap(spacing: 10, runSpacing: 10, children: [
+                        _SearchBox(
+                            controller: search,
+                            label: 'नाम, EPIC या मोबाइल खोजें',
+                            icon: Icons.search_rounded,
+                            onChanged: (_) => filtersChanged(),
+                            width: 260),
+                        _DatabaseFilterPicker(
+                          label: 'विधानसभा',
+                          icon: Icons.account_balance_rounded,
+                          value: selectedOptionLabels['assembly'],
+                          onTap: () =>
+                              openOptionSelector('assembly', 'Assembly'),
+                          onClear: () => clearOption('assembly'),
+                        ),
+                        _DatabaseFilterPicker(
+                          label: 'गाँव',
+                          icon: Icons.location_city_rounded,
+                          value: selectedOptionLabels['village'],
+                          onTap: () => openOptionSelector('village', 'Village'),
+                          onClear: () => clearOption('village'),
+                        ),
+                        _DatabaseFilterPicker(
+                          label: 'ग्राम पंचायत',
+                          icon: Icons.holiday_village_rounded,
+                          value: selectedOptionLabels['gramPanchayat'],
+                          onTap: () => openOptionSelector(
+                              'gramPanchayat', 'Gram Panchayat'),
+                          onClear: () => clearOption('gramPanchayat'),
+                        ),
+                        _DatabaseFilterPicker(
+                          label: 'तहसील',
+                          icon: Icons.apartment_rounded,
+                          value: selectedOptionLabels['tehsil'],
+                          onTap: () => openOptionSelector('tehsil', 'Tehsil'),
+                          onClear: () => clearOption('tehsil'),
+                        ),
+                        _DatabaseFilterPicker(
+                          label: 'नगर पालिका',
+                          icon: Icons.location_city_outlined,
+                          value: selectedOptionLabels['municipality'],
+                          onTap: () => openOptionSelector(
+                              'municipality', 'Municipality'),
+                          onClear: () => clearOption('municipality'),
+                        ),
+                        _DatabaseFilterPicker(
+                          label: 'भाग / बूथ',
+                          icon: Icons.how_to_vote_rounded,
+                          value: selectedOptionLabels['partNumber'],
+                          onTap: () =>
+                              openOptionSelector('partNumber', 'Part / Booth'),
+                          onClear: () => clearOption('partNumber'),
+                        ),
+                        _DatabaseFilterPicker(
+                          label: 'अनुभाग',
+                          icon: Icons.format_list_numbered_rounded,
+                          value: selectedOptionLabels['section'],
+                          onTap: () => openOptionSelector('section', 'Section'),
+                          onClear: () => clearOption('section'),
+                        ),
+                        _DatabaseFilterPicker(
+                          label: 'जाति',
+                          icon: Icons.groups_2_rounded,
+                          value: selectedOptionLabels['caste'],
+                          onTap: () => openOptionSelector('caste', 'Caste'),
+                          onClear: () => clearOption('caste'),
+                        ),
+                        _DatabaseFilterPicker(
+                          label: 'संगठन पद',
+                          icon: Icons.badge_rounded,
+                          value: selectedOptionLabels['organizationPost'],
+                          onTap: () => openOptionSelector(
+                              'organizationPost', 'Org Post'),
+                          onClear: () => clearOption('organizationPost'),
+                        ),
+                        _DropFilter(
+                          label: 'समर्थन',
+                          value: support,
+                          items: const {
+                            '': 'All',
+                            'supporter': 'Supporter',
+                            'opposite': 'Opposite',
+                            'neutral': 'Neutral',
+                            'undecided': 'Undecided',
+                          },
+                          onChanged: (value) {
+                            support = value;
+                            filtersChanged();
+                          },
+                        ),
                       ]),
-                    ),
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                            color: const Color(0xfff5f8fe),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: border)),
+                        child: Column(children: [
+                          Row(children: [
+                            Checkbox(
+                              value: allPageSelected,
+                              onChanged: pageIds.isEmpty
+                                  ? null
+                                  : (value) => setState(() {
+                                        for (final id in pageIds) {
+                                          if (selectAllFiltered) {
+                                            value == true
+                                                ? excludedIds.remove(id)
+                                                : excludedIds.add(id);
+                                          } else {
+                                            value == true
+                                                ? selectedIds.add(id)
+                                                : selectedIds.remove(id);
+                                          }
+                                        }
+                                      }),
+                            ),
+                            Expanded(
+                              child: Text('मतदाता ($total)',
+                                  style: const TextStyle(
+                                      color: navy,
+                                      fontWeight: FontWeight.w900)),
+                            ),
+                            TextButton.icon(
+                              onPressed: pageIds.isEmpty
+                                  ? null
+                                  : () => setState(() {
+                                        for (final id in pageIds) {
+                                          allPageSelected
+                                              ? (selectAllFiltered
+                                                  ? excludedIds.add(id)
+                                                  : selectedIds.remove(id))
+                                              : (selectAllFiltered
+                                                  ? excludedIds.remove(id)
+                                                  : selectedIds.add(id));
+                                        }
+                                      }),
+                              icon: const Icon(Icons.library_add_check_rounded),
+                              label: Text(allPageSelected
+                                  ? 'Unselect this page'
+                                  : 'Select this page'),
+                            ),
+                          ]),
+                          if (loading)
+                            const Padding(
+                                padding: EdgeInsets.all(28),
+                                child: CircularProgressIndicator())
+                          else if (snapshot.hasError)
+                            Padding(
+                                padding: const EdgeInsets.all(18),
+                                child: Text('${snapshot.error}',
+                                    style: const TextStyle(color: Colors.red)))
+                          else if (items.isEmpty)
+                            const Padding(
+                                padding: EdgeInsets.all(28),
+                                child: Text(
+                                    'इन फ़िल्टर में कोई मतदाता नहीं मिला।'))
+                          else
+                            ...items.map((voter) => _VoterChoice(
+                                  voter: voter,
+                                  selected: isSelected('${voter['_id']}'),
+                                  onChanged: (value) =>
+                                      toggleVoter('${voter['_id']}', value),
+                                )),
+                          if (pages > 1)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 12),
+                              child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    IconButton.outlined(
+                                        onPressed: page <= 1
+                                            ? null
+                                            : () => setState(() {
+                                                  page--;
+                                                  refreshVoters();
+                                                }),
+                                        icon: const Icon(
+                                            Icons.chevron_left_rounded)),
+                                    Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 14),
+                                        child: Text('पेज $page / $pages',
+                                            style: const TextStyle(
+                                                color: navy,
+                                                fontWeight: FontWeight.w800))),
+                                    IconButton.outlined(
+                                        onPressed: page >= pages
+                                            ? null
+                                            : () => setState(() {
+                                                  page++;
+                                                  refreshVoters();
+                                                }),
+                                        icon: const Icon(
+                                            Icons.chevron_right_rounded)),
+                                  ]),
+                            ),
+                        ]),
+                      ),
+                    ],
                   ]),
             ),
             _PrintStepCard(
@@ -950,29 +1169,45 @@ class _PrintStepCard extends StatelessWidget {
 }
 
 class _SelectionBadge extends StatelessWidget {
-  const _SelectionBadge({required this.count, required this.allFiltered});
+  const _SelectionBadge({
+    required this.count,
+    required this.allFiltered,
+    this.onTap,
+  });
   final int count;
   final bool allFiltered;
+  final VoidCallback? onTap;
 
   @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
-        decoration: BoxDecoration(
-            color: count > 0 ? const Color(0xffeaf8f0) : Colors.white,
-            border: Border.all(color: count > 0 ? green : border),
-            borderRadius: BorderRadius.circular(10)),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(count > 0 ? Icons.check_circle_rounded : Icons.touch_app_rounded,
-              color: count > 0 ? green : muted, size: 19),
-          const SizedBox(width: 7),
-          Text(
-              count > 0
-                  ? '$count चुने${allFiltered ? ' (फ़िल्टर से)' : ''}'
-                  : 'मतदाता चुनें',
-              style: TextStyle(
+  Widget build(BuildContext context) => Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
+            decoration: BoxDecoration(
+                color: count > 0 ? const Color(0xffeaf8f0) : Colors.white,
+                border: Border.all(color: count > 0 ? green : border),
+                borderRadius: BorderRadius.circular(10)),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(
+                  count > 0
+                      ? Icons.check_circle_rounded
+                      : Icons.touch_app_rounded,
                   color: count > 0 ? green : muted,
-                  fontWeight: FontWeight.w800)),
-        ]),
+                  size: 19),
+              const SizedBox(width: 7),
+              Text(
+                  count > 0
+                      ? '$count चुने${allFiltered ? ' (फ़िल्टर से)' : ''}'
+                      : 'मतदाता चुनें',
+                  style: TextStyle(
+                      color: count > 0 ? green : muted,
+                      fontWeight: FontWeight.w800)),
+            ]),
+          ),
+        ),
       );
 }
 
@@ -1238,6 +1473,432 @@ class _SummaryPill extends StatelessWidget {
                   style: const TextStyle(
                       color: navy, fontWeight: FontWeight.w900, fontSize: 12)),
             ]),
+          ),
+        ]),
+      );
+}
+
+class _CompactVoterSelectionPanel extends StatelessWidget {
+  const _CompactVoterSelectionPanel({
+    required this.search,
+    required this.selectedCount,
+    required this.total,
+    required this.activeFilterCount,
+    required this.selectAllFiltered,
+    required this.onSearch,
+    required this.onAllFiltered,
+    required this.onMissingMobile,
+    required this.onReview,
+    required this.onSupporter,
+    required this.onOpenFilters,
+    required this.onOpenVoters,
+    required this.onOpenFields,
+  });
+
+  final TextEditingController search;
+  final int selectedCount;
+  final int total;
+  final int activeFilterCount;
+  final bool selectAllFiltered;
+  final ValueChanged<String> onSearch;
+  final VoidCallback onAllFiltered;
+  final VoidCallback onMissingMobile;
+  final VoidCallback onReview;
+  final VoidCallback onSupporter;
+  final VoidCallback onOpenFilters;
+  final VoidCallback onOpenVoters;
+  final VoidCallback onOpenFields;
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            controller: search,
+            onChanged: onSearch,
+            decoration: InputDecoration(
+              hintText: 'नाम, EPIC, मोबाइल या घर संख्या खोजें...',
+              prefixIcon: const Icon(Icons.search_rounded),
+              suffixIcon: search.text.isEmpty
+                  ? null
+                  : IconButton(
+                      onPressed: () {
+                        search.clear();
+                        onSearch('');
+                      },
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: onOpenFilters,
+                icon: const Icon(Icons.tune_rounded),
+                label: Text(activeFilterCount == 0
+                    ? 'Advanced फ़िल्टर'
+                    : 'फ़िल्टर ($activeFilterCount)'),
+              ),
+            ),
+            const SizedBox(width: 9),
+            Expanded(
+              child: FilledButton.tonalIcon(
+                onPressed: onOpenVoters,
+                icon: const Icon(Icons.people_alt_rounded),
+                label: Text(selectedCount == 0
+                    ? 'मतदाता चुनें'
+                    : '$selectedCount चयनित'),
+              ),
+            ),
+          ]),
+          const SizedBox(height: 13),
+          const Text('जल्दी चुनें',
+              style: TextStyle(color: navy, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 92,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+                _CompactQuickCard(
+                  icon: Icons.select_all_rounded,
+                  title: 'फ़िल्टर के सभी',
+                  subtitle: '$total मतदाता',
+                  color: blue,
+                  selected: selectAllFiltered,
+                  onTap: onAllFiltered,
+                ),
+                _CompactQuickCard(
+                  icon: Icons.phone_disabled_rounded,
+                  title: 'मोबाइल नहीं',
+                  subtitle: 'बिना नंबर',
+                  color: rose,
+                  onTap: onMissingMobile,
+                ),
+                _CompactQuickCard(
+                  icon: Icons.fact_check_rounded,
+                  title: 'समीक्षा जरूरी',
+                  subtitle: 'Review सूची',
+                  color: purple,
+                  onTap: onReview,
+                ),
+                _CompactQuickCard(
+                  icon: Icons.thumb_up_alt_rounded,
+                  title: 'समर्थक',
+                  subtitle: 'Supporter सूची',
+                  color: green,
+                  onTap: onSupporter,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          Material(
+            color: const Color(0xffedf4ff),
+            borderRadius: BorderRadius.circular(12),
+            child: InkWell(
+              onTap: selectedCount == 0 ? onOpenVoters : onOpenFields,
+              borderRadius: BorderRadius.circular(12),
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                child: Row(children: [
+                  const Icon(Icons.info_outline_rounded, color: blue, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      selectedCount == 0
+                          ? 'अभी कोई मतदाता नहीं चुना गया'
+                          : '$selectedCount मतदाता चुने गए',
+                      style: const TextStyle(
+                          color: blue, fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                  Text(selectedCount == 0 ? 'चुनें' : 'अगला: फ़ील्ड',
+                      style: const TextStyle(
+                          color: blue, fontWeight: FontWeight.w900)),
+                  const Icon(Icons.chevron_right_rounded, color: blue),
+                ]),
+              ),
+            ),
+          ),
+        ],
+      );
+}
+
+class _CompactQuickCard extends StatelessWidget {
+  const _CompactQuickCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.color,
+    required this.onTap,
+    this.selected = false,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Color color;
+  final VoidCallback onTap;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: 150,
+        margin: const EdgeInsets.only(right: 8),
+        child: Material(
+          color: selected ? color.withValues(alpha: .12) : Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(13),
+            side: BorderSide(
+                color: selected ? color : color.withValues(alpha: .25)),
+          ),
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(13),
+            child: Padding(
+              padding: const EdgeInsets.all(10),
+              child: Row(children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: .1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(icon, color: color, size: 20),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                color: navy,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w900)),
+                        const SizedBox(height: 3),
+                        Text(subtitle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(color: muted, fontSize: 9)),
+                      ]),
+                ),
+                if (selected)
+                  Icon(Icons.check_circle_rounded, color: color, size: 17),
+              ]),
+            ),
+          ),
+        ),
+      );
+}
+
+class _VoterPickerSheet extends StatefulWidget {
+  const _VoterPickerSheet({
+    required this.filters,
+    required this.isSelected,
+    required this.onToggle,
+    required this.onSelectAll,
+    required this.onClear,
+  });
+
+  final Map<String, String?> filters;
+  final bool Function(String id) isSelected;
+  final void Function(String id, bool selected) onToggle;
+  final VoidCallback onSelectAll;
+  final VoidCallback onClear;
+
+  @override
+  State<_VoterPickerSheet> createState() => _VoterPickerSheetState();
+}
+
+class _VoterPickerSheetState extends State<_VoterPickerSheet> {
+  int page = 1;
+  static const pageSize = 40;
+  late Future<Map<String, dynamic>> future;
+
+  @override
+  void initState() {
+    super.initState();
+    load();
+  }
+
+  void load() {
+    future = api.getQuery('/api/members', {
+      ...widget.filters,
+      'paged': 'true',
+      'page': '$page',
+      'limit': '$pageSize',
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => Container(
+        constraints: const BoxConstraints(maxWidth: 720),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+        ),
+        child: Column(children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 10, 10),
+            child: Column(children: [
+              Container(
+                width: 44,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 13),
+                decoration: BoxDecoration(
+                    color: border, borderRadius: BorderRadius.circular(20)),
+              ),
+              Row(children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                      color: softBlue, borderRadius: BorderRadius.circular(13)),
+                  child: const Icon(Icons.people_alt_rounded, color: blue),
+                ),
+                const SizedBox(width: 11),
+                const Expanded(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('मतदाता चुनें',
+                            style: TextStyle(
+                                color: navy,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w900)),
+                        Text('चेकबॉक्स से अपनी पसंद के मतदाता चुनें',
+                            style: TextStyle(color: muted, fontSize: 11)),
+                      ]),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close_rounded),
+                ),
+              ]),
+              const SizedBox(height: 10),
+              Row(children: [
+                Expanded(
+                  child: FilledButton.tonalIcon(
+                    onPressed: () => setState(widget.onSelectAll),
+                    icon: const Icon(Icons.select_all_rounded),
+                    label: const Text('सभी परिणाम चुनें'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton(
+                  onPressed: () => setState(widget.onClear),
+                  child: const Text('चयन हटाएं'),
+                ),
+              ]),
+            ]),
+          ),
+          const Divider(height: 1),
+          Expanded(
+            child: FutureBuilder<Map<String, dynamic>>(
+              future: future,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState != ConnectionState.done) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Text('${snapshot.error}',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: rose)),
+                    ),
+                  );
+                }
+                final data = snapshot.data ?? const <String, dynamic>{};
+                final voters = List<Map<String, dynamic>>.from(
+                  (data['items'] as List? ?? [])
+                      .map((item) => Map<String, dynamic>.from(item)),
+                );
+                final total = _number(data['total']);
+                final pages = _number(data['pages']).clamp(1, 999999);
+                if (voters.isEmpty) {
+                  return const Center(
+                    child: Text('इस खोज या फ़िल्टर में कोई मतदाता नहीं मिला।',
+                        style: TextStyle(color: muted)),
+                  );
+                }
+                return Column(children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+                    child: Row(children: [
+                      Text('$total मतदाता',
+                          style: const TextStyle(
+                              color: navy, fontWeight: FontWeight.w900)),
+                      const Spacer(),
+                      Text('पेज $page / $pages',
+                          style: const TextStyle(color: muted, fontSize: 11)),
+                    ]),
+                  ),
+                  Expanded(
+                    child: ListView.separated(
+                      padding: const EdgeInsets.fromLTRB(10, 4, 10, 10),
+                      itemCount: voters.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (_, index) {
+                        final voter = voters[index];
+                        final id = '${voter['_id']}';
+                        return _VoterChoice(
+                          voter: voter,
+                          selected: widget.isSelected(id),
+                          onChanged: (selected) {
+                            widget.onToggle(id, selected);
+                            setState(() {});
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                  if (pages > 1)
+                    SafeArea(
+                      top: false,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                        child: Row(children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: page <= 1
+                                  ? null
+                                  : () => setState(() {
+                                        page--;
+                                        load();
+                                      }),
+                              icon: const Icon(Icons.chevron_left_rounded),
+                              label: const Text('पिछला'),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: FilledButton.tonalIcon(
+                              onPressed: page >= pages
+                                  ? null
+                                  : () => setState(() {
+                                        page++;
+                                        load();
+                                      }),
+                              icon: const Icon(Icons.chevron_right_rounded),
+                              label: const Text('अगला'),
+                            ),
+                          ),
+                        ]),
+                      ),
+                    ),
+                ]);
+              },
+            ),
           ),
         ]),
       );
@@ -1509,18 +2170,20 @@ class _DatabaseFilterPicker extends StatelessWidget {
     required this.value,
     required this.onTap,
     required this.onClear,
+    this.width = 210,
   });
   final String label;
   final IconData icon;
   final String? value;
   final VoidCallback onTap;
   final VoidCallback onClear;
+  final double width;
 
   @override
   Widget build(BuildContext context) {
     final selected = value != null && value!.trim().isNotEmpty;
     return SizedBox(
-      width: 210,
+      width: width,
       child: Material(
         color: selected ? const Color(0xffedf4ff) : Colors.white,
         shape: RoundedRectangleBorder(
@@ -1596,15 +2259,17 @@ class _DropFilter extends StatelessWidget {
       {required this.label,
       required this.value,
       required this.items,
-      required this.onChanged});
+      required this.onChanged,
+      this.width = 180});
   final String label;
   final String value;
   final Map<String, String> items;
   final ValueChanged<String> onChanged;
+  final double width;
 
   @override
   Widget build(BuildContext context) => SizedBox(
-        width: 180,
+        width: width,
         child: DropdownButtonFormField<String>(
           key: ValueKey('$label-$value'),
           initialValue: value,
