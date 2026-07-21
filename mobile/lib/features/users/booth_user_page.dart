@@ -60,9 +60,9 @@ class _BoothUserPageState extends State<BoothUserPage> {
               PremiumFeatureHero(
                 title: 'बूथ मैनेजर',
                 subtitle:
-                    'बूथ खोजें, मतदाता देखें और सही manager को सुरक्षित access दें।',
+                    'बूथ खोजें, मतदाता देखें और सही मैनेजर को सुरक्षित access दें।',
                 icon: Icons.manage_accounts_rounded,
-                badges: const ['Role access', 'Booth wise', 'Secure'],
+                badges: const ['भूमिका आधारित', 'बूथ अनुसार', 'सुरक्षित'],
                 action: FilledButton.icon(
                   onPressed: booths.isEmpty
                       ? null
@@ -71,7 +71,7 @@ class _BoothUserPageState extends State<BoothUserPage> {
                             boothId: selectedBoothId,
                           ),
                   icon: const Icon(Icons.person_add_alt_1_rounded),
-                  label: const Text('New manager'),
+                  label: const Text('नया मैनेजर'),
                 ),
               ),
               _SummaryStrip(
@@ -171,10 +171,10 @@ class _SummaryStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) =>
       Wrap(spacing: 10, runSpacing: 10, children: [
-        _TinyMetric('Booths', booths, Icons.home_work_rounded, blue),
-        _TinyMetric('Managers', heads, Icons.supervisor_account_rounded, green),
-        _TinyMetric('Active', activeHeads, Icons.verified_user_rounded, orange),
-        _TinyMetric('Mapped voters', voters, Icons.how_to_vote_rounded, navy),
+        _TinyMetric('बूथ', booths, Icons.home_work_rounded, blue),
+        _TinyMetric('मैनेजर', heads, Icons.supervisor_account_rounded, green),
+        _TinyMetric('सक्रिय', activeHeads, Icons.verified_user_rounded, orange),
+        _TinyMetric('जुड़े मतदाता', voters, Icons.how_to_vote_rounded, navy),
       ]);
 }
 
@@ -241,7 +241,7 @@ class _BoothFinder extends StatelessWidget {
       return query.isEmpty || text.contains(query);
     }).toList();
     return _Surface(
-      title: 'Find booth',
+      title: 'बूथ खोजें',
       action: Text('${filtered.length}/${booths.length}',
           style: const TextStyle(color: muted, fontWeight: FontWeight.w800)),
       child: Column(children: [
@@ -260,7 +260,7 @@ class _BoothFinder extends StatelessWidget {
                     },
                     icon: const Icon(Icons.close_rounded),
                   ),
-            hintText: 'Booth no, name, ward...',
+            hintText: 'बूथ संख्या, नाम, वार्ड या क्षेत्र...',
           ),
         ),
         const SizedBox(height: 10),
@@ -305,7 +305,7 @@ class _BoothFinder extends StatelessWidget {
                       child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('${booth['name'] ?? 'Unnamed booth'}',
+                            Text('${booth['name'] ?? 'बिना नाम का बूथ'}',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
@@ -360,21 +360,21 @@ class _BoothWorkspace extends StatelessWidget {
   Widget build(BuildContext context) {
     if (booth == null) {
       return const _Surface(
-        title: 'Select booth',
+        title: 'बूथ चुनें',
         child: ListTile(
           leading: Icon(Icons.info_outline_rounded),
-          title: Text('No booth selected'),
+          title: Text('कोई बूथ नहीं चुना गया'),
         ),
       );
     }
     final boothId = '${booth!['_id']}';
     return Column(children: [
       _Surface(
-        title: 'Booth ${booth!['number'] ?? '-'}',
+        title: 'बूथ ${booth!['number'] ?? '-'}',
         action: FilledButton.icon(
           onPressed: onManualAdd,
           icon: const Icon(Icons.person_add_alt_1_rounded),
-          label: const Text('Add manager'),
+          label: const Text('मैनेजर जोड़ें'),
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('${booth!['name'] ?? '-'}',
@@ -399,7 +399,7 @@ class _BoothWorkspace extends StatelessWidget {
       ),
       const SizedBox(height: 12),
       _Surface(
-        title: 'Voters in this booth',
+        title: 'इस बूथ के मतदाता',
         action: SizedBox(
           width: 250,
           child: TextField(
@@ -408,7 +408,7 @@ class _BoothWorkspace extends StatelessWidget {
             decoration: InputDecoration(
               isDense: true,
               prefixIcon: const Icon(Icons.search_rounded),
-              hintText: 'Name, mobile, EPIC...',
+              hintText: 'नाम, मोबाइल या EPIC खोजें...',
               suffixIcon: voterSearch.text.isEmpty
                   ? null
                   : IconButton(
@@ -460,8 +460,8 @@ class _HeadGrid extends StatelessWidget {
           border: Border.all(color: border),
           borderRadius: BorderRadius.circular(8),
         ),
-        child:
-            const Text('No manager assigned. Pick a voter below or add one.'),
+        child: const Text(
+            'अभी मैनेजर नहीं है। नीचे से मतदाता चुनें या नया जोड़ें।'),
       );
     }
     return Wrap(
@@ -618,13 +618,13 @@ class _BoothVoterList extends StatelessWidget {
           if (voters.isEmpty) {
             return const ListTile(
               leading: Icon(Icons.search_off_rounded),
-              title: Text('No voters found'),
+              title: Text('कोई मतदाता नहीं मिला'),
             );
           }
           return Column(children: [
             Align(
               alignment: Alignment.centerLeft,
-              child: Text('Showing ${voters.length} of $total',
+              child: Text('$total में से ${voters.length} दिख रहे हैं',
                   style: const TextStyle(color: muted, fontSize: 12)),
             ),
             const SizedBox(height: 6),
@@ -680,7 +680,7 @@ class _VoterManagerRow extends StatelessWidget {
           OutlinedButton.icon(
             onPressed: onMakeManager,
             icon: const Icon(Icons.admin_panel_settings_outlined, size: 18),
-            label: const Text('Make manager'),
+            label: const Text('मैनेजर बनाएं'),
           ),
         ]),
       );
@@ -850,12 +850,14 @@ class _BoothUserFormState extends State<BoothUserForm> {
   late final phone = TextEditingController(
       text: widget.user?['phone'] ?? '${widget.candidate?['mobile'] ?? ''}');
   final password = TextEditingController();
+  final assignedBoothSearch = TextEditingController();
   late String? boothId =
       widget.initialBoothId ?? _idOf(widget.user?['assignedBooth']);
   bool active = true;
   bool canPrint = false;
   bool canExport = false;
   bool canViewMobile = false;
+  bool showPassword = false;
   bool saving = false;
   String error = '';
 
@@ -869,17 +871,31 @@ class _BoothUserFormState extends State<BoothUserForm> {
     canViewMobile = permissions?['canViewFullMobile'] == true;
   }
 
+  @override
+  void dispose() {
+    name.dispose();
+    email.dispose();
+    phone.dispose();
+    password.dispose();
+    assignedBoothSearch.dispose();
+    super.dispose();
+  }
+
   Future<void> save() async {
     if (boothId == null || boothId!.isEmpty) {
-      setState(() => error = 'Select a booth for this manager.');
+      setState(() => error = 'इस मैनेजर के लिए बूथ चुनना जरूरी है।');
       return;
     }
     if (name.text.trim().isEmpty || email.text.trim().isEmpty) {
-      setState(() => error = 'Name and email are required.');
+      setState(() => error = 'नाम और लॉगिन ईमेल भरना जरूरी है।');
+      return;
+    }
+    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email.text.trim())) {
+      setState(() => error = 'सही लॉगिन ईमेल लिखें।');
       return;
     }
     if (widget.user == null && password.text.length < 6) {
-      setState(() => error = 'Password must be at least 6 characters.');
+      setState(() => error = 'पासवर्ड कम-से-कम 6 अक्षर का होना चाहिए।');
       return;
     }
     setState(() {
@@ -907,7 +923,15 @@ class _BoothUserFormState extends State<BoothUserForm> {
         await api.put('/api/auth/users/${widget.user!['_id']}', body);
       }
       widget.onSaved();
-      if (mounted) Navigator.pop(context);
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(widget.user == null
+              ? 'बूथ मैनेजर सफलतापूर्वक बनाया गया।'
+              : 'मैनेजर की जानकारी अपडेट हो गई।'),
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
     } catch (e) {
       setState(() => error = e.toString().replaceFirst('Exception: ', ''));
     } finally {
@@ -916,118 +940,389 @@ class _BoothUserFormState extends State<BoothUserForm> {
   }
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
-        title: Text(widget.user == null
-            ? 'Assign booth manager'
-            : 'Edit manager access'),
-        content: SizedBox(
-          width: 620,
-          child: SingleChildScrollView(
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Wrap(spacing: 10, runSpacing: 10, children: [
-                SizedBox(
-                  width: 290,
-                  child: TextField(
-                      controller: name,
-                      decoration: const InputDecoration(labelText: 'Name')),
-                ),
-                SizedBox(
-                  width: 290,
-                  child: TextField(
-                      controller: phone,
-                      decoration: const InputDecoration(labelText: 'Mobile')),
-                ),
-                SizedBox(
-                  width: 290,
-                  child: TextField(
-                      controller: email,
-                      decoration:
-                          const InputDecoration(labelText: 'Login email')),
-                ),
-                SizedBox(
-                  width: 290,
-                  child: TextField(
-                    controller: password,
-                    obscureText: true,
-                    decoration: InputDecoration(
-                      labelText:
-                          widget.user == null ? 'Password' : 'New password',
-                    ),
-                  ),
-                ),
-                SizedBox(
-                  width: 590,
-                  child: DropdownButtonFormField<String>(
-                    initialValue: boothId,
-                    decoration:
-                        const InputDecoration(labelText: 'Assigned booth'),
-                    items: widget.booths
-                        .map((b) => DropdownMenuItem<String>(
-                              value: '${b['_id']}',
-                              child: Text(
-                                  '${b['number'] ?? '-'} - ${b['name'] ?? '-'}'),
-                            ))
-                        .toList(),
-                    onChanged: (value) => setState(() => boothId = value),
-                  ),
-                ),
-              ]),
-              const SizedBox(height: 12),
+  Widget build(BuildContext context) {
+    final isNew = widget.user == null;
+    final query = assignedBoothSearch.text.trim().toLowerCase();
+    final filteredBooths = widget.booths.where((booth) {
+      if (query.isEmpty || '${booth['_id']}' == boothId) return true;
+      final ward = booth['ward'] is Map ? booth['ward'] as Map : const {};
+      return '${booth['number'] ?? ''} ${booth['name'] ?? ''} '
+              '${booth['area'] ?? ''} ${ward['number'] ?? ''}'
+          .toLowerCase()
+          .contains(query);
+    }).toList();
+
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 20),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 700, maxHeight: 780),
+        child: Column(children: [
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                  colors: [Color(0xff0b45c6), Color(0xff1672f8)]),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+            child: Row(children: [
               Container(
-                padding: const EdgeInsets.all(10),
+                width: 48,
+                height: 48,
                 decoration: BoxDecoration(
-                  color: const Color(0xfff7f9fd),
-                  border: Border.all(color: border),
-                  borderRadius: BorderRadius.circular(8),
+                  color: Colors.white.withValues(alpha: .16),
+                  borderRadius: BorderRadius.circular(15),
                 ),
-                child: Column(children: [
-                  SwitchListTile(
-                    dense: true,
-                    value: active,
-                    onChanged: (value) => setState(() => active = value),
-                    title: const Text('Active login'),
-                  ),
-                  CheckboxListTile(
-                    dense: true,
-                    value: canViewMobile,
-                    onChanged: (value) =>
-                        setState(() => canViewMobile = value == true),
-                    title: const Text('Can view full mobile numbers'),
-                  ),
-                  CheckboxListTile(
-                    dense: true,
-                    value: canPrint,
-                    onChanged: (value) =>
-                        setState(() => canPrint = value == true),
-                    title: const Text('Can print voter profiles'),
-                  ),
-                  CheckboxListTile(
-                    dense: true,
-                    value: canExport,
-                    onChanged: (value) =>
-                        setState(() => canExport = value == true),
-                    title: const Text('Can export voter data'),
-                  ),
-                ]),
+                child: const Icon(Icons.manage_accounts_rounded,
+                    color: Colors.white),
               ),
-              if (error.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(error, style: const TextStyle(color: Colors.red)),
-                ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        isNew
+                            ? 'नया बूथ मैनेजर बनाएं'
+                            : 'मैनेजर की जानकारी बदलें',
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 19,
+                            fontWeight: FontWeight.w900),
+                      ),
+                      const SizedBox(height: 3),
+                      const Text(
+                        'लॉगिन बनाएं, बूथ चुनें और जरूरी अनुमति तय करें।',
+                        style: TextStyle(color: Colors.white70, fontSize: 12),
+                      ),
+                    ]),
+              ),
+              IconButton(
+                tooltip: 'बंद करें',
+                onPressed: saving ? null : () => Navigator.pop(context),
+                icon: const Icon(Icons.close_rounded, color: Colors.white),
+              ),
             ]),
           ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: saving ? null : () => Navigator.pop(context),
-              child: const Text('Cancel')),
-          FilledButton.icon(
-            onPressed: saving ? null : save,
-            icon: const Icon(Icons.save_outlined),
-            label: Text(saving ? 'Saving...' : 'Save manager'),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(children: [
+                _ManagerFormSection(
+                  step: '1',
+                  title: 'मैनेजर और लॉगिन',
+                  subtitle: 'मैनेजर की पहचान और ऐप में लॉगिन की जानकारी।',
+                  child: Column(children: [
+                    TextField(
+                      controller: name,
+                      enabled: !saving,
+                      textInputAction: TextInputAction.next,
+                      decoration: const InputDecoration(
+                        labelText: 'मैनेजर का पूरा नाम *',
+                        prefixIcon: Icon(Icons.person_outline_rounded),
+                      ),
+                    ),
+                    const SizedBox(height: 11),
+                    TextField(
+                      controller: phone,
+                      enabled: !saving,
+                      keyboardType: TextInputType.phone,
+                      textInputAction: TextInputAction.next,
+                      decoration: const InputDecoration(
+                        labelText: 'मोबाइल नंबर',
+                        prefixIcon: Icon(Icons.phone_outlined),
+                      ),
+                    ),
+                    const SizedBox(height: 11),
+                    TextField(
+                      controller: email,
+                      enabled: !saving,
+                      keyboardType: TextInputType.emailAddress,
+                      textInputAction: TextInputAction.next,
+                      autocorrect: false,
+                      decoration: const InputDecoration(
+                        labelText: 'लॉगिन ईमेल *',
+                        prefixIcon: Icon(Icons.alternate_email_rounded),
+                        helperText: 'मैनेजर इसी ईमेल से ऐप में लॉगिन करेगा',
+                      ),
+                    ),
+                    const SizedBox(height: 11),
+                    TextField(
+                      controller: password,
+                      enabled: !saving,
+                      obscureText: !showPassword,
+                      decoration: InputDecoration(
+                        labelText:
+                            isNew ? 'पासवर्ड *' : 'नया पासवर्ड (वैकल्पिक)',
+                        prefixIcon: const Icon(Icons.lock_outline_rounded),
+                        helperText: isNew
+                            ? 'कम-से-कम 6 अक्षर रखें'
+                            : 'खाली छोड़ने पर पुराना पासवर्ड रहेगा',
+                        suffixIcon: IconButton(
+                          onPressed: () =>
+                              setState(() => showPassword = !showPassword),
+                          icon: Icon(showPassword
+                              ? Icons.visibility_off_outlined
+                              : Icons.visibility_outlined),
+                        ),
+                      ),
+                    ),
+                  ]),
+                ),
+                const SizedBox(height: 12),
+                _ManagerFormSection(
+                  step: '2',
+                  title: 'बूथ चुनें',
+                  subtitle: 'मैनेजर केवल चुने हुए बूथ का डेटा संभालेगा।',
+                  child: Column(children: [
+                    TextField(
+                      controller: assignedBoothSearch,
+                      enabled: !saving,
+                      onChanged: (_) => setState(() {}),
+                      decoration: InputDecoration(
+                        labelText: 'बूथ खोजें',
+                        hintText: 'संख्या, नाम, वार्ड या क्षेत्र',
+                        prefixIcon: const Icon(Icons.search_rounded),
+                        suffixIcon: query.isEmpty
+                            ? null
+                            : IconButton(
+                                onPressed: () {
+                                  assignedBoothSearch.clear();
+                                  setState(() {});
+                                },
+                                icon: const Icon(Icons.close_rounded),
+                              ),
+                      ),
+                    ),
+                    const SizedBox(height: 11),
+                    DropdownButtonFormField<String>(
+                      initialValue: boothId,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: 'बूथ *',
+                        prefixIcon: Icon(Icons.how_to_vote_rounded),
+                      ),
+                      items: filteredBooths.map((booth) {
+                        final ward = booth['ward'] is Map
+                            ? booth['ward'] as Map
+                            : const {};
+                        return DropdownMenuItem<String>(
+                          value: '${booth['_id']}',
+                          child: Text(
+                            'बूथ ${booth['number'] ?? '-'} · ${booth['name'] ?? '-'} · वार्ड ${ward['number'] ?? '-'}',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        );
+                      }).toList(),
+                      onChanged: saving
+                          ? null
+                          : (value) => setState(() => boothId = value),
+                    ),
+                    if (filteredBooths.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 9),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text('खोज से कोई बूथ नहीं मिला।',
+                              style: TextStyle(color: rose, fontSize: 12)),
+                        ),
+                      ),
+                  ]),
+                ),
+                const SizedBox(height: 12),
+                _ManagerFormSection(
+                  step: '3',
+                  title: 'पहुँच और अनुमति',
+                  subtitle: 'सुरक्षा के लिए केवल जरूरी अनुमति चालू करें।',
+                  child: Column(children: [
+                    _PermissionSwitch(
+                      icon: Icons.login_rounded,
+                      title: 'लॉगिन सक्रिय रखें',
+                      subtitle: 'बंद होने पर मैनेजर लॉगिन नहीं कर पाएगा',
+                      value: active,
+                      onChanged: saving
+                          ? null
+                          : (value) => setState(() => active = value),
+                    ),
+                    _PermissionSwitch(
+                      icon: Icons.phone_android_rounded,
+                      title: 'पूरा मोबाइल नंबर देखें',
+                      subtitle: 'मतदाताओं के पूरे नंबर दिखाई देंगे',
+                      value: canViewMobile,
+                      onChanged: saving
+                          ? null
+                          : (value) => setState(() => canViewMobile = value),
+                    ),
+                    _PermissionSwitch(
+                      icon: Icons.print_outlined,
+                      title: 'मतदाता प्रोफ़ाइल प्रिंट करें',
+                      subtitle: 'मैनेजर मतदाता प्रोफ़ाइल PDF बना सकेगा',
+                      value: canPrint,
+                      onChanged: saving
+                          ? null
+                          : (value) => setState(() => canPrint = value),
+                    ),
+                    _PermissionSwitch(
+                      icon: Icons.file_download_outlined,
+                      title: 'मतदाता डेटा एक्सपोर्ट करें',
+                      subtitle: 'Excel/CSV एक्सपोर्ट की अनुमति मिलेगी',
+                      value: canExport,
+                      onChanged: saving
+                          ? null
+                          : (value) => setState(() => canExport = value),
+                    ),
+                  ]),
+                ),
+                if (error.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xffffeeee),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(children: [
+                      const Icon(Icons.error_outline_rounded,
+                          color: Color(0xffb42318)),
+                      const SizedBox(width: 9),
+                      Expanded(
+                        child: Text(error,
+                            style: const TextStyle(
+                                color: Color(0xffb42318),
+                                fontWeight: FontWeight.w700)),
+                      ),
+                    ]),
+                  ),
+                ],
+              ]),
+            ),
           ),
-        ],
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: const BoxDecoration(
+              color: Color(0xfff8faff),
+              border: Border(top: BorderSide(color: border)),
+              borderRadius: BorderRadius.vertical(bottom: Radius.circular(24)),
+            ),
+            child: Row(children: [
+              TextButton(
+                onPressed: saving ? null : () => Navigator.pop(context),
+                child: const Text('रद्द करें'),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: SizedBox(
+                  height: 50,
+                  child: FilledButton.icon(
+                    onPressed: saving ? null : save,
+                    icon: saving
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white))
+                        : const Icon(Icons.check_circle_rounded),
+                    label: Text(saving
+                        ? 'सहेजा जा रहा है...'
+                        : isNew
+                            ? 'मैनेजर बनाएं'
+                            : 'बदलाव सहेजें'),
+                  ),
+                ),
+              ),
+            ]),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+class _ManagerFormSection extends StatelessWidget {
+  const _ManagerFormSection({
+    required this.step,
+    required this.title,
+    required this.subtitle,
+    required this.child,
+  });
+
+  final String step;
+  final String title;
+  final String subtitle;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: const Color(0xfff8faff),
+          border: Border.all(color: border),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            CircleAvatar(
+              radius: 16,
+              backgroundColor: blue,
+              child: Text(step,
+                  style: const TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.w900)),
+            ),
+            const SizedBox(width: 9),
+            Expanded(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title,
+                        style: const TextStyle(
+                            color: navy, fontWeight: FontWeight.w900)),
+                    Text(subtitle,
+                        style: const TextStyle(color: muted, fontSize: 11)),
+                  ]),
+            ),
+          ]),
+          const SizedBox(height: 13),
+          child,
+        ]),
+      );
+}
+
+class _PermissionSwitch extends StatelessWidget {
+  const _PermissionSwitch({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final bool value;
+  final ValueChanged<bool>? onChanged;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border.all(color: value ? const Color(0xffbed3ff) : border),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: SwitchListTile.adaptive(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 11),
+          secondary: Icon(icon, color: value ? blue : muted),
+          title: Text(title,
+              style: const TextStyle(
+                  color: navy, fontSize: 13, fontWeight: FontWeight.w800)),
+          subtitle: Text(subtitle,
+              style: const TextStyle(color: muted, fontSize: 10)),
+          value: value,
+          onChanged: onChanged,
+        ),
       );
 }
 
