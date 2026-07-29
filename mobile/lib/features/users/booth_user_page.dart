@@ -916,118 +916,152 @@ class _BoothUserFormState extends State<BoothUserForm> {
   }
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
-        title: Text(widget.user == null
-            ? 'Assign booth manager'
-            : 'Edit manager access'),
-        content: SizedBox(
-          width: 620,
-          child: SingleChildScrollView(
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Wrap(spacing: 10, runSpacing: 10, children: [
-                SizedBox(
-                  width: 290,
-                  child: TextField(
-                      controller: name,
-                      decoration: const InputDecoration(labelText: 'Name')),
-                ),
-                SizedBox(
-                  width: 290,
-                  child: TextField(
-                      controller: phone,
-                      decoration: const InputDecoration(labelText: 'Mobile')),
-                ),
-                SizedBox(
-                  width: 290,
-                  child: TextField(
-                      controller: email,
-                      decoration:
-                          const InputDecoration(labelText: 'Login email')),
-                ),
-                SizedBox(
-                  width: 290,
-                  child: TextField(
-                    controller: password,
-                    obscureText: true,
-                    decoration: InputDecoration(
-                      labelText:
-                          widget.user == null ? 'Password' : 'New password',
-                    ),
-                  ),
-                ),
-                SizedBox(
-                  width: 590,
-                  child: DropdownButtonFormField<String>(
-                    initialValue: boothId,
-                    decoration:
-                        const InputDecoration(labelText: 'Assigned booth'),
-                    items: widget.booths
-                        .map((b) => DropdownMenuItem<String>(
-                              value: '${b['_id']}',
-                              child: Text(
-                                  '${b['number'] ?? '-'} - ${b['name'] ?? '-'}'),
-                            ))
-                        .toList(),
-                    onChanged: (value) => setState(() => boothId = value),
-                  ),
-                ),
-              ]),
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: const Color(0xfff7f9fd),
-                  border: Border.all(color: border),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Column(children: [
-                  SwitchListTile(
-                    dense: true,
-                    value: active,
-                    onChanged: (value) => setState(() => active = value),
-                    title: const Text('Active login'),
-                  ),
-                  CheckboxListTile(
-                    dense: true,
-                    value: canViewMobile,
-                    onChanged: (value) =>
-                        setState(() => canViewMobile = value == true),
-                    title: const Text('Can view full mobile numbers'),
-                  ),
-                  CheckboxListTile(
-                    dense: true,
-                    value: canPrint,
-                    onChanged: (value) =>
-                        setState(() => canPrint = value == true),
-                    title: const Text('Can print voter profiles'),
-                  ),
-                  CheckboxListTile(
-                    dense: true,
-                    value: canExport,
-                    onChanged: (value) =>
-                        setState(() => canExport = value == true),
-                    title: const Text('Can export voter data'),
-                  ),
-                ]),
-              ),
-              if (error.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(error, style: const TextStyle(color: Colors.red)),
-                ),
-            ]),
-          ),
+  Widget build(BuildContext context) {
+    final mobile = MediaQuery.sizeOf(context).width < 700;
+    final title =
+        widget.user == null ? 'बूथ मैनेजर जोड़ें' : 'मैनेजर संपादित करें';
+    final form = ListView(
+      padding: const EdgeInsets.fromLTRB(18, 14, 18, 24),
+      shrinkWrap: !mobile,
+      children: [
+        const CircleAvatar(
+          radius: 38,
+          backgroundColor: softBlue,
+          child:
+              Icon(Icons.admin_panel_settings_rounded, color: blue, size: 34),
         ),
-        actions: [
-          TextButton(
-              onPressed: saving ? null : () => Navigator.pop(context),
-              child: const Text('Cancel')),
-          FilledButton.icon(
+        const SizedBox(height: 10),
+        Text(title,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+                color: navy, fontSize: 20, fontWeight: FontWeight.w900)),
+        const SizedBox(height: 18),
+        _managerField(name, 'नाम *', Icons.person_outline_rounded),
+        const SizedBox(height: 12),
+        _managerField(phone, 'मोबाइल नंबर', Icons.phone_outlined,
+            keyboard: TextInputType.phone),
+        const SizedBox(height: 12),
+        _managerField(email, 'लॉगिन ईमेल *', Icons.email_outlined,
+            keyboard: TextInputType.emailAddress),
+        const SizedBox(height: 12),
+        _managerField(
+            password,
+            widget.user == null ? 'पासवर्ड *' : 'नया पासवर्ड',
+            Icons.lock_outline_rounded,
+            obscure: true),
+        const SizedBox(height: 12),
+        DropdownButtonFormField<String>(
+          initialValue: boothId,
+          isExpanded: true,
+          decoration: const InputDecoration(
+              labelText: 'बूथ चुनें *',
+              prefixIcon: Icon(Icons.how_to_vote_outlined)),
+          items: widget.booths
+              .map((b) => DropdownMenuItem<String>(
+                    value: '${b['_id']}',
+                    child: Text(
+                        'भाग ${b['number'] ?? '-'} · ${b['name'] ?? '-'}',
+                        overflow: TextOverflow.ellipsis),
+                  ))
+              .toList(),
+          onChanged: (value) => setState(() => boothId = value),
+        ),
+        const SizedBox(height: 16),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            border: Border.all(color: border),
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: Column(children: [
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: active,
+              onChanged: (value) => setState(() => active = value),
+              title: const Text('Active login',
+                  style: TextStyle(fontWeight: FontWeight.w800)),
+              subtitle: const Text('मैनेजर app में login कर सकता है'),
+            ),
+            _permissionTile(
+                Icons.phone_android_rounded,
+                'पूरे मोबाइल नंबर देखें',
+                canViewMobile,
+                (value) => setState(() => canViewMobile = value)),
+            _permissionTile(Icons.print_rounded, 'मतदाता प्रोफाइल print करें',
+                canPrint, (value) => setState(() => canPrint = value)),
+            _permissionTile(
+                Icons.file_download_rounded,
+                'मतदाता data export करें',
+                canExport,
+                (value) => setState(() => canExport = value)),
+          ]),
+        ),
+        if (error.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          Text(error,
+              style: const TextStyle(
+                  color: Colors.red, fontWeight: FontWeight.w700)),
+        ],
+      ],
+    );
+    if (mobile) {
+      return Dialog.fullscreen(
+        child: Scaffold(
+          backgroundColor: const Color(0xfff7f8fb),
+          appBar: AppBar(
+            backgroundColor: Colors.white,
+            foregroundColor: navy,
+            title: Text(title,
+                style: const TextStyle(fontWeight: FontWeight.w900)),
+            actions: [
+              Padding(
+                padding: const EdgeInsets.only(right: 10),
+                child: FilledButton.icon(
+                  onPressed: saving ? null : save,
+                  icon: const Icon(Icons.save_rounded),
+                  label: Text(saving ? 'Saving...' : 'Save'),
+                ),
+              )
+            ],
+          ),
+          body: form,
+        ),
+      );
+    }
+    return AlertDialog(
+      contentPadding: EdgeInsets.zero,
+      content: SizedBox(width: 520, height: 720, child: form),
+      actions: [
+        TextButton(
+            onPressed: saving ? null : () => Navigator.pop(context),
+            child: const Text('Cancel')),
+        FilledButton.icon(
             onPressed: saving ? null : save,
             icon: const Icon(Icons.save_outlined),
-            label: Text(saving ? 'Saving...' : 'Save manager'),
-          ),
-        ],
+            label: Text(saving ? 'Saving...' : 'Save manager')),
+      ],
+    );
+  }
+
+  Widget _managerField(
+          TextEditingController controller, String label, IconData icon,
+          {TextInputType? keyboard, bool obscure = false}) =>
+      TextField(
+        controller: controller,
+        keyboardType: keyboard,
+        obscureText: obscure,
+        decoration: InputDecoration(labelText: label, prefixIcon: Icon(icon)),
+      );
+
+  Widget _permissionTile(IconData icon, String title, bool value,
+          ValueChanged<bool> onChanged) =>
+      CheckboxListTile(
+        contentPadding: EdgeInsets.zero,
+        secondary: Icon(icon, color: blue),
+        value: value,
+        onChanged: (next) => onChanged(next == true),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
       );
 }
 
