@@ -10,6 +10,8 @@ router.get('/birthdays', controller.birthdays);
 router.get('/duplicates', controller.duplicates);
 router.get('/suggestions', controller.suggestions);
 router.get('/filter-options', controller.filterOptions);
+router.get('/location-groups', controller.locationGroups);
+router.post('/bulk-location-correction', allowRoles('admin'), controller.bulkLocationCorrection);
 router.delete('/', allowRoles('admin'), controller.removeAll);
 router.get('/:id', controller.get);
 router.post('/', upload.single('photo'), controller.create);

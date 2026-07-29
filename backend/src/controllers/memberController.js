@@ -227,6 +227,133 @@ function addOptionFilter(filter, key, value) {
   }
 }
 
+const locationFields = [
+  'assemblyNumber',
+  'assemblyName',
+  'gramPanchayat',
+  'village',
+  'partNumber',
+  'tehsil',
+  'municipality',
+  'sectionNumber',
+  'sectionName',
+  'location',
+];
+
+const cleanText = (value) => String(value ?? '').trim();
+
+const exactLocationFilter = (source = {}) => {
+  const filter = {};
+  for (const field of ['assemblyNumber', 'assemblyName', 'gramPanchayat', 'village', 'partNumber']) {
+    if (Object.prototype.hasOwnProperty.call(source, field)) {
+      filter[field] = cleanText(source[field]);
+    }
+  }
+  return filter;
+};
+
+const cleanLocationUpdates = (updates = {}) => {
+  const cleaned = {};
+  for (const field of locationFields) {
+    if (Object.prototype.hasOwnProperty.call(updates, field)) {
+      cleaned[field] = cleanText(updates[field]);
+    }
+  }
+  return cleaned;
+};
+
+exports.locationGroups = async (req, res, next) => {
+  try {
+    const filter = applyMemberScope(req.currentUser, {});
+    for (const key of ['assemblyNumber', 'assemblyName', 'gramPanchayat', 'village', 'partNumber']) {
+      addOptionFilter(filter, key, req.query[key]);
+    }
+    const q = cleanText(req.query.q).toLocaleLowerCase('hi-IN');
+    const rows = await Member.aggregate([
+      { $match: filter },
+      {
+        $group: {
+          _id: {
+            assemblyNumber: { $ifNull: ['$assemblyNumber', ''] },
+            assemblyName: { $ifNull: ['$assemblyName', ''] },
+            gramPanchayat: { $ifNull: ['$gramPanchayat', ''] },
+            village: { $ifNull: ['$village', ''] },
+            partNumber: { $ifNull: ['$partNumber', ''] },
+          },
+          count: { $sum: 1 },
+          sampleNames: { $push: '$name' },
+        },
+      },
+      { $sort: { count: -1 } },
+      { $limit: Math.min(Number(req.query.limit) || 200, 500) },
+    ]);
+    const items = rows.map((row) => {
+      const key = row._id || {};
+      const label = [
+        key.assemblyNumber || key.assemblyName ? `विधानसभा ${[key.assemblyNumber, key.assemblyName].filter(Boolean).join(' - ')}` : '',
+        key.gramPanchayat ? `पंचायत ${key.gramPanchayat}` : '',
+        key.village ? `गाँव ${key.village}` : '',
+        key.partNumber ? `भाग ${key.partNumber}` : '',
+      ].filter(Boolean).join(' • ') || 'Location खाली';
+      return {
+        key,
+        label,
+        count: row.count,
+        sampleNames: (row.sampleNames || []).filter(Boolean).slice(0, 3),
+      };
+    }).filter((item) => !q || item.label.toLocaleLowerCase('hi-IN').includes(q));
+    res.json({ items });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.bulkLocationCorrection = async (req, res, next) => {
+  try {
+    const source = exactLocationFilter(req.body?.source || {});
+    const updates = cleanLocationUpdates(req.body?.updates || {});
+    const dryRun = req.body?.dryRun !== false;
+    const sourceKeyCount = Object.values(source).filter((value) => value !== '').length;
+    if (!source.village || sourceKeyCount < 2) {
+      return res.status(400).json({
+        message: 'गाँव अकेला unique नहीं माना जाएगा। Source में कम से कम गाँव + विधानसभा/पंचायत/भाग में से एक value दें।',
+      });
+    }
+    if (!Object.keys(updates).length) {
+      return res.status(400).json({ message: 'Correct location values required.' });
+    }
+    const filter = applyMemberScope(req.currentUser, source);
+    const count = await Member.countDocuments(filter);
+    const sample = await Member.find(filter)
+      .select('name voterId guardianName houseNumber assemblyNumber assemblyName gramPanchayat village partNumber')
+      .limit(20)
+      .lean();
+    if (dryRun) {
+      return res.json({ dryRun: true, matched: count, source, updates, sample });
+    }
+    if (count > 5000) {
+      return res.status(400).json({ message: 'एक बार में 5000 से ज्यादा voters update नहीं होंगे। Filter छोटा करें।', matched: count });
+    }
+    const members = await Member.find(filter);
+    let updated = 0;
+    for (const member of members) {
+      Object.assign(member, updates);
+      member.updatedBy = req.currentUser._id;
+      await member.save();
+      updated += 1;
+    }
+    await writeActivity({
+      req,
+      action: 'members.location_corrected',
+      module: 'members',
+      after: { matched: count, updated, source, updates },
+    });
+    res.json({ dryRun: false, matched: count, updated, source, updates });
+  } catch (error) {
+    next(error);
+  }
+};
+
 exports.filterOptions = async (req, res, next) => {
   try {
     const definition = optionDefinitions[req.query.field];
