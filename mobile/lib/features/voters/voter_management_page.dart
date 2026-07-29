@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -47,6 +47,7 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
   final selectedIds = <String>{};
   final selectedOptionFilters = <String, Map<String, String>>{};
   final selectedOptionLabels = <String, String>{};
+  final recentFilters = <_RecentFilter>[];
   bool listening = false;
   bool showAdvancedFilters = false;
   String gender = '';
@@ -204,6 +205,163 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
     });
   }
 
+  String _filterValue(String field, TextEditingController controller) =>
+      selectedOptionLabels[field] ?? controller.text.trim();
+
+  void _rememberRecentFilter(String field, String title, _FilterOption option) {
+    recentFilters.removeWhere(
+        (item) => item.field == field && item.label == option.label);
+    recentFilters.insert(
+      0,
+      _RecentFilter(
+        field: field,
+        title: title,
+        label: option.label,
+        filters: option.filters,
+      ),
+    );
+    if (recentFilters.length > 8) {
+      recentFilters.removeRange(8, recentFilters.length);
+    }
+  }
+
+  void _applyRecentFilter(_RecentFilter filter) => setState(() {
+        selectedOptionFilters[filter.field] = filter.filters;
+        selectedOptionLabels[filter.field] = filter.label;
+        currentPage = 1;
+        selectedIds.clear();
+        refreshVoters();
+      });
+
+  void _clearFilterText(TextEditingController controller) => setState(() {
+        controller.clear();
+        currentPage = 1;
+        selectedIds.clear();
+        refreshVoters();
+      });
+
+  void _clearSmartOrText(String field, TextEditingController controller) =>
+      setState(() {
+        selectedOptionFilters.remove(field);
+        selectedOptionLabels.remove(field);
+        controller.clear();
+        currentPage = 1;
+        selectedIds.clear();
+        refreshVoters();
+      });
+
+  void _clearLocationFilters() => setState(() {
+        for (final field in [
+          'assembly',
+          'village',
+          'gramPanchayat',
+          'partNumber'
+        ]) {
+          selectedOptionFilters.remove(field);
+          selectedOptionLabels.remove(field);
+        }
+        assemblyNumber.clear();
+        village.clear();
+        gramPanchayat.clear();
+        boothNumber.clear();
+        currentPage = 1;
+        selectedIds.clear();
+        refreshVoters();
+      });
+
+  List<_ActiveFilterData> get activeFilterChips {
+    final chips = <_ActiveFilterData>[];
+    void add(String label, String value, VoidCallback onClear) {
+      final clean = value.trim();
+      if (clean.isEmpty) return;
+      chips
+          .add(_ActiveFilterData(label: label, value: clean, onClear: onClear));
+    }
+
+    add('Search', search.text, () => _clearFilterText(search));
+    add(
+        'अक्षर',
+        nameLetter,
+        () => setState(() {
+              nameLetter = '';
+              currentPage = 1;
+              selectedIds.clear();
+              refreshVoters();
+            }));
+    add(
+        'समर्थन',
+        _supportLabel(support),
+        () => setState(() {
+              support = '';
+              currentPage = 1;
+              selectedIds.clear();
+              refreshVoters();
+            }));
+    add(
+        'लिंग',
+        _genderLabel(gender),
+        () => setState(() {
+              gender = '';
+              currentPage = 1;
+              selectedIds.clear();
+              refreshVoters();
+            }));
+    add(
+        'सत्यापन',
+        _verificationLabel(verificationStatus),
+        () => setState(() {
+              verificationStatus = '';
+              currentPage = 1;
+              selectedIds.clear();
+              refreshVoters();
+            }));
+    add('विधानसभा', _filterValue('assembly', assemblyNumber),
+        () => _clearSmartOrText('assembly', assemblyNumber));
+    add('गाँव', _filterValue('village', village),
+        () => _clearSmartOrText('village', village));
+    add('पंचायत', _filterValue('gramPanchayat', gramPanchayat),
+        () => _clearSmartOrText('gramPanchayat', gramPanchayat));
+    add('भाग', _filterValue('partNumber', boothNumber),
+        () => _clearSmartOrText('partNumber', boothNumber));
+    add('अनुभाग नं.', sectionNumber.text,
+        () => _clearFilterText(sectionNumber));
+    add('अनुभाग', _filterValue('section', sectionName),
+        () => _clearSmartOrText('section', sectionName));
+    add('तहसील', _filterValue('tehsil', tehsil),
+        () => _clearSmartOrText('tehsil', tehsil));
+    add('नगर पालिका', _filterValue('municipality', municipality),
+        () => _clearSmartOrText('municipality', municipality));
+    add('स्थान', location.text, () => _clearFilterText(location));
+    add('जाति', _filterValue('caste', caste),
+        () => _clearSmartOrText('caste', caste));
+    add('पद', _filterValue('organizationPost', organizationPost),
+        () => _clearSmartOrText('organizationPost', organizationPost));
+    return chips;
+  }
+
+  String _supportLabel(String value) => switch (value) {
+        'supporter' => 'समर्थक',
+        'neutral' => 'तटस्थ',
+        'opposite' => 'विरोधी',
+        'undecided' => 'अनिर्णीत',
+        _ => '',
+      };
+
+  String _genderLabel(String value) => switch (value) {
+        'male' => 'पुरुष',
+        'female' => 'महिला',
+        'other' => 'अन्य',
+        _ => '',
+      };
+
+  String _verificationLabel(String value) => switch (value) {
+        'pending' => 'लंबित',
+        'verified' => 'सत्यापित',
+        'needs_review' => 'Review आवश्यक',
+        'duplicate' => 'डुप्लीकेट',
+        _ => '',
+      };
+
   Future<void> useQuickSearch(String mode) async {
     final cleanMode = mode.startsWith('जैसे') ? 'नाम' : mode;
     final value = await showDialog<String>(
@@ -270,11 +428,26 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
     setState(() {
       selectedOptionFilters[field] = option.filters;
       selectedOptionLabels[field] = option.label;
+      _rememberRecentFilter(field, title, option);
       currentPage = 1;
       selectedIds.clear();
       refreshVoters();
     });
   }
+
+  Future<_FilterOption?> pickFilterOption(
+    String field,
+    String title,
+    Map<String, String?> currentFilters,
+  ) =>
+      showDialog<_FilterOption>(
+        context: context,
+        builder: (_) => _FilterOptionDialog(
+          field: field,
+          title: title,
+          currentFilters: currentFilters,
+        ),
+      );
 
   void clearSmartFilter(String field) => setState(() {
         selectedOptionFilters.remove(field);
@@ -430,17 +603,52 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
               const SizedBox(height: 12),
               TextField(
                 controller: nextVillage,
-                decoration: const InputDecoration(
-                    labelText: 'गाँव / क्षेत्र',
-                    prefixIcon: Icon(Icons.location_on_outlined)),
+                decoration: InputDecoration(
+                  labelText: 'गाँव / क्षेत्र',
+                  prefixIcon: const Icon(Icons.location_on_outlined),
+                  suffixIcon: IconButton(
+                    tooltip: 'Database से गाँव चुनें',
+                    icon: const Icon(Icons.list_alt_rounded),
+                    onPressed: () async {
+                      final option = await pickFilterOption('village', 'गाँव', {
+                        if (nextSupport.isNotEmpty) 'supportLevel': nextSupport,
+                        if (nextGender.isNotEmpty) 'gender': nextGender,
+                        if (nextVerification.isNotEmpty)
+                          'verificationStatus': nextVerification,
+                      });
+                      if (option == null) return;
+                      setSheetState(() => nextVillage.text =
+                          option.filters['village'] ?? option.label);
+                    },
+                  ),
+                ),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: nextBooth,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                    labelText: 'भाग / बूथ संख्या',
-                    prefixIcon: Icon(Icons.how_to_vote_outlined)),
+                decoration: InputDecoration(
+                  labelText: 'भाग / बूथ संख्या',
+                  prefixIcon: const Icon(Icons.how_to_vote_outlined),
+                  suffixIcon: IconButton(
+                    tooltip: 'Database से भाग चुनें',
+                    icon: const Icon(Icons.list_alt_rounded),
+                    onPressed: () async {
+                      final option =
+                          await pickFilterOption('partNumber', 'भाग / बूथ', {
+                        if (nextSupport.isNotEmpty) 'supportLevel': nextSupport,
+                        if (nextGender.isNotEmpty) 'gender': nextGender,
+                        if (nextVerification.isNotEmpty)
+                          'verificationStatus': nextVerification,
+                        if (nextVillage.text.trim().isNotEmpty)
+                          'village': nextVillage.text.trim(),
+                      });
+                      if (option == null) return;
+                      setSheetState(() => nextBooth.text =
+                          option.filters['partNumber'] ?? option.label);
+                    },
+                  ),
+                ),
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
@@ -573,23 +781,28 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
                 icon: const Icon(Icons.sort_by_alpha_rounded, size: 20),
               ),
             ]),
-            if (nameLetter.isNotEmpty ||
-                support.isNotEmpty ||
-                verificationStatus.isNotEmpty ||
-                gender.isNotEmpty ||
-                village.text.isNotEmpty ||
-                boothNumber.text.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: ActionChip(
-                    avatar: const Icon(Icons.close_rounded, size: 17),
-                    label: const Text('सभी फ़िल्टर हटाएँ'),
-                    onPressed: clearFilters,
-                  ),
-                ),
-              ),
+            _ActiveFilterChips(
+              items: activeFilterChips,
+              onClearAll: clearFilters,
+              compact: true,
+            ),
+            _LocationFilterCard(
+              assembly: _filterValue('assembly', assemblyNumber),
+              village: _filterValue('village', village),
+              gramPanchayat: _filterValue('gramPanchayat', gramPanchayat),
+              partNumber: _filterValue('partNumber', boothNumber),
+              onPickAssembly: () => openSmartFilter('assembly', 'विधानसभा'),
+              onPickVillage: () => openSmartFilter('village', 'गाँव'),
+              onPickPanchayat: () =>
+                  openSmartFilter('gramPanchayat', 'ग्राम पंचायत'),
+              onPickPart: () => openSmartFilter('partNumber', 'भाग / बूथ'),
+              onClear: _clearLocationFilters,
+              compact: true,
+            ),
+            _RecentFilterStrip(
+              items: recentFilters,
+              onTap: _applyRecentFilter,
+            ),
             const SizedBox(height: 8),
             FutureBuilder<VoterPageResult>(
               future: votersFuture,
@@ -609,20 +822,41 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
                 }
                 final result = snapshot.data!;
                 if (result.items.isEmpty) {
-                  return _PhoneMessage(
-                    icon: Icons.person_search_rounded,
-                    title: 'कोई मतदाता नहीं मिला',
-                    subtitle: 'नाम की spelling बदलें या फ़िल्टर हटाकर खोजें।',
-                    onRetry: clearFilters,
+                  return Column(
+                    children: [
+                      _FilterResultSummary(
+                        total: result.total,
+                        shown: result.items.length,
+                        activeFilters: activeFilterChips.length,
+                      ),
+                      const SizedBox(height: 10),
+                      _PhoneMessage(
+                        icon: Icons.person_search_rounded,
+                        title: 'कोई मतदाता नहीं मिला',
+                        subtitle:
+                            'नाम की spelling बदलें या फ़िल्टर हटाकर खोजें।',
+                        onRetry: clearFilters,
+                      ),
+                    ],
                   );
                 }
-                return _PhoneContactList(
-                  result: result,
-                  onChanged: () => setState(refreshVoters),
-                  onPageChanged: (page) => setState(() {
-                    currentPage = page;
-                    refreshVoters();
-                  }),
+                return Column(
+                  children: [
+                    _FilterResultSummary(
+                      total: result.total,
+                      shown: result.items.length,
+                      activeFilters: activeFilterChips.length,
+                    ),
+                    const SizedBox(height: 10),
+                    _PhoneContactList(
+                      result: result,
+                      onChanged: () => setState(refreshVoters),
+                      onPageChanged: (page) => setState(() {
+                        currentPage = page;
+                        refreshVoters();
+                      }),
+                    ),
+                  ],
                 );
               },
             ),
@@ -731,7 +965,27 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
                   selectedOptionLabels.clear();
                   currentPage = 1;
                   selectedIds.clear();
+                  refreshVoters();
                 }),
+      ),
+      _ActiveFilterChips(
+        items: activeFilterChips,
+        onClearAll: clearFilters,
+      ),
+      _LocationFilterCard(
+        assembly: _filterValue('assembly', assemblyNumber),
+        village: _filterValue('village', village),
+        gramPanchayat: _filterValue('gramPanchayat', gramPanchayat),
+        partNumber: _filterValue('partNumber', boothNumber),
+        onPickAssembly: () => openSmartFilter('assembly', 'विधानसभा'),
+        onPickVillage: () => openSmartFilter('village', 'गाँव'),
+        onPickPanchayat: () => openSmartFilter('gramPanchayat', 'ग्राम पंचायत'),
+        onPickPart: () => openSmartFilter('partNumber', 'भाग / बूथ'),
+        onClear: _clearLocationFilters,
+      ),
+      _RecentFilterStrip(
+        items: recentFilters,
+        onTap: _applyRecentFilter,
       ),
       if (showAdvancedFilters) ...[
         const SizedBox(height: 10),
@@ -742,109 +996,128 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
             icon: const Icon(Icons.clear_all),
             label: const Text('सभी साफ करें'),
           ),
-          child: Wrap(spacing: 10, runSpacing: 10, children: [
-            _SearchFilter(
-                controller: assemblyNumber,
-                label: 'विधानसभा संख्या',
-                icon: Icons.account_balance_outlined,
-                onChanged: (_) => filtersChanged()),
-            _SearchFilter(
-                controller: boothNumber,
-                label: 'भाग / बूथ संख्या',
-                icon: Icons.how_to_vote_outlined,
-                onChanged: (_) => filtersChanged()),
-            _SearchFilter(
-                controller: sectionNumber,
-                label: 'अनुभाग संख्या',
-                icon: Icons.format_list_numbered,
-                onChanged: (_) => filtersChanged()),
-            _SearchFilter(
-                controller: sectionName,
-                label: 'अनुभाग नाम',
-                icon: Icons.segment,
-                onChanged: (_) => filtersChanged()),
-            _SearchFilter(
-                controller: village,
-                label: 'गाँव',
-                icon: Icons.home_work_outlined,
-                onChanged: (_) => filtersChanged()),
-            _SearchFilter(
-                controller: gramPanchayat,
-                label: 'ग्राम पंचायत',
-                icon: Icons.holiday_village_outlined,
-                onChanged: (_) => filtersChanged()),
-            _SearchFilter(
-                controller: tehsil,
-                label: 'तहसील',
-                icon: Icons.location_city_outlined,
-                onChanged: (_) => filtersChanged()),
-            _SearchFilter(
-                controller: municipality,
-                label: 'नगर पालिका',
-                icon: Icons.apartment_outlined,
-                onChanged: (_) => filtersChanged()),
-            _SearchFilter(
-                controller: location,
-                label: 'पता / स्थान',
-                icon: Icons.location_on_outlined,
-                onChanged: (_) => filtersChanged()),
-            _SearchFilter(
-                controller: caste,
-                label: 'जाति',
-                icon: Icons.groups_2_outlined,
-                onChanged: (_) => filtersChanged()),
-            _SearchFilter(
-                controller: organizationPost,
-                label: 'राजनीतिक पद',
-                icon: Icons.badge_outlined,
-                onChanged: (_) => filtersChanged()),
-            _FilterDropdown(
-              label: 'समर्थन स्तर',
-              value: support,
-              items: const {
-                '': 'सभी',
-                'supporter': 'समर्थक',
-                'neutral': 'तटस्थ',
-                'opposite': 'विरोधी',
-                'undecided': 'अनिर्णीत',
-              },
-              onChanged: (value) => setState(() {
-                support = value;
-                currentPage = 1;
-                refreshVoters();
-              }),
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text(
+              'Type करें या field के list icon से database options scroll/search करके चुनें।',
+              style: TextStyle(
+                  color: muted, fontSize: 12, fontWeight: FontWeight.w700),
             ),
-            _FilterDropdown(
-              label: 'लिंग',
-              value: gender,
-              items: const {
-                '': 'सभी',
-                'male': 'पुरुष',
-                'female': 'महिला',
-                'other': 'अन्य',
-              },
-              onChanged: (value) => setState(() {
-                gender = value;
-                currentPage = 1;
-                refreshVoters();
-              }),
-            ),
-            _FilterDropdown(
-              label: 'सत्यापन',
-              value: verificationStatus,
-              items: const {
-                '': 'सभी',
-                'pending': 'लंबित',
-                'verified': 'सत्यापित',
-                'needs_review': 'Review आवश्यक',
-                'duplicate': 'डुप्लीकेट',
-              },
-              onChanged: (value) => setState(() {
-                verificationStatus = value;
-                currentPage = 1;
-                refreshVoters();
-              }),
-            ),
+            const SizedBox(height: 10),
+            Wrap(spacing: 10, runSpacing: 10, children: [
+              _SearchFilter(
+                  controller: assemblyNumber,
+                  label: 'विधानसभा संख्या',
+                  icon: Icons.account_balance_outlined,
+                  onChanged: (_) => filtersChanged(),
+                  onPick: () => openSmartFilter('assembly', 'विधानसभा')),
+              _SearchFilter(
+                  controller: boothNumber,
+                  label: 'भाग / बूथ संख्या',
+                  icon: Icons.how_to_vote_outlined,
+                  onChanged: (_) => filtersChanged(),
+                  onPick: () => openSmartFilter('partNumber', 'भाग / बूथ')),
+              _SearchFilter(
+                  controller: sectionNumber,
+                  label: 'अनुभाग संख्या',
+                  icon: Icons.format_list_numbered,
+                  onChanged: (_) => filtersChanged()),
+              _SearchFilter(
+                  controller: sectionName,
+                  label: 'अनुभाग नाम',
+                  icon: Icons.segment,
+                  onChanged: (_) => filtersChanged()),
+              _SearchFilter(
+                  controller: village,
+                  label: 'गाँव',
+                  icon: Icons.home_work_outlined,
+                  onChanged: (_) => filtersChanged(),
+                  onPick: () => openSmartFilter('village', 'गाँव')),
+              _SearchFilter(
+                  controller: gramPanchayat,
+                  label: 'ग्राम पंचायत',
+                  icon: Icons.holiday_village_outlined,
+                  onChanged: (_) => filtersChanged(),
+                  onPick: () =>
+                      openSmartFilter('gramPanchayat', 'ग्राम पंचायत')),
+              _SearchFilter(
+                  controller: tehsil,
+                  label: 'तहसील',
+                  icon: Icons.location_city_outlined,
+                  onChanged: (_) => filtersChanged(),
+                  onPick: () => openSmartFilter('tehsil', 'तहसील')),
+              _SearchFilter(
+                  controller: municipality,
+                  label: 'नगर पालिका',
+                  icon: Icons.apartment_outlined,
+                  onChanged: (_) => filtersChanged(),
+                  onPick: () => openSmartFilter('municipality', 'नगर पालिका')),
+              _SearchFilter(
+                  controller: location,
+                  label: 'पता / स्थान',
+                  icon: Icons.location_on_outlined,
+                  onChanged: (_) => filtersChanged()),
+              _SearchFilter(
+                  controller: caste,
+                  label: 'जाति',
+                  icon: Icons.groups_2_outlined,
+                  onChanged: (_) => filtersChanged(),
+                  onPick: () => openSmartFilter('caste', 'जाति')),
+              _SearchFilter(
+                  controller: organizationPost,
+                  label: 'राजनीतिक पद',
+                  icon: Icons.badge_outlined,
+                  onChanged: (_) => filtersChanged(),
+                  onPick: () =>
+                      openSmartFilter('organizationPost', 'संगठन पद')),
+              _FilterDropdown(
+                label: 'समर्थन स्तर',
+                value: support,
+                items: const {
+                  '': 'सभी',
+                  'supporter': 'समर्थक',
+                  'neutral': 'तटस्थ',
+                  'opposite': 'विरोधी',
+                  'undecided': 'अनिर्णीत',
+                },
+                onChanged: (value) => setState(() {
+                  support = value;
+                  currentPage = 1;
+                  refreshVoters();
+                }),
+              ),
+              _FilterDropdown(
+                label: 'लिंग',
+                value: gender,
+                items: const {
+                  '': 'सभी',
+                  'male': 'पुरुष',
+                  'female': 'महिला',
+                  'other': 'अन्य',
+                },
+                onChanged: (value) => setState(() {
+                  gender = value;
+                  currentPage = 1;
+                  refreshVoters();
+                }),
+              ),
+              _FilterDropdown(
+                label: 'सत्यापन',
+                value: verificationStatus,
+                items: const {
+                  '': 'सभी',
+                  'pending': 'लंबित',
+                  'verified': 'सत्यापित',
+                  'needs_review': 'Review आवश्यक',
+                  'duplicate': 'डुप्लीकेट',
+                },
+                onChanged: (value) => setState(() {
+                  verificationStatus = value;
+                  currentPage = 1;
+                  refreshVoters();
+                }),
+              ),
+            ]),
           ]),
         ),
       ],
@@ -929,34 +1202,46 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
             );
           }
           final result = snapshot.data!;
-          return VoterTable(
-            items:
-                result.items.map((e) => Map<String, dynamic>.from(e)).toList(),
-            refresh: () => setState(refreshVoters),
-            onDeleteAll: deleteAll,
-            total: result.total,
-            page: result.page,
-            pages: result.pages,
-            onPageChanged: (page) => setState(() {
-              currentPage = page;
-              refreshVoters();
-            }),
-            pageSize: result.limit,
-            selectedIds: selectedIds,
-            onSelectionChanged: (id, selected) => setState(() {
-              if (selected) {
-                selectedIds.add(id);
-              } else {
-                selectedIds.remove(id);
-              }
-            }),
-            onSelectPage: (ids, selected) => setState(() {
-              if (selected) {
-                selectedIds.addAll(ids);
-              } else {
-                selectedIds.removeAll(ids);
-              }
-            }),
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _FilterResultSummary(
+                total: result.total,
+                shown: result.items.length,
+                activeFilters: activeFilterChips.length,
+              ),
+              const SizedBox(height: 10),
+              VoterTable(
+                items: result.items
+                    .map((e) => Map<String, dynamic>.from(e))
+                    .toList(),
+                refresh: () => setState(refreshVoters),
+                onDeleteAll: deleteAll,
+                total: result.total,
+                page: result.page,
+                pages: result.pages,
+                onPageChanged: (page) => setState(() {
+                  currentPage = page;
+                  refreshVoters();
+                }),
+                pageSize: result.limit,
+                selectedIds: selectedIds,
+                onSelectionChanged: (id, selected) => setState(() {
+                  if (selected) {
+                    selectedIds.add(id);
+                  } else {
+                    selectedIds.remove(id);
+                  }
+                }),
+                onSelectPage: (ids, selected) => setState(() {
+                  if (selected) {
+                    selectedIds.addAll(ids);
+                  } else {
+                    selectedIds.removeAll(ids);
+                  }
+                }),
+              ),
+            ],
           );
         },
       ),
@@ -994,6 +1279,344 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
       )
     ]);
   }
+}
+
+class _ActiveFilterData {
+  const _ActiveFilterData({
+    required this.label,
+    required this.value,
+    required this.onClear,
+  });
+
+  final String label;
+  final String value;
+  final VoidCallback onClear;
+}
+
+class _RecentFilter {
+  const _RecentFilter({
+    required this.field,
+    required this.title,
+    required this.label,
+    required this.filters,
+  });
+
+  final String field;
+  final String title;
+  final String label;
+  final Map<String, String> filters;
+}
+
+class _ActiveFilterChips extends StatelessWidget {
+  const _ActiveFilterChips({
+    required this.items,
+    required this.onClearAll,
+    this.compact = false,
+  });
+
+  final List<_ActiveFilterData> items;
+  final VoidCallback onClearAll;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    if (items.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: EdgeInsets.only(top: compact ? 8 : 10, bottom: compact ? 2 : 0),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xfff8fbff),
+          borderRadius: BorderRadius.circular(compact ? 18 : 20),
+          border: Border.all(color: border),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            const Icon(Icons.filter_alt_rounded, color: blue, size: 18),
+            const SizedBox(width: 7),
+            Text('${items.length} active filters',
+                style: const TextStyle(
+                    color: navy, fontWeight: FontWeight.w900, fontSize: 13)),
+            const Spacer(),
+            TextButton(
+              onPressed: onClearAll,
+              child: const Text('Reset all'),
+            ),
+          ]),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: items
+                .map((item) => InputChip(
+                      avatar: const Icon(Icons.check_circle_rounded,
+                          color: green, size: 17),
+                      label: Text('${item.label}: ${item.value}'),
+                      onDeleted: item.onClear,
+                      labelStyle: const TextStyle(
+                          color: navy, fontWeight: FontWeight.w800),
+                      backgroundColor: Colors.white,
+                      side: const BorderSide(color: border),
+                    ))
+                .toList(),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+class _LocationFilterCard extends StatelessWidget {
+  const _LocationFilterCard({
+    required this.assembly,
+    required this.village,
+    required this.gramPanchayat,
+    required this.partNumber,
+    required this.onPickAssembly,
+    required this.onPickVillage,
+    required this.onPickPanchayat,
+    required this.onPickPart,
+    required this.onClear,
+    this.compact = false,
+  });
+
+  final String assembly;
+  final String village;
+  final String gramPanchayat;
+  final String partNumber;
+  final VoidCallback onPickAssembly;
+  final VoidCallback onPickVillage;
+  final VoidCallback onPickPanchayat;
+  final VoidCallback onPickPart;
+  final VoidCallback onClear;
+  final bool compact;
+
+  bool get hasAny =>
+      assembly.trim().isNotEmpty ||
+      village.trim().isNotEmpty ||
+      gramPanchayat.trim().isNotEmpty ||
+      partNumber.trim().isNotEmpty;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: EdgeInsets.only(top: compact ? 8 : 10),
+        child: Container(
+          width: double.infinity,
+          padding: EdgeInsets.all(compact ? 12 : 14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(compact ? 18 : 22),
+            border: Border.all(
+                color: hasAny ? blue.withValues(alpha: .28) : border),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x0c071b4b),
+                blurRadius: 18,
+                offset: Offset(0, 8),
+              ),
+            ],
+          ),
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: softBlue,
+                  borderRadius: BorderRadius.circular(13),
+                ),
+                child: const Icon(Icons.map_rounded, color: blue, size: 20),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('गाँव + पंचायत + भाग',
+                          style: TextStyle(
+                              color: navy,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w900)),
+                      SizedBox(height: 2),
+                      Text(
+                          'गाँव अकेला unique नहीं — पूरी location key से filter करें',
+                          style: TextStyle(color: muted, fontSize: 11)),
+                    ]),
+              ),
+              if (hasAny)
+                IconButton(
+                  tooltip: 'Location filter हटाएँ',
+                  onPressed: onClear,
+                  icon: const Icon(Icons.close_rounded, color: muted),
+                ),
+            ]),
+            const SizedBox(height: 11),
+            LayoutBuilder(builder: (context, constraints) {
+              final chipWidth = constraints.maxWidth < 380
+                  ? (constraints.maxWidth - 8) / 2
+                  : compact
+                      ? 150.0
+                      : 168.0;
+              return Wrap(spacing: 8, runSpacing: 8, children: [
+                _LocationPickChip(
+                    width: chipWidth,
+                    label: 'विधानसभा',
+                    value: assembly,
+                    icon: Icons.account_balance_rounded,
+                    onTap: onPickAssembly),
+                _LocationPickChip(
+                    width: chipWidth,
+                    label: 'गाँव',
+                    value: village,
+                    icon: Icons.home_work_rounded,
+                    onTap: onPickVillage),
+                _LocationPickChip(
+                    width: chipWidth,
+                    label: 'पंचायत',
+                    value: gramPanchayat,
+                    icon: Icons.holiday_village_rounded,
+                    onTap: onPickPanchayat),
+                _LocationPickChip(
+                    width: chipWidth,
+                    label: 'भाग',
+                    value: partNumber,
+                    icon: Icons.how_to_vote_rounded,
+                    onTap: onPickPart),
+              ]);
+            }),
+          ]),
+        ),
+      );
+}
+
+class _LocationPickChip extends StatelessWidget {
+  const _LocationPickChip({
+    required this.width,
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final double width;
+  final String label;
+  final String value;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = value.trim().isNotEmpty;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        width: width,
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 9),
+        decoration: BoxDecoration(
+          color: selected ? softBlue : const Color(0xfff7f9ff),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+              color: selected ? blue.withValues(alpha: .35) : border),
+        ),
+        child: Row(children: [
+          Icon(icon, color: selected ? blue : muted, size: 18),
+          const SizedBox(width: 7),
+          Expanded(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(label, style: const TextStyle(color: muted, fontSize: 9.5)),
+              const SizedBox(height: 2),
+              Text(selected ? value : 'चुनें',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      color: selected ? navy : muted,
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w900)),
+            ]),
+          ),
+          const Icon(Icons.keyboard_arrow_down_rounded, color: muted, size: 18),
+        ]),
+      ),
+    );
+  }
+}
+
+class _RecentFilterStrip extends StatelessWidget {
+  const _RecentFilterStrip({required this.items, required this.onTap});
+
+  final List<_RecentFilter> items;
+  final ValueChanged<_RecentFilter> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    if (items.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('Recent filters',
+            style: TextStyle(
+                color: navy, fontWeight: FontWeight.w900, fontSize: 13)),
+        const SizedBox(height: 7),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: items
+                .map((item) => Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: ActionChip(
+                        avatar: const Icon(Icons.history_rounded, size: 17),
+                        label: Text('${item.title}: ${item.label}'),
+                        onPressed: () => onTap(item),
+                      ),
+                    ))
+                .toList(),
+          ),
+        ),
+      ]),
+    );
+  }
+}
+
+class _FilterResultSummary extends StatelessWidget {
+  const _FilterResultSummary({
+    required this.total,
+    required this.shown,
+    required this.activeFilters,
+  });
+
+  final int total;
+  final int shown;
+  final int activeFilters;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+        decoration: BoxDecoration(
+          color: const Color(0xffeef6ff),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: blue.withValues(alpha: .16)),
+        ),
+        child: Row(children: [
+          const Icon(Icons.people_alt_rounded, color: blue, size: 20),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Text(
+              activeFilters == 0
+                  ? '$total मतदाता मिले'
+                  : '$total मतदाता मिले • $activeFilters filter active',
+              style: const TextStyle(color: navy, fontWeight: FontWeight.w900),
+            ),
+          ),
+          Text('इस पेज: $shown',
+              style:
+                  const TextStyle(color: muted, fontWeight: FontWeight.w800)),
+        ]),
+      );
 }
 
 class _SmartSearchPanel extends StatelessWidget {
@@ -2009,31 +2632,40 @@ class _SearchFilter extends StatelessWidget {
       {required this.controller,
       required this.label,
       required this.icon,
-      required this.onChanged});
+      required this.onChanged,
+      this.onPick});
   final TextEditingController controller;
   final String label;
   final IconData icon;
   final ValueChanged<String> onChanged;
+  final VoidCallback? onPick;
 
   @override
   Widget build(BuildContext context) => SizedBox(
-        width: 180,
+        width: 220,
         child: TextField(
           controller: controller,
           onChanged: onChanged,
           decoration: InputDecoration(
             labelText: label,
             prefixIcon: Icon(icon, size: 20),
-            suffixIcon: controller.text.isEmpty
-                ? null
-                : IconButton(
-                    tooltip: 'देखें',
-                    onPressed: () {
-                      controller.clear();
-                      onChanged('');
-                    },
-                    icon: const Icon(Icons.close, size: 18),
-                  ),
+            suffixIcon: Row(mainAxisSize: MainAxisSize.min, children: [
+              if (onPick != null)
+                IconButton(
+                  tooltip: 'List से चुनें',
+                  onPressed: onPick,
+                  icon: const Icon(Icons.list_alt_rounded, size: 18),
+                ),
+              if (controller.text.isNotEmpty)
+                IconButton(
+                  tooltip: 'साफ करें',
+                  onPressed: () {
+                    controller.clear();
+                    onChanged('');
+                  },
+                  icon: const Icon(Icons.close, size: 18),
+                ),
+            ]),
           ),
         ),
       );
@@ -2093,6 +2725,7 @@ class _LocationCorrectionDialog extends StatefulWidget {
 }
 
 class _LocationCorrectionDialogState extends State<_LocationCorrectionDialog> {
+  final smartQuery = TextEditingController();
   final sourceAssemblyNumber = TextEditingController();
   final sourceAssemblyName = TextEditingController();
   final sourceGramPanchayat = TextEditingController();
@@ -2107,11 +2740,14 @@ class _LocationCorrectionDialogState extends State<_LocationCorrectionDialog> {
   final newTehsil = TextEditingController();
 
   bool loading = false;
+  bool advancedMode = false;
+  Timer? previewDebounce;
   int? matched;
   List<Map<String, dynamic>> sample = const [];
   String? error;
 
   Map<String, String> get source => {
+        if (!advancedMode) 'smartQuery': smartQuery.text.trim(),
         'assemblyNumber': sourceAssemblyNumber.text.trim(),
         'assemblyName': sourceAssemblyName.text.trim(),
         'gramPanchayat': sourceGramPanchayat.text.trim(),
@@ -2128,8 +2764,17 @@ class _LocationCorrectionDialogState extends State<_LocationCorrectionDialog> {
         'tehsil': newTehsil.text.trim(),
       }..removeWhere((_, value) => value.isEmpty);
 
-  bool get validSource =>
-      sourceVillage.text.trim().isNotEmpty && source.length >= 2;
+  bool get validSource => advancedMode
+      ? sourceVillage.text.trim().isNotEmpty && source.length >= 2
+      : smartQuery.text.trim().length >= 2 || source.length >= 2;
+
+  void schedulePreview() {
+    previewDebounce?.cancel();
+    if (!validSource) return;
+    previewDebounce = Timer(const Duration(milliseconds: 650), () {
+      if (mounted) preview(silent: true);
+    });
+  }
 
   Future<void> chooseSourceFromDatabase() async {
     setState(() {
@@ -2153,6 +2798,7 @@ class _LocationCorrectionDialogState extends State<_LocationCorrectionDialog> {
       if (selected == null) return;
       final key = Map<String, dynamic>.from(selected['key'] as Map? ?? {});
       setState(() {
+        advancedMode = true;
         sourceAssemblyNumber.text = '${key['assemblyNumber'] ?? ''}';
         sourceAssemblyName.text = '${key['assemblyName'] ?? ''}';
         sourceGramPanchayat.text = '${key['gramPanchayat'] ?? ''}';
@@ -2172,10 +2818,13 @@ class _LocationCorrectionDialogState extends State<_LocationCorrectionDialog> {
     }
   }
 
-  Future<void> preview() async {
+  Future<void> preview({bool silent = false}) async {
     if (!validSource) {
-      setState(() => error =
-          'गाँव अकेला unique नहीं है। Source में गाँव + विधानसभा/पंचायत/भाग भरें।');
+      if (!silent) {
+        setState(() => error = advancedMode
+            ? 'गाँव अकेला unique नहीं है। Source में गाँव + विधानसभा/पंचायत/भाग भरें।'
+            : 'पुरानी जानकारी search में कम से कम 2 अक्षर लिखें।');
+      }
       return;
     }
     setState(() {
@@ -2188,8 +2837,7 @@ class _LocationCorrectionDialogState extends State<_LocationCorrectionDialog> {
       final res = await api.post('/api/members/bulk-location-correction', {
         'dryRun': true,
         'source': source,
-        'updates':
-            updates.isEmpty ? {'village': sourceVillage.text.trim()} : updates,
+        'updates': updates,
       });
       setState(() {
         matched = res['matched'] as int? ?? 0;
@@ -2242,7 +2890,9 @@ class _LocationCorrectionDialogState extends State<_LocationCorrectionDialog> {
       if (!mounted) return;
       Navigator.pop(context, true);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('${res['updated'] ?? 0} voters location corrected')));
+          content: Text(res['noChange'] == true
+              ? 'कोई नया बदलाव नहीं मिला।'
+              : '${res['updated'] ?? 0} voters location corrected')));
     } catch (e) {
       setState(() => error = '$e'.replaceFirst('Exception: ', ''));
     } finally {
@@ -2253,6 +2903,7 @@ class _LocationCorrectionDialogState extends State<_LocationCorrectionDialog> {
   @override
   void dispose() {
     for (final controller in [
+      smartQuery,
       sourceAssemblyNumber,
       sourceAssemblyName,
       sourceGramPanchayat,
@@ -2267,6 +2918,7 @@ class _LocationCorrectionDialogState extends State<_LocationCorrectionDialog> {
     ]) {
       controller.dispose();
     }
+    previewDebounce?.cancel();
     super.dispose();
   }
 
@@ -2280,14 +2932,211 @@ class _LocationCorrectionDialogState extends State<_LocationCorrectionDialog> {
         ),
       );
 
+  int get correctionStep {
+    if (matched != null) return 3;
+    if (updates.isNotEmpty && validSource) return 2;
+    if (source.isNotEmpty) return 1;
+    return 0;
+  }
+
+  Widget stepBadge(int number, String title) {
+    final active = correctionStep >= number - 1;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: active ? softBlue : const Color(0xfff7f9ff),
+        borderRadius: BorderRadius.circular(14),
+        border:
+            Border.all(color: active ? blue.withValues(alpha: .30) : border),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        CircleAvatar(
+          radius: 13,
+          backgroundColor: active ? blue : const Color(0xffe7edf7),
+          child: Text('$number',
+              style: TextStyle(
+                  color: active ? Colors.white : muted,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w900)),
+        ),
+        const SizedBox(width: 7),
+        Text(title,
+            style: TextStyle(
+                color: active ? navy : muted,
+                fontWeight: FontWeight.w900,
+                fontSize: 12)),
+      ]),
+    );
+  }
+
+  Widget stepHeader(int number, String title, String subtitle, IconData icon) =>
+      Padding(
+        padding: const EdgeInsets.only(top: 18, bottom: 10),
+        child: Row(children: [
+          CircleAvatar(
+            backgroundColor: softBlue,
+            child: Icon(icon, color: blue, size: 20),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('$number. $title',
+                  style: const TextStyle(
+                      color: navy, fontSize: 16, fontWeight: FontWeight.w900)),
+              const SizedBox(height: 2),
+              Text(subtitle,
+                  style: const TextStyle(
+                      color: muted, fontSize: 12, fontWeight: FontWeight.w700)),
+            ]),
+          ),
+        ]),
+      );
+
+  Widget duplicateWarning() {
+    final onlyVillage =
+        sourceVillage.text.trim().isNotEmpty && source.length < 2;
+    if (!onlyVillage) return const SizedBox.shrink();
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xfffff7ed),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: orange.withValues(alpha: .35)),
+      ),
+      child: const Row(children: [
+        Icon(Icons.warning_amber_rounded, color: orange),
+        SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            'Safe rule: गाँव या गलत OCR text अकेला unique नहीं है। विधानसभा / पंचायत / भाग में से कम से कम एक और value चुनें।',
+            style: TextStyle(color: navy, fontWeight: FontWeight.w800),
+          ),
+        ),
+      ]),
+    );
+  }
+
+  Widget comparisonTable() {
+    const labels = {
+      'assemblyNumber': 'विधानसभा संख्या',
+      'assemblyName': 'विधानसभा नाम',
+      'gramPanchayat': 'ग्राम पंचायत',
+      'village': 'गाँव',
+      'partNumber': 'भाग / बूथ',
+      'tehsil': 'तहसील',
+    };
+    String oldValue(String key) => source[key] ?? '-';
+    String newValue(String key) => updates[key] ?? oldValue(key);
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: border),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('Old vs New comparison',
+            style: TextStyle(color: navy, fontWeight: FontWeight.w900)),
+        const SizedBox(height: 8),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: DataTable(
+            headingRowHeight: 34,
+            dataRowMinHeight: 38,
+            dataRowMaxHeight: 46,
+            columns: const [
+              DataColumn(label: Text('Field')),
+              DataColumn(label: Text('Old')),
+              DataColumn(label: Text('New')),
+            ],
+            rows: labels.entries
+                .map((entry) => DataRow(cells: [
+                      DataCell(Text(entry.value)),
+                      DataCell(Text(oldValue(entry.key))),
+                      DataCell(Text(newValue(entry.key),
+                          style: TextStyle(
+                              color: newValue(entry.key) == oldValue(entry.key)
+                                  ? muted
+                                  : green,
+                              fontWeight: FontWeight.w900))),
+                    ]))
+                .toList(),
+          ),
+        ),
+      ]),
+    );
+  }
+
+  List<Widget> currentLocationSummary() {
+    if (sample.isEmpty) return const [];
+    String values(String key) {
+      final set = sample
+          .map((voter) => '${voter[key] ?? ''}'.trim())
+          .where((value) => value.isNotEmpty)
+          .toSet()
+          .take(4)
+          .toList();
+      return set.isEmpty ? 'खाली' : set.join(', ');
+    }
+
+    return [
+      const SizedBox(height: 10),
+      const Divider(),
+      const Text('अभी database में values',
+          style: TextStyle(color: navy, fontWeight: FontWeight.w900)),
+      const SizedBox(height: 8),
+      Wrap(spacing: 8, runSpacing: 8, children: [
+        Chip(label: Text('पंचायत: ${values('gramPanchayat')}')),
+        Chip(label: Text('गाँव: ${values('village')}')),
+        Chip(label: Text('भाग: ${values('partNumber')}')),
+        Chip(label: Text('तहसील: ${values('tehsil')}')),
+      ]),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) => AlertDialog(
-        title: const Text('Location Master + Bulk Correction'),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+        titlePadding: const EdgeInsets.fromLTRB(22, 20, 12, 0),
+        title: Row(children: [
+          const CircleAvatar(
+            backgroundColor: softBlue,
+            child: Icon(Icons.edit_location_alt_rounded, color: blue),
+          ),
+          const SizedBox(width: 12),
+          const Expanded(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Location Master + Bulk Correction',
+                  style: TextStyle(color: navy, fontWeight: FontWeight.w900)),
+              SizedBox(height: 2),
+              Text(
+                  'पुरानी location चुनें → सही location भरें → preview → apply',
+                  style: TextStyle(color: muted, fontSize: 12)),
+            ]),
+          ),
+          IconButton(
+            onPressed: loading ? null : () => Navigator.pop(context, false),
+            icon: const Icon(Icons.close_rounded),
+          ),
+        ]),
         content: SizedBox(
-          width: 780,
+          width: 860,
           child: SingleChildScrollView(
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Wrap(spacing: 8, runSpacing: 8, children: [
+                stepBadge(1, 'Old location'),
+                stepBadge(2, 'New location'),
+                stepBadge(3, 'Preview voters'),
+                stepBadge(4, 'Apply'),
+              ]),
+              const SizedBox(height: 14),
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
@@ -2300,36 +3149,94 @@ class _LocationCorrectionDialogState extends State<_LocationCorrectionDialog> {
                   style: TextStyle(color: navy, fontWeight: FontWeight.w800),
                 ),
               ),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: FilledButton.icon(
-                  onPressed: loading ? null : chooseSourceFromDatabase,
-                  icon: const Icon(Icons.dataset_rounded),
-                  label: const Text('Database से पुरानी location चुनें'),
-                ),
-              ),
               const SizedBox(height: 12),
-              const Text('1. पुरानी / गलत location key',
-                  style: TextStyle(
-                      color: navy, fontSize: 15, fontWeight: FontWeight.w900)),
-              const SizedBox(height: 10),
-              Wrap(spacing: 10, runSpacing: 10, children: [
-                field(sourceAssemblyNumber, 'विधानसभा संख्या',
-                    Icons.account_balance_outlined),
-                field(sourceAssemblyName, 'विधानसभा नाम',
-                    Icons.account_balance_rounded),
-                field(sourceGramPanchayat, 'ग्राम पंचायत',
-                    Icons.holiday_village_outlined),
-                field(sourceVillage, 'गाँव *', Icons.location_city_rounded),
-                field(sourcePartNumber, 'भाग / बूथ', Icons.how_to_vote_rounded),
-              ]),
-              const SizedBox(height: 18),
-              const Text('2. सही value सेट करें',
-                  style: TextStyle(
-                      color: navy, fontSize: 15, fontWeight: FontWeight.w900)),
-              const SizedBox(height: 10),
+              SegmentedButton<bool>(
+                segments: const [
+                  ButtonSegment(
+                      value: false,
+                      icon: Icon(Icons.auto_fix_high_rounded),
+                      label: Text('Smart Fix')),
+                  ButtonSegment(
+                      value: true,
+                      icon: Icon(Icons.vpn_key_rounded),
+                      label: Text('Safe Key')),
+                ],
+                selected: {advancedMode},
+                onSelectionChanged: (value) => setState(() {
+                  advancedMode = value.first;
+                  matched = null;
+                  sample = const [];
+                  error = null;
+                }),
+              ),
+              duplicateWarning(),
+              stepHeader(
+                  1,
+                  advancedMode
+                      ? 'पुरानी location चुनें'
+                      : 'पुरानी गलत/अधूरी जानकारी search करें',
+                  advancedMode
+                      ? 'गलत records वाली पूरी key चुनें — गाँव + पंचायत + भाग सबसे safe है।'
+                      : 'जैसे: sahara bheeta, Hier, भीटा 47 — system live affected voters दिखाएगा।',
+                  Icons.my_location_rounded),
+              if (!advancedMode) ...[
+                TextField(
+                  controller: smartQuery,
+                  onChanged: (_) => setState(() {
+                    matched = null;
+                    sample = const [];
+                    schedulePreview();
+                  }),
+                  decoration: InputDecoration(
+                    prefixIcon: const Icon(Icons.search_rounded),
+                    labelText: 'Old info search करें',
+                    hintText: 'sahara bheeta / Hier / भीटा 47',
+                    suffixIcon: smartQuery.text.isEmpty
+                        ? null
+                        : IconButton(
+                            onPressed: () => setState(() {
+                              smartQuery.clear();
+                              matched = null;
+                              sample = const [];
+                            }),
+                            icon: const Icon(Icons.close_rounded),
+                          ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Warning: गाँव अकेला unique नहीं हो सकता। अगर result ज्यादा आए तो पंचायत/भाग भी search में लिखें।',
+                  style: TextStyle(color: muted, fontSize: 12),
+                ),
+              ] else ...[
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: FilledButton.icon(
+                    onPressed: loading ? null : chooseSourceFromDatabase,
+                    icon: const Icon(Icons.dataset_rounded),
+                    label: const Text('Database से पुरानी location चुनें'),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Wrap(spacing: 10, runSpacing: 10, children: [
+                  field(sourceAssemblyNumber, 'विधानसभा संख्या',
+                      Icons.account_balance_outlined),
+                  field(sourceAssemblyName, 'विधानसभा नाम',
+                      Icons.account_balance_rounded),
+                  field(sourceGramPanchayat, 'ग्राम पंचायत',
+                      Icons.holiday_village_outlined),
+                  field(sourceVillage, 'गाँव / गलत OCR text *',
+                      Icons.location_city_rounded),
+                  field(
+                      sourcePartNumber, 'भाग / बूथ', Icons.how_to_vote_rounded),
+                ]),
+              ],
+              stepHeader(
+                  2,
+                  'सही location चुनें / लिखें',
+                  'जो field बदलनी है वही भरें; खाली field पुरानी value रखेगी।',
+                  Icons.task_alt_rounded),
               Wrap(spacing: 10, runSpacing: 10, children: [
                 field(newAssemblyNumber, 'नई विधानसभा संख्या',
                     Icons.account_balance_outlined),
@@ -2342,9 +3249,27 @@ class _LocationCorrectionDialogState extends State<_LocationCorrectionDialog> {
                     newPartNumber, 'नया भाग / बूथ', Icons.how_to_vote_rounded),
                 field(newTehsil, 'नई तहसील / ब्लॉक', Icons.apartment_rounded),
               ]),
+              comparisonTable(),
               const SizedBox(height: 14),
               if (error != null)
-                Text(error!, style: const TextStyle(color: Colors.red)),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xfffff1f2),
+                    borderRadius: BorderRadius.circular(14),
+                    border:
+                        Border.all(color: Colors.red.withValues(alpha: .20)),
+                  ),
+                  child: Text(error!,
+                      style: const TextStyle(
+                          color: Colors.red, fontWeight: FontWeight.w800)),
+                ),
+              stepHeader(
+                  3,
+                  'Preview affected voters',
+                  'Apply से पहले affected voter count और sample confirm करें।',
+                  Icons.visibility_rounded),
               if (matched != null) ...[
                 Container(
                   margin: const EdgeInsets.only(top: 8),
@@ -2359,13 +3284,30 @@ class _LocationCorrectionDialogState extends State<_LocationCorrectionDialog> {
                       children: [
                         Text('$matched voters match हुए',
                             style: const TextStyle(
-                                color: navy, fontWeight: FontWeight.w900)),
+                                color: navy,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w900)),
                         const SizedBox(height: 6),
                         ...sample.take(5).map((voter) => Text(
                             '• ${voter['name'] ?? '-'} · EPIC ${voter['voterId'] ?? '-'} · घर ${voter['houseNumber'] ?? '-'}',
                             style:
                                 const TextStyle(color: muted, fontSize: 12))),
+                        ...currentLocationSummary(),
                       ]),
+                ),
+              ] else ...[
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xfff7f9ff),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: border),
+                  ),
+                  child: const Text(
+                    'Preview दबाने पर affected voter count और sample यहाँ दिखेंगे।',
+                    style: TextStyle(color: muted, fontWeight: FontWeight.w700),
+                  ),
                 ),
               ],
             ]),

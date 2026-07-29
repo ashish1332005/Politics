@@ -8,6 +8,8 @@ import '../../core/picked_file_source.dart';
 import '../../core/theme.dart';
 import '../../layout/app_layout.dart';
 import '../../widgets/mobile_components.dart';
+import 'import_review_page.dart';
+import 'smart_excel_import_page.dart';
 
 class UploadPage extends StatefulWidget {
   const UploadPage({super.key});
@@ -33,6 +35,8 @@ class _UploadPageState extends State<UploadPage> {
   int ocrCardsProcessed = 0;
   int ocrCardsTotal = 0;
   String processingStage = '';
+  Map<String, dynamic>? lastResult;
+  List<Map<String, dynamic>> failedRecords = const [];
 
   double? get progressValue {
     if (!uploading) return null;
@@ -152,6 +156,8 @@ class _UploadPageState extends State<UploadPage> {
       ocrCardsProcessed = 0;
       ocrCardsTotal = 0;
       processingStage = '';
+      lastResult = null;
+      failedRecords = const [];
       status = 'फाइल अपलोड हो रही है। बड़ी PDF में कुछ समय लग सकता है…';
     });
     final uploadId = 'upload-${DateTime.now().millisecondsSinceEpoch}';
@@ -200,12 +206,18 @@ class _UploadPageState extends State<UploadPage> {
       api.notifyDataChanged();
       if (!mounted) return;
       setState(() {
+        lastResult = Map<String, dynamic>.from(res);
+        failedRecords = _extractFailedRecords(res);
         status =
             'आयात सफल रहा। ${res['imported'] ?? 0} मतदाता जोड़े गए और ${(res['skipped'] as List? ?? []).length} रिकॉर्ड समीक्षा के लिए छोड़े गए। मतदाता सूची अपने आप अपडेट हो गई है।';
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() => status = e.toString().replaceFirst('Exception: ', ''));
+      setState(() {
+        lastResult = null;
+        failedRecords = const [];
+        status = e.toString().replaceFirst('Exception: ', '');
+      });
     } finally {
       if (mounted) setState(() => uploading = false);
     }
@@ -279,12 +291,26 @@ class _UploadPageState extends State<UploadPage> {
             enabled: !uploading,
             onTap: () => upload(false),
           ),
+          _ReviewBeforeSaveCard(
+            enabled: !uploading,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const SmartExcelImportPage()),
+            ),
+          ),
+          const _ServerMemoryWarning(),
           if (uploading) _PhoneImportProgress(state: this),
           if (!uploading && status.isNotEmpty)
             _PhoneImportResult(
               success: status.startsWith('आयात सफल'),
               message: status,
               filename: currentFile,
+              result: lastResult,
+              failedRecords: failedRecords,
+              onReview: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ImportReviewPage()),
+              ),
             ),
           Container(
             padding: const EdgeInsets.all(16),
@@ -354,6 +380,14 @@ class _UploadPageState extends State<UploadPage> {
           ]);
         },
       ),
+      _ReviewBeforeSaveCard(
+        enabled: !uploading,
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const SmartExcelImportPage()),
+        ),
+      ),
+      const _ServerMemoryWarning(),
       if (uploading || status.isNotEmpty)
         SectionCard(
           title: uploading ? 'अपलोड और आयात जारी है' : 'अपलोड का परिणाम',
@@ -418,12 +452,29 @@ class _UploadPageState extends State<UploadPage> {
                 style: TextStyle(color: muted),
               ),
             ] else
-              Text(
-                status,
-                style: TextStyle(
-                  color: status.startsWith('आयात सफल') ? green : Colors.red,
-                  fontWeight: FontWeight.w700,
-                ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    status,
+                    style: TextStyle(
+                      color: status.startsWith('आयात सफल') ? green : Colors.red,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  if (lastResult != null) ...[
+                    const SizedBox(height: 12),
+                    _ImportReviewSummary(
+                      result: lastResult!,
+                      failedRecords: failedRecords,
+                      onReview: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => const ImportReviewPage()),
+                      ),
+                    ),
+                  ],
+                ],
               ),
           ]),
         ),
@@ -514,6 +565,217 @@ class _UploadCard extends StatelessWidget {
       );
 }
 
+class _ReviewBeforeSaveCard extends StatelessWidget {
+  const _ReviewBeforeSaveCard({required this.enabled, required this.onTap});
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+        onTap: enabled ? onTap : null,
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xfff7fff9),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: green.withValues(alpha: .24)),
+          ),
+          child: const Row(children: [
+            CircleAvatar(
+              backgroundColor: softGreen,
+              child: Icon(Icons.rule_folder_rounded, color: green),
+            ),
+            SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Excel review before save',
+                        style: TextStyle(
+                            color: navy, fontWeight: FontWeight.w900)),
+                    SizedBox(height: 3),
+                    Text(
+                        'कॉलम मिलाएं, duplicate/missing summary देखें, फिर import करें।',
+                        style: TextStyle(color: muted, fontSize: 12)),
+                  ]),
+            ),
+            Icon(Icons.chevron_right_rounded, color: muted),
+          ]),
+        ),
+      );
+}
+
+class _ServerMemoryWarning extends StatelessWidget {
+  const _ServerMemoryWarning();
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: const Color(0xfffff7ed),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: orange.withValues(alpha: .28)),
+        ),
+        child:
+            const Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Icon(Icons.memory_rounded, color: orange),
+          SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Server memory warning: बड़ी/scanned PDF में OCR धीरे चलेगा। 1–2 page test करें, app खुला रखें, और request fail हो तो थोड़ी देर बाद retry करें।',
+              style: TextStyle(color: navy, fontWeight: FontWeight.w800),
+            ),
+          ),
+        ]),
+      );
+}
+
+class _ProgressMiniStat extends StatelessWidget {
+  const _ProgressMiniStat({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: const Color(0xfff7f9ff),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: border),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, color: blue, size: 16),
+          const SizedBox(width: 6),
+          Text('$label: $value',
+              style: const TextStyle(
+                  color: navy, fontSize: 12, fontWeight: FontWeight.w900)),
+        ]),
+      );
+}
+
+class _ImportReviewSummary extends StatelessWidget {
+  const _ImportReviewSummary({
+    required this.result,
+    required this.failedRecords,
+    required this.onReview,
+  });
+  final Map<String, dynamic> result;
+  final List<Map<String, dynamic>> failedRecords;
+  final VoidCallback onReview;
+
+  @override
+  Widget build(BuildContext context) {
+    final imported = _num(result['imported']);
+    final created = _num(result['created']);
+    final updated = _num(result['updated']);
+    final reviewRequired = _num(result['reviewRequired']);
+    final skippedCount = result['skipped'] is List
+        ? (result['skipped'] as List).length
+        : _num(result['skipped']);
+    final duplicates = _num(result['duplicateSkipped']) +
+        _num(result['fileDuplicates']) +
+        _num(result['mobileDuplicates']);
+    final missing = failedRecords
+        .where((record) =>
+            '${record['reason'] ?? ''}'.toLowerCase().contains('missing'))
+        .length;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Wrap(spacing: 8, runSpacing: 8, children: [
+        _ImportMetric('Imported', imported, Icons.done_all_rounded, green),
+        _ImportMetric('Created', created, Icons.person_add_rounded, blue),
+        _ImportMetric('Updated', updated, Icons.edit_note_rounded, purple),
+        _ImportMetric(
+            'Review', reviewRequired, Icons.fact_check_rounded, orange),
+        _ImportMetric('Skipped', skippedCount, Icons.block_rounded, rose),
+        _ImportMetric('Duplicate', duplicates, Icons.copy_rounded, orange),
+        _ImportMetric(
+            'Missing data', missing, Icons.error_outline_rounded, rose),
+      ]),
+      const SizedBox(height: 12),
+      if (reviewRequired > 0)
+        OutlinedButton.icon(
+          onPressed: onReview,
+          icon: const Icon(Icons.fact_check_rounded),
+          label: Text('$reviewRequired records review करें'),
+        ),
+      if (failedRecords.isNotEmpty) ...[
+        const SizedBox(height: 12),
+        _FailedRecordsList(records: failedRecords),
+      ],
+    ]);
+  }
+
+  static int _num(dynamic value) =>
+      value is num ? value.toInt() : int.tryParse('$value') ?? 0;
+}
+
+class _ImportMetric extends StatelessWidget {
+  const _ImportMetric(this.label, this.value, this.icon, this.color);
+  final String label;
+  final int value;
+  final IconData icon;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: .08),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: color.withValues(alpha: .18)),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, color: color, size: 17),
+          const SizedBox(width: 6),
+          Text('$label: $value',
+              style: const TextStyle(
+                  color: navy, fontSize: 12, fontWeight: FontWeight.w900)),
+        ]),
+      );
+}
+
+class _FailedRecordsList extends StatelessWidget {
+  const _FailedRecordsList({required this.records});
+  final List<Map<String, dynamic>> records;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xfffff8fa),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: rose.withValues(alpha: .20)),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('Failed / skipped records',
+              style: TextStyle(color: navy, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 8),
+          ...records.take(8).map((record) {
+            final row = record['row'] ?? record['item']?['row'] ?? '-';
+            final reason = record['reason'] ?? 'Unknown reason';
+            final name =
+                record['item']?['name'] ?? record['row']?['name'] ?? '';
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text(
+                  '• Row $row ${name.toString().isEmpty ? '' : '· $name'} — $reason',
+                  style: const TextStyle(color: navy, fontSize: 12)),
+            );
+          }),
+          if (records.length > 8)
+            Text('+${records.length - 8} और records review में हैं',
+                style: const TextStyle(color: muted, fontSize: 12)),
+        ]),
+      );
+}
+
 class _PhoneImportProgress extends StatelessWidget {
   const _PhoneImportProgress({required this.state});
   final _UploadPageState state;
@@ -568,6 +830,21 @@ class _PhoneImportProgress extends StatelessWidget {
           Text(_phoneProgressText(state),
               style: const TextStyle(
                   color: navy, fontSize: 12, fontWeight: FontWeight.w700)),
+          if (state.ocrPagesTotal > 0 || state.ocrCardsTotal > 0) ...[
+            const SizedBox(height: 10),
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              if (state.ocrPagesTotal > 0)
+                _ProgressMiniStat(
+                    icon: Icons.picture_as_pdf_rounded,
+                    label: 'OCR pages',
+                    value: '${state.ocrPagesProcessed}/${state.ocrPagesTotal}'),
+              if (state.ocrCardsTotal > 0)
+                _ProgressMiniStat(
+                    icon: Icons.badge_rounded,
+                    label: 'Voter cards',
+                    value: '${state.ocrCardsProcessed}/${state.ocrCardsTotal}'),
+            ]),
+          ],
           const SizedBox(height: 16),
           _ImportStep(label: 'फाइल अपलोड', done: state.serverProcessing),
           _ImportStep(
@@ -624,10 +901,16 @@ class _PhoneImportResult extends StatelessWidget {
     required this.success,
     required this.message,
     required this.filename,
+    required this.result,
+    required this.failedRecords,
+    required this.onReview,
   });
   final bool success;
   final String message;
   final String? filename;
+  final Map<String, dynamic>? result;
+  final List<Map<String, dynamic>> failedRecords;
+  final VoidCallback onReview;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -659,6 +942,14 @@ class _PhoneImportResult extends StatelessWidget {
               ],
               const SizedBox(height: 7),
               Text(message, style: const TextStyle(color: navy, fontSize: 12)),
+              if (result != null) ...[
+                const SizedBox(height: 12),
+                _ImportReviewSummary(
+                  result: result!,
+                  failedRecords: failedRecords,
+                  onReview: onReview,
+                ),
+              ],
             ]),
           ),
         ]),
@@ -701,6 +992,19 @@ String _phoneProgressText(_UploadPageState state) {
   return state.processingStage.isEmpty
       ? 'सर्वर पर processing शुरू हो रही है…'
       : _localizedStage(state.processingStage);
+}
+
+List<Map<String, dynamic>> _extractFailedRecords(Map<String, dynamic> result) {
+  final raw = result['failed'] ?? result['failedRecords'] ?? result['skipped'];
+  if (raw is! List) return const [];
+  return raw
+      .whereType<Object?>()
+      .map((item) {
+        if (item is Map) return Map<String, dynamic>.from(item);
+        return {'reason': '$item'};
+      })
+      .where((item) => item.isNotEmpty)
+      .toList();
 }
 
 String _formatBytes(int bytes) {

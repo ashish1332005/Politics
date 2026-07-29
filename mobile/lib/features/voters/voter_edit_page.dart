@@ -2,12 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/api_client.dart';
+import '../../core/contact_actions.dart';
 import '../../core/picked_file_source.dart';
 import '../../core/print_helper.dart';
 import '../../core/theme.dart';
-import 'voter_contact_actions.dart';
 
 class VoterEditPage extends StatefulWidget {
   const VoterEditPage({super.key, required this.voter, required this.onSaved});
@@ -144,6 +145,7 @@ class _VoterEditPageState extends State<VoterEditPage> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
+        backgroundColor: const Color(0xfff7f8fb),
         appBar: AppBar(
           toolbarHeight: 66,
           backgroundColor: Colors.white,
@@ -168,16 +170,19 @@ class _VoterEditPageState extends State<VoterEditPage> {
             const SizedBox(width: 12),
           ],
         ),
+        bottomNavigationBar: _stickySaveBar(),
         body: Form(
           key: formKey,
           child: ListView(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
             children: [
               _profile(),
               _section('व्यक्तिगत जानकारी', Icons.person_outline, [
-                _field('name', 'नाम *', required: true),
-                _field('surname', 'उपनाम'),
-                _field('guardianName', 'पिता / पति का नाम'),
+                _field('name', 'नाम *',
+                    icon: Icons.person_rounded, required: true),
+                _field('surname', 'उपनाम', icon: Icons.badge_rounded),
+                _field('guardianName', 'पिता / पति का नाम',
+                    icon: Icons.family_restroom_rounded),
                 _dropdown(
                     'संबंध',
                     relationType,
@@ -189,21 +194,14 @@ class _VoterEditPageState extends State<VoterEditPage> {
                       'other': 'अन्य'
                     },
                     (v) => relationType = v),
-                _field('age', 'उम्र', number: true),
+                _field('age', 'उम्र', icon: Icons.cake_rounded, number: true),
                 _dateField('dob', 'जन्म तिथि'),
-                _dropdown(
-                    'लिंग',
-                    gender,
-                    const {
-                      '': 'चुनें',
-                      'male': 'पुरुष',
-                      'female': 'महिला',
-                      'other': 'अन्य'
-                    },
-                    (v) => gender = v),
+                _genderCards(),
                 _dateField('anniversary', 'विवाह वर्षगांठ'),
-                _field('mobile', 'मोबाइल नंबर', number: true),
-                _field('altMobile', 'वैकल्पिक मोबाइल नंबर', number: true),
+                _field('mobile', 'मोबाइल नंबर',
+                    icon: Icons.call_rounded, number: true),
+                _field('altMobile', 'वैकल्पिक मोबाइल नंबर',
+                    icon: Icons.phone_iphone_rounded, number: true),
               ]),
               _section('पता एवं चुनाव जानकारी', Icons.home_outlined, [
                 _field('houseNumber', 'घर संख्या'),
@@ -253,65 +251,239 @@ class _VoterEditPageState extends State<VoterEditPage> {
                 _field('occupation', 'व्यवसाय'),
                 _field('education', 'शिक्षा'),
               ]),
-              _actions(),
+              _dangerActions(),
             ],
           ),
         ),
       );
 
-  Widget _profile() => Card(
-        elevation: 0,
+  Widget _profile() {
+    final mobile =
+        fields['mobile']?.text.trim() ?? '${widget.voter['mobile'] ?? ''}';
+    final name = fields['name']?.text.trim().isNotEmpty == true
+        ? fields['name']!.text.trim()
+        : '${widget.voter['name'] ?? '-'}';
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
         color: Colors.white,
-        margin: const EdgeInsets.only(bottom: 16),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(22),
-          side: const BorderSide(color: border),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(18),
-          child: Row(children: [
-            InkWell(
-              onTap: _pickPhoto,
-              borderRadius: BorderRadius.circular(12),
-              child: Stack(clipBehavior: Clip.none, children: [
-                ClipOval(
-                  child:
-                      SizedBox(width: 96, height: 96, child: _photoPreview()),
+        borderRadius: BorderRadius.circular(26),
+        border: Border.all(color: border),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0f071b4b),
+            blurRadius: 22,
+            offset: Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          InkWell(
+            onTap: _pickPhoto,
+            borderRadius: BorderRadius.circular(24),
+            child: Stack(clipBehavior: Clip.none, children: [
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border:
+                      Border.all(color: blue.withValues(alpha: .25), width: 2),
                 ),
-                const Positioned(
-                    right: -2,
-                    bottom: 0,
-                    child: CircleAvatar(
-                        radius: 17,
-                        backgroundColor: blue,
-                        child: Icon(Icons.camera_alt_outlined,
-                            color: Colors.white, size: 17))),
-              ]),
+                child: ClipOval(
+                  child:
+                      SizedBox(width: 100, height: 100, child: _photoPreview()),
+                ),
+              ),
+              Positioned(
+                right: -4,
+                bottom: 6,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: blue,
+                    borderRadius: BorderRadius.circular(18),
+                    boxShadow: const [
+                      BoxShadow(color: Color(0x330d6efd), blurRadius: 10),
+                    ],
+                  ),
+                  child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.camera_alt_rounded,
+                        color: Colors.white, size: 15),
+                    SizedBox(width: 4),
+                    Text('फोटो',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w900)),
+                  ]),
+                ),
+              ),
+            ]),
+          ),
+          const SizedBox(width: 18),
+          Expanded(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                Text(name,
+                    style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w900,
+                        color: navy)),
+                const SizedBox(height: 8),
+                _ProfileMiniRow(
+                    Icons.badge_outlined,
+                    'मतदाता आईडी (EPIC)',
+                    fields['voterId']!.text.isEmpty
+                        ? '-'
+                        : fields['voterId']!.text),
+                const SizedBox(height: 5),
+                _ProfileMiniRow(
+                    Icons.tag_rounded,
+                    'मतदाता क्रमांक',
+                    fields['voterSerial']!.text.isEmpty
+                        ? '-'
+                        : fields['voterSerial']!.text),
+                const SizedBox(height: 8),
+                Text(
+                    'अंतिम अपडेट: ${_formattedDate(widget.voter['updatedAt'])}',
+                    style: const TextStyle(color: muted, fontSize: 12)),
+              ])),
+        ]),
+        const SizedBox(height: 16),
+        Wrap(spacing: 9, runSpacing: 9, children: [
+          _HeroAction(
+            icon: Icons.call_rounded,
+            label: 'कॉल',
+            color: green,
+            onTap: () => callNumber(context, mobile),
+          ),
+          _HeroAction(
+            icon: Icons.chat_rounded,
+            label: 'WhatsApp',
+            color: const Color(0xff25d366),
+            onTap: () =>
+                openWhatsApp(context, mobile, message: 'नमस्कार $name जी,'),
+          ),
+          _HeroAction(
+            icon: Icons.sms_rounded,
+            label: 'SMS',
+            color: blue,
+            onTap: _sendSms,
+          ),
+          _HeroAction(
+            icon: Icons.bookmark_border_rounded,
+            label: 'सेव करें',
+            color: navy,
+            onTap: saving ? null : save,
+          ),
+        ]),
+      ]),
+    );
+  }
+
+  Future<void> _sendSms() async {
+    final mobile = (fields['mobile']?.text ?? '${widget.voter['mobile'] ?? ''}')
+        .replaceAll(RegExp(r'\D'), '');
+    if (mobile.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('SMS के लिए मोबाइल नंबर उपलब्ध नहीं है।')));
+      return;
+    }
+    final uri = Uri.parse('sms:$mobile');
+    if (!await launchUrl(uri) && mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('SMS app नहीं खुल सकी।')));
+    }
+  }
+
+  Widget _genderCards() => _FullWidth(
+        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('लिंग',
+              style: TextStyle(color: muted, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 8),
+          Wrap(spacing: 10, runSpacing: 10, children: [
+            _ChoiceCard(
+              selected: gender == 'male',
+              icon: Icons.male_rounded,
+              label: 'पुरुष',
+              onTap: () => setState(() => gender = 'male'),
             ),
-            const SizedBox(width: 20),
-            Expanded(
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                  Text('${widget.voter['name'] ?? '-'}',
-                      style: const TextStyle(
-                          fontSize: 23,
-                          fontWeight: FontWeight.w900,
-                          color: navy)),
-                  const SizedBox(height: 8),
-                  _ProfileMiniRow(Icons.badge_outlined, 'मतदाता आईडी (EPIC)',
-                      '${widget.voter['voterId'] ?? '-'}'),
-                  const SizedBox(height: 5),
-                  _ProfileMiniRow(Icons.tag_rounded, 'मतदाता क्रमांक',
-                      '${widget.voter['voterSerial'] ?? '-'}'),
-                  const SizedBox(height: 10),
-                  VoterContactActions(voter: widget.voter),
-                  const Divider(),
-                  Text(
-                      'अंतिम अपडेट: ${_formattedDate(widget.voter['updatedAt'])}',
-                      style: const TextStyle(color: muted, fontSize: 12)),
-                ])),
+            _ChoiceCard(
+              selected: gender == 'female',
+              icon: Icons.female_rounded,
+              label: 'महिला',
+              onTap: () => setState(() => gender = 'female'),
+            ),
+            _ChoiceCard(
+              selected: gender == 'other',
+              icon: Icons.person_outline_rounded,
+              label: 'अन्य',
+              onTap: () => setState(() => gender = 'other'),
+            ),
           ]),
+        ]),
+      );
+
+  Widget _stickySaveBar() => SafeArea(
+        top: false,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            border: Border(top: BorderSide(color: border)),
+            boxShadow: [
+              BoxShadow(
+                  color: Color(0x14071b4b),
+                  blurRadius: 18,
+                  offset: Offset(0, -8)),
+            ],
+          ),
+          child: LayoutBuilder(builder: (context, box) {
+            final wide = box.maxWidth > 680;
+            final buttons = Row(mainAxisSize: MainAxisSize.min, children: [
+              SizedBox(
+                width: wide ? 150 : 0,
+                child: wide
+                    ? OutlinedButton.icon(
+                        onPressed: saving ? null : () => Navigator.pop(context),
+                        icon: const Icon(Icons.close_rounded),
+                        label: const Text('रद्द करें'),
+                      )
+                    : const SizedBox.shrink(),
+              ),
+              if (wide) const SizedBox(width: 12),
+              SizedBox(
+                width: wide ? 260 : box.maxWidth,
+                child: FilledButton.icon(
+                  onPressed: saving ? null : save,
+                  icon: saving
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Icon(Icons.save_rounded),
+                  label: Text(saving ? 'सहेज रहे हैं...' : 'सुरक्षित करें'),
+                ),
+              ),
+            ]);
+            if (!wide) return buttons;
+            return Row(children: [
+              const Icon(Icons.verified_user_rounded, color: green, size: 20),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text('बदलाव save करने के बाद voter list refresh होगी',
+                    style:
+                        TextStyle(color: muted, fontWeight: FontWeight.w700)),
+              ),
+              buttons,
+            ]);
+          }),
         ),
       );
 
@@ -381,13 +553,17 @@ class _VoterEditPageState extends State<VoterEditPage> {
       bool number = false,
       int lines = 1,
       bool full = false,
-      bool readOnly = false}) {
+      bool readOnly = false,
+      IconData? icon}) {
     final field = TextFormField(
       controller: fields[key],
       readOnly: readOnly,
       maxLines: lines,
       keyboardType: number ? TextInputType.number : TextInputType.text,
-      decoration: InputDecoration(labelText: label),
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: icon == null ? null : Icon(icon, size: 20),
+      ),
       validator: required
           ? (value) =>
               value == null || value.trim().isEmpty ? '$label आवश्यक है' : null
@@ -401,7 +577,20 @@ class _VoterEditPageState extends State<VoterEditPage> {
         readOnly: true,
         decoration: InputDecoration(
             labelText: label,
-            suffixIcon: const Icon(Icons.calendar_month_outlined)),
+            helperText: 'Calendar से तारीख चुनें',
+            prefixIcon: const Icon(Icons.calendar_today_rounded),
+            suffixIcon: Row(mainAxisSize: MainAxisSize.min, children: [
+              if (fields[key]!.text.isNotEmpty)
+                IconButton(
+                  tooltip: 'तारीख हटाएँ',
+                  onPressed: () => setState(() => fields[key]!.clear()),
+                  icon: const Icon(Icons.close_rounded, size: 18),
+                ),
+              const Padding(
+                padding: EdgeInsets.only(right: 8),
+                child: Icon(Icons.calendar_month_outlined),
+              ),
+            ])),
         onTap: () async {
           final date = await showDatePicker(
               context: context,
@@ -410,7 +599,8 @@ class _VoterEditPageState extends State<VoterEditPage> {
               initialDate:
                   DateTime.tryParse(fields[key]!.text) ?? DateTime.now());
           if (date != null) {
-            fields[key]!.text = DateFormat('yyyy-MM-dd').format(date);
+            setState(() =>
+                fields[key]!.text = DateFormat('yyyy-MM-dd').format(date));
           }
         },
       );
@@ -428,7 +618,7 @@ class _VoterEditPageState extends State<VoterEditPage> {
         }),
       );
 
-  Widget _actions() => Padding(
+  Widget _dangerActions() => Padding(
         padding: const EdgeInsets.only(bottom: 24),
         child: Wrap(
             alignment: WrapAlignment.end,
@@ -440,14 +630,6 @@ class _VoterEditPageState extends State<VoterEditPage> {
                   icon: const Icon(Icons.delete_outline, color: Colors.red),
                   label:
                       const Text('हटाएं', style: TextStyle(color: Colors.red))),
-              OutlinedButton.icon(
-                  onPressed: saving ? null : () => Navigator.pop(context),
-                  icon: const Icon(Icons.close),
-                  label: const Text('रद्द करें')),
-              FilledButton.icon(
-                  onPressed: saving ? null : save,
-                  icon: const Icon(Icons.save_outlined),
-                  label: Text(saving ? 'सहेज रहे हैं...' : 'सहेजें')),
             ]),
       );
 
@@ -464,6 +646,81 @@ class _FullWidth extends StatelessWidget {
   final Widget child;
   @override
   Widget build(BuildContext context) => child;
+}
+
+class _HeroAction extends StatelessWidget {
+  const _HeroAction({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          width: 116,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: .08),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: color.withValues(alpha: .18)),
+          ),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Icon(icon, color: color, size: 22),
+            const SizedBox(height: 6),
+            Text(label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                    color: navy, fontSize: 12, fontWeight: FontWeight.w900)),
+          ]),
+        ),
+      );
+}
+
+class _ChoiceCard extends StatelessWidget {
+  const _ChoiceCard({
+    required this.selected,
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final bool selected;
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          width: 124,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+          decoration: BoxDecoration(
+            color: selected ? softBlue : Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: selected ? blue : border, width: 1.2),
+          ),
+          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Icon(icon, color: selected ? blue : muted, size: 21),
+            const SizedBox(width: 7),
+            Text(label,
+                style: TextStyle(
+                    color: selected ? blue : navy,
+                    fontWeight: FontWeight.w900)),
+          ]),
+        ),
+      );
 }
 
 class _ProfileMiniRow extends StatelessWidget {

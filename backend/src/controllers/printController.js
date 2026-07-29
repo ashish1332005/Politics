@@ -88,15 +88,22 @@ function applyPrintFilters(req, filter) {
 }
 
 function mediaIdFromPhoto(photo) {
-  const match = String(photo || '').match(/^\/media\/([a-f0-9]{24})$/i);
+  const raw = String(photo || '').trim();
+  let value = raw;
+  try { value = new URL(raw).pathname; } catch (_) {}
+  const match = value.match(/\/media\/([a-f0-9]{24})(?:$|[/?#])/i);
   return match ? match[1] : null;
 }
 
 function photoPath(member) {
-  if (!member.photo || /^https?:/i.test(member.photo) || mediaIdFromPhoto(member.photo)) return null;
-  const relative = String(member.photo).replace(/^[/\\]+/, '');
+  if (!member.photo || mediaIdFromPhoto(member.photo)) return null;
+  const raw = String(member.photo).trim();
+  let value = raw;
+  try { value = new URL(raw).pathname; } catch (_) {}
+  if (/^https?:/i.test(value)) return null;
+  const relative = String(value).replace(/^[/\\]+/, '');
   const candidates = [
-    resolveUploadPublicPath(member.photo),
+    resolveUploadPublicPath(value),
     path.resolve(process.cwd(), relative),
     path.resolve(__dirname, '../../', relative),
   ];
@@ -192,15 +199,23 @@ exports.printMembers = async (req, res, next) => {
 
       prepared.forEach((item, column) => {
         const x = margin + column * (cardWidth + gap);
-        doc.roundedRect(x, y, cardWidth, rowHeight, 6).lineWidth(.8).strokeColor('#cbd5e1').stroke();
+        doc.roundedRect(x, y, cardWidth, rowHeight, 8).lineWidth(.8).strokeColor('#cbd5e1').stroke();
+        doc.roundedRect(x, y, cardWidth, Math.min(22, rowHeight), 8).fillOpacity(0.05).fillAndStroke('#2563eb', '#cbd5e1').fillOpacity(1);
         let textX = x + 9;
         if (includePhoto) {
           const image = getPhotoSource(item.member);
           if (image) {
-            try { doc.image(image, x + 9, y + 10, { fit: [48, 62], align: 'center', valign: 'center' }); }
-            catch (_) { doc.rect(x + 9, y + 10, 48, 62).strokeColor('#dbe4f2').stroke(); }
+            try {
+              doc.roundedRect(x + 9, y + 10, 48, 62, 3).strokeColor('#dbe4f2').stroke();
+              doc.image(image, x + 9, y + 10, { fit: [48, 62], align: 'center', valign: 'center' });
+            }
+            catch (_) {
+              doc.roundedRect(x + 9, y + 10, 48, 62, 3).strokeColor('#dbe4f2').stroke();
+              doc.font('Hindi').fontSize(6).fillColor('#94a3b8').text('Photo', x + 9, y + 36, { width: 48, align: 'center' });
+            }
           } else {
-            doc.rect(x + 9, y + 10, 48, 62).strokeColor('#dbe4f2').stroke();
+            doc.roundedRect(x + 9, y + 10, 48, 62, 3).strokeColor('#dbe4f2').stroke();
+            doc.font('Hindi').fontSize(6).fillColor('#94a3b8').text('Photo', x + 9, y + 36, { width: 48, align: 'center' });
           }
           textX += photoWidth;
         }
