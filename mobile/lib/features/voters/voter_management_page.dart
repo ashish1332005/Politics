@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -42,6 +42,7 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
   final organizationPost = TextEditingController();
   final sectionName = TextEditingController();
   final assemblyNumber = TextEditingController();
+  final searchFocus = FocusNode();
   final speech = SpeechToText();
   final selectedIds = <String>{};
   final selectedOptionFilters = <String, Map<String, String>>{};
@@ -101,6 +102,7 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
     organizationPost.dispose();
     sectionName.dispose();
     assemblyNumber.dispose();
+    searchFocus.dispose();
     speech.stop();
     super.dispose();
   }
@@ -200,6 +202,26 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
       selectedOptionLabels.clear();
       refreshVoters();
     });
+  }
+
+  Future<void> useQuickSearch(String mode) async {
+    final cleanMode = mode.startsWith('जैसे') ? 'नाम' : mode;
+    final value = await showDialog<String>(
+      context: context,
+      builder: (_) => _QuickSearchDialog(mode: cleanMode),
+    );
+    if (value == null || value.trim().isEmpty || !mounted) {
+      searchFocus.requestFocus();
+      return;
+    }
+    setState(() {
+      search.text = value.trim();
+      search.selection = TextSelection.collapsed(offset: search.text.length);
+      currentPage = 1;
+      selectedIds.clear();
+      refreshVoters();
+    });
+    searchFocus.requestFocus();
   }
 
   Future<void> openLocationCorrection() async {
@@ -476,6 +498,7 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
           children: [
             _EasyVoterSearchCard(
               controller: search,
+              focusNode: searchFocus,
               listening: listening,
               onChanged: searchChanged,
               onSubmitted: (_) => filtersChanged(),
@@ -484,6 +507,7 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
                 filtersChanged();
               },
               onMic: toggleVoiceSearch,
+              onQuickPick: useQuickSearch,
             ),
             const SizedBox(height: 16),
             _PhoneCategoryStrip(
@@ -648,6 +672,7 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
         final compact = constraints.maxWidth < 620;
         final searchBox = _EasyVoterSearchField(
           controller: search,
+          focusNode: searchFocus,
           listening: listening,
           onChanged: searchChanged,
           onSubmitted: (_) {
@@ -694,7 +719,7 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
               style: TextStyle(color: Colors.red, fontWeight: FontWeight.w700)),
         ),
       const SizedBox(height: 8),
-      const _SearchHelpStrip(),
+      _SearchHelpStrip(onPick: useQuickSearch),
       _SmartSearchPanel(
         selectedLabels: selectedOptionLabels,
         onPick: openSmartFilter,
@@ -1063,19 +1088,23 @@ class _SmartSearchPanel extends StatelessWidget {
 class _EasyVoterSearchCard extends StatelessWidget {
   const _EasyVoterSearchCard({
     required this.controller,
+    required this.focusNode,
     required this.listening,
     required this.onChanged,
     required this.onSubmitted,
     required this.onClear,
     required this.onMic,
+    required this.onQuickPick,
   });
 
   final TextEditingController controller;
+  final FocusNode focusNode;
   final bool listening;
   final ValueChanged<String> onChanged;
   final ValueChanged<String> onSubmitted;
   final VoidCallback onClear;
   final VoidCallback onMic;
+  final ValueChanged<String> onQuickPick;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -1119,6 +1148,7 @@ class _EasyVoterSearchCard extends StatelessWidget {
           const SizedBox(height: 12),
           _EasyVoterSearchField(
             controller: controller,
+            focusNode: focusNode,
             listening: listening,
             onChanged: onChanged,
             onSubmitted: onSubmitted,
@@ -1135,7 +1165,7 @@ class _EasyVoterSearchCard extends StatelessWidget {
                     fontWeight: FontWeight.w800)),
           ],
           const SizedBox(height: 11),
-          const _SearchHelpStrip(compact: true),
+          _SearchHelpStrip(compact: true, onPick: onQuickPick),
         ]),
       );
 }
@@ -1143,6 +1173,7 @@ class _EasyVoterSearchCard extends StatelessWidget {
 class _EasyVoterSearchField extends StatelessWidget {
   const _EasyVoterSearchField({
     required this.controller,
+    required this.focusNode,
     required this.listening,
     required this.onChanged,
     required this.onSubmitted,
@@ -1152,6 +1183,7 @@ class _EasyVoterSearchField extends StatelessWidget {
   });
 
   final TextEditingController controller;
+  final FocusNode focusNode;
   final bool listening;
   final ValueChanged<String> onChanged;
   final ValueChanged<String> onSubmitted;
@@ -1162,6 +1194,7 @@ class _EasyVoterSearchField extends StatelessWidget {
   @override
   Widget build(BuildContext context) => TextField(
         controller: controller,
+        focusNode: focusNode,
         onChanged: onChanged,
         textInputAction: TextInputAction.search,
         onSubmitted: onSubmitted,
@@ -1209,46 +1242,119 @@ class _EasyVoterSearchField extends StatelessWidget {
 }
 
 class _SearchHelpStrip extends StatelessWidget {
-  const _SearchHelpStrip({this.compact = false});
+  const _SearchHelpStrip({this.compact = false, this.onPick});
   final bool compact;
+  final ValueChanged<String>? onPick;
 
   @override
   Widget build(BuildContext context) => Wrap(
         spacing: 7,
         runSpacing: 7,
         children: [
-          const _SearchHintChip(Icons.person_search_rounded, 'नाम'),
-          const _SearchHintChip(Icons.family_restroom_rounded, 'पिता/पति'),
-          const _SearchHintChip(Icons.badge_outlined, 'EPIC'),
-          const _SearchHintChip(Icons.home_rounded, 'घर'),
-          const _SearchHintChip(Icons.phone_rounded, 'मोबाइल'),
+          _SearchHintChip(Icons.person_search_rounded, 'नाम', onTap: onPick),
+          _SearchHintChip(Icons.family_restroom_rounded, 'पिता/पति',
+              onTap: onPick),
+          _SearchHintChip(Icons.badge_outlined, 'EPIC', onTap: onPick),
+          _SearchHintChip(Icons.home_rounded, 'घर', onTap: onPick),
+          _SearchHintChip(Icons.phone_rounded, 'मोबाइल', onTap: onPick),
           if (!compact)
-            const _SearchHintChip(
-                Icons.lightbulb_outline_rounded, 'जैसे: राम मोहन'),
+            _SearchHintChip(Icons.lightbulb_outline_rounded, 'जैसे: राम मोहन',
+                onTap: onPick),
         ],
       );
 }
 
 class _SearchHintChip extends StatelessWidget {
-  const _SearchHintChip(this.icon, this.label);
+  const _SearchHintChip(this.icon, this.label, {this.onTap});
   final IconData icon;
   final String label;
+  final ValueChanged<String>? onTap;
 
   @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
-        decoration: BoxDecoration(
-          color: const Color(0xfff6f8fc),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: border),
+  Widget build(BuildContext context) => InkWell(
+        onTap: onTap == null ? null : () => onTap!(label),
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+          decoration: BoxDecoration(
+            color: const Color(0xfff6f8fc),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: border),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(icon, color: blue, size: 14),
+            const SizedBox(width: 5),
+            Text(label,
+                style: const TextStyle(
+                    color: navy, fontSize: 12, fontWeight: FontWeight.w800)),
+          ]),
         ),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(icon, color: blue, size: 14),
-          const SizedBox(width: 5),
-          Text(label,
-              style: const TextStyle(
-                  color: navy, fontSize: 12, fontWeight: FontWeight.w800)),
+      );
+}
+
+class _QuickSearchDialog extends StatefulWidget {
+  const _QuickSearchDialog({required this.mode});
+  final String mode;
+
+  @override
+  State<_QuickSearchDialog> createState() => _QuickSearchDialogState();
+}
+
+class _QuickSearchDialogState extends State<_QuickSearchDialog> {
+  final controller = TextEditingController();
+
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  String get hint => switch (widget.mode) {
+        'पिता/पति' => 'पिता या पति का नाम लिखें...',
+        'EPIC' => 'EPIC नंबर लिखें...',
+        'घर' => 'घर संख्या लिखें...',
+        'मोबाइल' => 'मोबाइल नंबर लिखें...',
+        _ => 'मतदाता का नाम लिखें...',
+      };
+
+  IconData get icon => switch (widget.mode) {
+        'पिता/पति' => Icons.family_restroom_rounded,
+        'EPIC' => Icons.badge_outlined,
+        'घर' => Icons.home_rounded,
+        'मोबाइल' => Icons.phone_rounded,
+        _ => Icons.person_search_rounded,
+      };
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: Row(children: [
+          CircleAvatar(
+            backgroundColor: softBlue,
+            child: Icon(icon, color: blue),
+          ),
+          const SizedBox(width: 10),
+          Expanded(child: Text('${widget.mode} से खोजें')),
         ]),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          textInputAction: TextInputAction.search,
+          onSubmitted: (value) => Navigator.pop(context, value),
+          decoration: InputDecoration(
+            hintText: hint,
+            prefixIcon: Icon(icon),
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(context, controller.text),
+            icon: const Icon(Icons.search_rounded),
+            label: const Text('Search'),
+          ),
+        ],
       );
 }
 
@@ -2025,6 +2131,47 @@ class _LocationCorrectionDialogState extends State<_LocationCorrectionDialog> {
   bool get validSource =>
       sourceVillage.text.trim().isNotEmpty && source.length >= 2;
 
+  Future<void> chooseSourceFromDatabase() async {
+    setState(() {
+      loading = true;
+      error = null;
+    });
+    try {
+      final res = await api.getQuery('/api/members/location-groups', {
+        'limit': '300',
+      });
+      final items = List<Map<String, dynamic>>.from(
+        (res['items'] as List? ?? const []).map(
+          (item) => Map<String, dynamic>.from(item),
+        ),
+      );
+      if (!mounted) return;
+      final selected = await showDialog<Map<String, dynamic>>(
+        context: context,
+        builder: (_) => _LocationGroupPicker(items: items),
+      );
+      if (selected == null) return;
+      final key = Map<String, dynamic>.from(selected['key'] as Map? ?? {});
+      setState(() {
+        sourceAssemblyNumber.text = '${key['assemblyNumber'] ?? ''}';
+        sourceAssemblyName.text = '${key['assemblyName'] ?? ''}';
+        sourceGramPanchayat.text = '${key['gramPanchayat'] ?? ''}';
+        sourceVillage.text = '${key['village'] ?? ''}';
+        sourcePartNumber.text = '${key['partNumber'] ?? ''}';
+        newAssemblyNumber.text = sourceAssemblyNumber.text;
+        newAssemblyName.text = sourceAssemblyName.text;
+        newGramPanchayat.text = sourceGramPanchayat.text;
+        newVillage.text = sourceVillage.text;
+        newPartNumber.text = sourcePartNumber.text;
+        matched = null;
+      });
+    } catch (e) {
+      setState(() => error = '$e'.replaceFirst('Exception: ', ''));
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
+  }
+
   Future<void> preview() async {
     if (!validSource) {
       setState(() => error =
@@ -2154,6 +2301,16 @@ class _LocationCorrectionDialogState extends State<_LocationCorrectionDialog> {
                 ),
               ),
               const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: FilledButton.icon(
+                  onPressed: loading ? null : chooseSourceFromDatabase,
+                  icon: const Icon(Icons.dataset_rounded),
+                  label: const Text('Database से पुरानी location चुनें'),
+                ),
+              ),
+              const SizedBox(height: 12),
               const Text('1. पुरानी / गलत location key',
                   style: TextStyle(
                       color: navy, fontSize: 15, fontWeight: FontWeight.w900)),
@@ -2236,6 +2393,97 @@ class _LocationCorrectionDialogState extends State<_LocationCorrectionDialog> {
           ),
         ],
       );
+}
+
+class _LocationGroupPicker extends StatefulWidget {
+  const _LocationGroupPicker({required this.items});
+  final List<Map<String, dynamic>> items;
+
+  @override
+  State<_LocationGroupPicker> createState() => _LocationGroupPickerState();
+}
+
+class _LocationGroupPickerState extends State<_LocationGroupPicker> {
+  String q = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final query = q.toLowerCase();
+    final items = widget.items.where((item) {
+      final label = '${item['label'] ?? ''}'.toLowerCase();
+      return query.isEmpty || label.contains(query);
+    }).toList();
+    return AlertDialog(
+      title: const Text('Source location चुनें'),
+      content: SizedBox(
+        width: 620,
+        height: 560,
+        child: Column(children: [
+          TextField(
+            onChanged: (value) => setState(() => q = value),
+            decoration: const InputDecoration(
+              prefixIcon: Icon(Icons.search_rounded),
+              hintText: 'गाँव, पंचायत, विधानसभा या भाग खोजें...',
+            ),
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            child: items.isEmpty
+                ? const Center(child: Text('कोई location group नहीं मिला'))
+                : ListView.separated(
+                    itemCount: items.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 8),
+                    itemBuilder: (_, index) {
+                      final item = items[index];
+                      final count = item['count'] ?? 0;
+                      return InkWell(
+                        onTap: () => Navigator.pop(context, item),
+                        borderRadius: BorderRadius.circular(16),
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: border),
+                          ),
+                          child: Row(children: [
+                            const CircleAvatar(
+                              backgroundColor: softBlue,
+                              child:
+                                  Icon(Icons.location_on_rounded, color: blue),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('${item['label'] ?? '-'}',
+                                        style: const TextStyle(
+                                            color: navy,
+                                            fontWeight: FontWeight.w900)),
+                                    const SizedBox(height: 3),
+                                    Text('$count voters',
+                                        style: const TextStyle(
+                                            color: muted, fontSize: 12)),
+                                  ]),
+                            ),
+                            const Icon(Icons.chevron_right_rounded,
+                                color: muted),
+                          ]),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ]),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close')),
+      ],
+    );
+  }
 }
 
 class _PrintOptionsDialog extends StatefulWidget {

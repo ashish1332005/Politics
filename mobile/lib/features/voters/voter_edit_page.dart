@@ -260,7 +260,13 @@ class _VoterEditPageState extends State<VoterEditPage> {
       );
 
   Widget _profile() => Card(
+        elevation: 0,
+        color: Colors.white,
         margin: const EdgeInsets.only(bottom: 16),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(22),
+          side: const BorderSide(color: border),
+        ),
         child: Padding(
           padding: const EdgeInsets.all(18),
           child: Row(children: [
@@ -293,10 +299,11 @@ class _VoterEditPageState extends State<VoterEditPage> {
                           fontWeight: FontWeight.w900,
                           color: navy)),
                   const SizedBox(height: 8),
-                  Text('मतदाता आईडी (EPIC): ${widget.voter['voterId'] ?? '-'}',
-                      style: const TextStyle(color: muted)),
-                  Text('मतदाता क्रमांक: ${widget.voter['voterSerial'] ?? '-'}',
-                      style: const TextStyle(color: muted)),
+                  _ProfileMiniRow(Icons.badge_outlined, 'मतदाता आईडी (EPIC)',
+                      '${widget.voter['voterId'] ?? '-'}'),
+                  const SizedBox(height: 5),
+                  _ProfileMiniRow(Icons.tag_rounded, 'मतदाता क्रमांक',
+                      '${widget.voter['voterSerial'] ?? '-'}'),
                   const SizedBox(height: 10),
                   VoterContactActions(voter: widget.voter),
                   const Divider(),
@@ -334,7 +341,13 @@ class _VoterEditPageState extends State<VoterEditPage> {
   }
 
   Widget _section(String title, IconData icon, List<Widget> children) => Card(
+        elevation: 0,
+        color: Colors.white,
         margin: const EdgeInsets.only(bottom: 16),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(22),
+          side: const BorderSide(color: border),
+        ),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child:
@@ -451,4 +464,34 @@ class _FullWidth extends StatelessWidget {
   final Widget child;
   @override
   Widget build(BuildContext context) => child;
+}
+
+class _ProfileMiniRow extends StatelessWidget {
+  const _ProfileMiniRow(this.icon, this.label, this.value);
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => Row(children: [
+        Container(
+          width: 28,
+          height: 28,
+          decoration: BoxDecoration(
+            color: softBlue,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, color: blue, size: 15),
+        ),
+        const SizedBox(width: 9),
+        Expanded(
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(label, style: const TextStyle(color: muted, fontSize: 11)),
+            Text(value,
+                style: const TextStyle(
+                    color: navy, fontSize: 14, fontWeight: FontWeight.w900)),
+          ]),
+        ),
+      ]);
 }
