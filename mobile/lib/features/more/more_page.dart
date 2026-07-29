@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/api_client.dart';
 import '../../core/theme.dart';
 import '../../layout/app_layout.dart';
 import '../../widgets/mobile_components.dart';
@@ -64,6 +65,53 @@ class MorePage extends StatelessWidget {
           Icons.settings_rounded, purple, const SettingsPage()),
     ];
 
+    if (MediaQuery.sizeOf(context).width < 700) {
+      return AppPage(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 110),
+        children: [
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: border),
+            ),
+            child: Row(children: [
+              const CircleAvatar(
+                radius: 27,
+                backgroundColor: softBlue,
+                foregroundColor: blue,
+                child: Icon(Icons.person_rounded, size: 28),
+              ),
+              const SizedBox(width: 13),
+              Expanded(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('${api.user?['name'] ?? 'User'}',
+                          style: const TextStyle(
+                              color: navy,
+                              fontSize: 17,
+                              fontWeight: FontWeight.w900)),
+                      Text(role == 'admin' ? 'Administrator' : 'Booth Manager',
+                          style: const TextStyle(color: muted, fontSize: 11)),
+                    ]),
+              ),
+              IconButton.filledTonal(
+                onPressed: () =>
+                    _open(context, const SettingsPage(), 'सेटिंग्स'),
+                icon: const Icon(Icons.settings_rounded, color: blue),
+              ),
+            ]),
+          ),
+          _PhoneMoreSection(title: 'आयात और डेटा', options: importOptions),
+          _PhoneMoreSection(title: 'काम और संपर्क', options: workOptions),
+          _PhoneMoreSection(
+              title: 'रिपोर्ट और विश्लेषण', options: reportOptions),
+          _PhoneMoreSection(title: 'प्रबंधन', options: adminOptions),
+        ],
+      );
+    }
     return AppPage(children: [
       AppHeroBanner(
         title: 'अधिक विकल्प',
@@ -94,6 +142,80 @@ class MorePage extends StatelessWidget {
       ),
     );
   }
+}
+
+class _PhoneMoreSection extends StatelessWidget {
+  const _PhoneMoreSection({required this.title, required this.options});
+  final String title;
+  final List<_Option> options;
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(left: 2, bottom: 10),
+            child: Text(title,
+                style: const TextStyle(
+                    color: navy, fontSize: 16, fontWeight: FontWeight.w900)),
+          ),
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: border),
+            ),
+            child: Column(
+              children: options
+                  .map((option) => InkWell(
+                        onTap: () =>
+                            MorePage._open(context, option.page, option.title),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 13),
+                          decoration: const BoxDecoration(
+                            border: Border(
+                                bottom: BorderSide(color: Color(0xffedf0f5))),
+                          ),
+                          child: Row(children: [
+                            Container(
+                              width: 43,
+                              height: 43,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: option.color.withValues(alpha: .1),
+                              ),
+                              child: Icon(option.icon,
+                                  color: option.color, size: 21),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(option.title,
+                                        style: const TextStyle(
+                                            color: navy,
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w900)),
+                                    const SizedBox(height: 2),
+                                    Text(option.subtitle,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                            color: muted, fontSize: 11)),
+                                  ]),
+                            ),
+                            const Icon(Icons.chevron_right_rounded,
+                                color: muted),
+                          ]),
+                        ),
+                      ))
+                  .toList(),
+            ),
+          ),
+        ],
+      );
 }
 
 class _OptionSection extends StatelessWidget {
@@ -140,15 +262,39 @@ class _StandalonePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(
+          toolbarHeight: 64,
           title: Text(title),
           backgroundColor: Colors.white,
           foregroundColor: navy,
           surfaceTintColor: Colors.white,
           actions: [
-            IconButton(
-              tooltip: 'बंद करें',
-              onPressed: () => Navigator.pop(context),
-              icon: const Icon(Icons.close_rounded),
+            Padding(
+              padding: const EdgeInsets.only(right: 10),
+              child: TextButton.icon(
+                style: TextButton.styleFrom(
+                  foregroundColor: navy,
+                  backgroundColor: softBlue,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(22)),
+                ),
+                onPressed: () => showDialog<void>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    icon: const Icon(Icons.help_rounded, color: blue, size: 34),
+                    title: Text('$title सहायता'),
+                    content: const Text(
+                        'इस screen के मुख्य विकल्प ऊपर से नीचे आसान steps में दिए गए हैं। किसी action से पहले चुनी हुई जानकारी ध्यान से जांचें।'),
+                    actions: [
+                      FilledButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('समझ गया'),
+                      ),
+                    ],
+                  ),
+                ),
+                icon: const Icon(Icons.help_rounded, size: 18),
+                label: const Text('सहायता'),
+              ),
             ),
           ],
         ),

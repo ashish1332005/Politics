@@ -307,11 +307,14 @@ class _BulkMessagePageState extends State<BulkMessagePage> {
             if ('${sender['_id']}' == senderId) selectedSender = sender;
           }
           return AppPage(children: [
-            PageHeading(
-              title: 'WhatsApp Campaign',
+            PremiumFeatureHero(
+              title: 'WhatsApp अभियान',
               subtitle:
-                  'Opt-in contacts को controlled batches में message भेजें',
-              action: OutlinedButton.icon(
+                  'सहमति वाले contacts को सुरक्षित batches में personal message भेजें।',
+              icon: Icons.campaign_rounded,
+              accent: green,
+              badges: const ['Opt-in', 'Batch control', 'History'],
+              action: FilledButton.icon(
                   onPressed: saveSender,
                   icon: const Icon(Icons.add_call),
                   label: const Text('Sender जोड़ें')),

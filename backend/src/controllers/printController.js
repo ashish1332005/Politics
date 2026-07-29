@@ -2,6 +2,7 @@
 const path = require('path');
 const PDFDocument = require('pdfkit');
 const Member = require('../models/Member');
+const MediaAsset = require('../models/MediaAsset');
 const { applyMemberScope } = require('../utils/boothAccess');
 const { resolveUploadPublicPath } = require('../utils/uploadPath');
 
@@ -86,8 +87,13 @@ function applyPrintFilters(req, filter) {
   }
 }
 
+function mediaIdFromPhoto(photo) {
+  const match = String(photo || '').match(/^\/media\/([a-f0-9]{24})$/i);
+  return match ? match[1] : null;
+}
+
 function photoPath(member) {
-  if (!member.photo || /^https?:/i.test(member.photo)) return null;
+  if (!member.photo || /^https?:/i.test(member.photo) || mediaIdFromPhoto(member.photo)) return null;
   const relative = String(member.photo).replace(/^[/\\]+/, '');
   const candidates = [
     resolveUploadPublicPath(member.photo),
@@ -95,6 +101,20 @@ function photoPath(member) {
     path.resolve(__dirname, '../../', relative),
   ];
   return candidates.find((candidate) => fs.existsSync(candidate)) || null;
+}
+
+async function loadPhotoSources(members) {
+  const mediaIds = [...new Set(members.map((member) => mediaIdFromPhoto(member.photo)).filter(Boolean))];
+  const media = new Map();
+  if (mediaIds.length) {
+    const assets = await MediaAsset.find({ _id: { $in: mediaIds } }).select('+data contentType').lean();
+    for (const asset of assets) media.set(String(asset._id), asset.data);
+  }
+  return (member) => {
+    const mediaId = mediaIdFromPhoto(member.photo);
+    if (mediaId) return media.get(mediaId) || null;
+    return photoPath(member);
+  };
 }
 
 function fieldRows(doc, member, selected, width) {
@@ -122,6 +142,7 @@ exports.printMembers = async (req, res, next) => {
       .collation({ locale: 'en', numericOrdering: true, strength: 1 })
       .limit(5000)
       .lean();
+    const getPhotoSource = await loadPhotoSources(members);
 
     const selected = [...new Set(String(req.query.fields || 'name,voterId,mobile,village,booth')
       .split(',').map((key) => key.trim()).filter((key) => fields[key]))];
@@ -174,7 +195,7 @@ exports.printMembers = async (req, res, next) => {
         doc.roundedRect(x, y, cardWidth, rowHeight, 6).lineWidth(.8).strokeColor('#cbd5e1').stroke();
         let textX = x + 9;
         if (includePhoto) {
-          const image = photoPath(item.member);
+          const image = getPhotoSource(item.member);
           if (image) {
             try { doc.image(image, x + 9, y + 10, { fit: [48, 62], align: 'center', valign: 'center' }); }
             catch (_) { doc.rect(x + 9, y + 10, 48, 62).strokeColor('#dbe4f2').stroke(); }

@@ -145,25 +145,25 @@ class _VoterEditPageState extends State<VoterEditPage> {
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(
-          toolbarHeight: 78,
-          backgroundColor: royalBlue,
-          foregroundColor: Colors.white,
+          toolbarHeight: 66,
+          backgroundColor: Colors.white,
+          foregroundColor: navy,
+          surfaceTintColor: Colors.white,
           title: const Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('मतदाता संपादित करें',
-                    style: TextStyle(fontWeight: FontWeight.w900)),
+                    style: TextStyle(color: navy, fontWeight: FontWeight.w900)),
                 Text('मतदाता की जानकारी अपडेट करें',
-                    style: TextStyle(fontSize: 12)),
+                    style: TextStyle(color: muted, fontSize: 11)),
               ]),
           actions: [
-            TextButton.icon(
+            IconButton.filledTonal(
+              tooltip: 'प्रोफाइल प्रिंट करें',
               onPressed: () => printApiPdf(context,
                   path: '/api/export/members/${widget.voter['_id']}.pdf',
                   jobName: 'मतदाता प्रोफाइल'),
-              icon: const Icon(Icons.print, color: Colors.white),
-              label: const Text('प्रिंट करें',
-                  style: TextStyle(color: Colors.white)),
+              icon: const Icon(Icons.print_rounded, color: blue),
             ),
             const SizedBox(width: 12),
           ],
@@ -267,20 +267,19 @@ class _VoterEditPageState extends State<VoterEditPage> {
             InkWell(
               onTap: _pickPhoto,
               borderRadius: BorderRadius.circular(12),
-              child: Stack(children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
+              child: Stack(clipBehavior: Clip.none, children: [
+                ClipOval(
                   child:
-                      SizedBox(width: 110, height: 125, child: _photoPreview()),
+                      SizedBox(width: 96, height: 96, child: _photoPreview()),
                 ),
                 const Positioned(
-                    right: 4,
-                    bottom: 4,
+                    right: -2,
+                    bottom: 0,
                     child: CircleAvatar(
-                        radius: 18,
-                        backgroundColor: Colors.white,
+                        radius: 17,
+                        backgroundColor: blue,
                         child: Icon(Icons.camera_alt_outlined,
-                            color: blue, size: 20))),
+                            color: Colors.white, size: 17))),
               ]),
             ),
             const SizedBox(width: 20),

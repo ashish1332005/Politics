@@ -6,6 +6,7 @@ import '../../core/contact_actions.dart';
 import '../../core/theme.dart';
 import '../../layout/app_layout.dart';
 import '../../widgets/common.dart';
+import '../../widgets/mobile_components.dart';
 import '../voters/voter_edit_page.dart';
 
 class ReminderDashboardPage extends StatefulWidget {
@@ -18,9 +19,12 @@ class ReminderDashboardPage extends StatefulWidget {
 class _ReminderDashboardPageState extends State<ReminderDashboardPage> {
   @override
   Widget build(BuildContext context) => AppPage(children: [
-        const PageHeading(
+        const PremiumFeatureHero(
           title: 'Follow-up Dashboard',
-          subtitle: 'आज, overdue और आने वाले संपर्क',
+          subtitle: 'आज के, overdue और आने वाले voter contacts एक जगह संभालें।',
+          icon: Icons.notifications_active_rounded,
+          accent: orange,
+          badges: ['आज', 'आने वाले', 'Call & WhatsApp'],
         ),
         FutureBlock<Map<String, dynamic>>(
           load: () => api.get('/api/follow-ups/dashboard'),
@@ -77,39 +81,80 @@ class _ReminderList extends StatelessWidget {
         final member = Map<String, dynamic>.from(item['member']);
         final followUp = Map<String, dynamic>.from(item['followUp']);
         return Card(
-          child: ListTile(
-            leading: CircleAvatar(
-                backgroundColor: color.withValues(alpha: .12),
-                child: Icon(Icons.notifications_active, color: color)),
-            title: Text('${member['name'] ?? ''} — ${followUp['title'] ?? ''}',
-                style: const TextStyle(fontWeight: FontWeight.w800)),
-            subtitle: Text(
-                '${DateFormat('dd-MM-yyyy').format(DateTime.parse('${followUp['dueAt']}'))} • ${member['village'] ?? member['organizationPost'] ?? ''}'),
-            onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                    builder: (_) =>
-                        VoterEditPage(voter: member, onSaved: refresh))),
-            trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-              IconButton(
-                  onPressed: () =>
-                      callNumber(context, '${member['mobile'] ?? ''}'),
-                  icon: const Icon(Icons.call, color: blue)),
-              IconButton(
-                  onPressed: () => openWhatsApp(
-                      context, '${member['mobile'] ?? ''}',
-                      message: 'नमस्कार ${member['name'] ?? ''} जी,'),
-                  icon: const Icon(Icons.chat, color: green)),
-              IconButton(
-                tooltip: 'पूरा करें',
-                onPressed: () async {
-                  await api.put(
-                      '/api/follow-ups/${member['_id']}/${followUp['_id']}',
-                      {'status': 'done'});
-                  refresh();
-                },
-                icon: const Icon(Icons.check_circle_outline, color: green),
+          margin: const EdgeInsets.only(bottom: 10),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(children: [
+              InkWell(
+                onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) =>
+                            VoterEditPage(voter: member, onSaved: refresh))),
+                child: Row(children: [
+                  CircleAvatar(
+                      backgroundColor: color.withValues(alpha: .12),
+                      child: Icon(Icons.notifications_active, color: color)),
+                  const SizedBox(width: 11),
+                  Expanded(
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('${member['name'] ?? ''}',
+                              style: const TextStyle(
+                                  color: navy,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w900)),
+                          const SizedBox(height: 2),
+                          Text('${followUp['title'] ?? 'Follow-up'}',
+                              style:
+                                  const TextStyle(color: muted, fontSize: 12)),
+                          const SizedBox(height: 4),
+                          Text(
+                              '${DateFormat('dd-MM-yyyy').format(DateTime.parse('${followUp['dueAt']}'))} · ${member['village'] ?? member['organizationPost'] ?? ''}',
+                              style: TextStyle(
+                                  color: color,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w800)),
+                        ]),
+                  ),
+                  const Icon(Icons.chevron_right_rounded, color: muted),
+                ]),
               ),
+              const Divider(height: 22),
+              Row(children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () =>
+                        callNumber(context, '${member['mobile'] ?? ''}'),
+                    icon: const Icon(Icons.call_rounded, color: blue, size: 18),
+                    label: const Text('Call'),
+                  ),
+                ),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => openWhatsApp(
+                        context, '${member['mobile'] ?? ''}',
+                        message: 'नमस्कार ${member['name'] ?? ''} जी,'),
+                    icon:
+                        const Icon(Icons.chat_rounded, color: green, size: 18),
+                    label: const Text('WhatsApp'),
+                  ),
+                ),
+                const SizedBox(width: 7),
+                IconButton.filled(
+                  tooltip: 'पूरा करें',
+                  onPressed: () async {
+                    await api.put(
+                        '/api/follow-ups/${member['_id']}/${followUp['_id']}',
+                        {'status': 'done'});
+                    refresh();
+                  },
+                  style: IconButton.styleFrom(backgroundColor: green),
+                  icon: const Icon(Icons.check_rounded, color: Colors.white),
+                ),
+              ]),
             ]),
           ),
         );

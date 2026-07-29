@@ -278,6 +278,235 @@ class AppHeroBanner extends StatelessWidget {
       );
 }
 
+class PremiumFeatureHero extends StatelessWidget {
+  const PremiumFeatureHero({
+    super.key,
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    this.accent = blue,
+    this.badges = const [],
+    this.action,
+  });
+
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final Color accent;
+  final List<String> badges;
+  final Widget? action;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xfff5f9ff), Color(0xffdceaff), Color(0xffbdd8ff)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: const Color(0xffcfe0fb)),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x171457f5),
+              blurRadius: 24,
+              offset: Offset(0, 10),
+            ),
+          ],
+        ),
+        child: Stack(children: [
+          Positioned(
+            right: -28,
+            top: -42,
+            child: Container(
+              width: 150,
+              height: 150,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withValues(alpha: .34),
+              ),
+            ),
+          ),
+          Positioned(
+            right: 8,
+            bottom: -26,
+            child: Transform.rotate(
+              angle: -.11,
+              child: Container(
+                width: 86,
+                height: 100,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: .72),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: Colors.white),
+                ),
+                child: Icon(icon, color: accent, size: 43),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(right: 74),
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: accent,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: accent.withValues(alpha: .24),
+                      blurRadius: 16,
+                      offset: const Offset(0, 7),
+                    ),
+                  ],
+                ),
+                child: Icon(icon, color: Colors.white, size: 27),
+              ),
+              const SizedBox(height: 15),
+              Text(title,
+                  style: const TextStyle(
+                      color: navy,
+                      fontSize: 23,
+                      height: 1.15,
+                      fontWeight: FontWeight.w900)),
+              const SizedBox(height: 7),
+              Text(subtitle,
+                  style: const TextStyle(
+                      color: Color(0xff40557f), fontSize: 13, height: 1.45)),
+              if (badges.isNotEmpty) ...[
+                const SizedBox(height: 15),
+                Wrap(
+                  spacing: 7,
+                  runSpacing: 7,
+                  children: badges
+                      .map((label) => Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: .78),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child:
+                                Row(mainAxisSize: MainAxisSize.min, children: [
+                              const Icon(Icons.check_circle_rounded,
+                                  color: green, size: 15),
+                              const SizedBox(width: 5),
+                              Text(label,
+                                  style: const TextStyle(
+                                      color: Color(0xff176a3b),
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w900)),
+                            ]),
+                          ))
+                      .toList(),
+                ),
+              ],
+              if (action != null) ...[
+                const SizedBox(height: 16),
+                action!,
+              ],
+            ]),
+          ),
+        ]),
+      );
+}
+
+class PremiumSectionTitle extends StatelessWidget {
+  const PremiumSectionTitle({
+    super.key,
+    required this.title,
+    required this.icon,
+    this.subtitle,
+    this.action,
+  });
+  final String title;
+  final String? subtitle;
+  final IconData icon;
+  final Widget? action;
+
+  @override
+  Widget build(BuildContext context) => Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: softBlue,
+              borderRadius: BorderRadius.circular(11),
+            ),
+            child: Icon(icon, color: blue, size: 19),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(title,
+                  style: const TextStyle(
+                      color: navy, fontSize: 17, fontWeight: FontWeight.w900)),
+              if (subtitle != null) ...[
+                const SizedBox(height: 2),
+                Text(subtitle!,
+                    style: const TextStyle(color: muted, fontSize: 11)),
+              ],
+            ]),
+          ),
+          if (action != null) action!,
+        ],
+      );
+}
+
+class PremiumEmptyState extends StatelessWidget {
+  const PremiumEmptyState({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    this.action,
+  });
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Widget? action;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 42, horizontal: 22),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: border),
+        ),
+        child: Column(children: [
+          Container(
+            width: 66,
+            height: 66,
+            decoration:
+                const BoxDecoration(shape: BoxShape.circle, color: softBlue),
+            child: Icon(icon, color: blue, size: 32),
+          ),
+          const SizedBox(height: 13),
+          Text(title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                  color: navy, fontSize: 16, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 4),
+          Text(subtitle,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: muted, fontSize: 12)),
+          if (action != null) ...[
+            const SizedBox(height: 16),
+            action!,
+          ],
+        ]),
+      );
+}
+
 class VisualSummaryCard extends StatelessWidget {
   const VisualSummaryCard({
     super.key,

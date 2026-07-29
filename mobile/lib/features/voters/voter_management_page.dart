@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
@@ -7,6 +8,7 @@ import '../../core/api_client.dart';
 import '../../core/contact_actions.dart';
 import '../../core/download_helper.dart';
 import '../../core/offline_voter_cache.dart';
+import '../../core/picked_file_source.dart';
 import '../../core/print_helper.dart';
 import '../../core/theme.dart';
 import '../../layout/app_layout.dart';
@@ -198,6 +200,20 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
       selectedOptionLabels.clear();
       refreshVoters();
     });
+  }
+
+  Future<void> openLocationCorrection() async {
+    final changed = await showDialog<bool>(
+      context: context,
+      builder: (_) => const _LocationCorrectionDialog(),
+    );
+    if (changed == true && mounted) {
+      setState(() {
+        currentPage = 1;
+        selectedIds.clear();
+        refreshVoters();
+      });
+    }
   }
 
   static const smartFieldKeys = <String, List<String>>{
@@ -458,43 +474,17 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 14, 16, 110),
           children: [
-            TextField(
+            _EasyVoterSearchCard(
               controller: search,
+              listening: listening,
               onChanged: searchChanged,
-              textInputAction: TextInputAction.search,
               onSubmitted: (_) => filtersChanged(),
-              decoration: InputDecoration(
-                hintText: 'नाम, मोबाइल, EPIC, गाँव खोजें...',
-                prefixIcon: const Icon(Icons.search_rounded),
-                suffixIcon: Row(mainAxisSize: MainAxisSize.min, children: [
-                  if (search.text.isNotEmpty)
-                    IconButton(
-                      onPressed: () {
-                        search.clear();
-                        filtersChanged();
-                      },
-                      icon: const Icon(Icons.close_rounded),
-                    ),
-                  IconButton(
-                    onPressed: toggleVoiceSearch,
-                    icon: Icon(listening ? Icons.mic : Icons.mic_none_rounded,
-                        color: listening ? Colors.red : blue),
-                  ),
-                ]),
-                filled: true,
-                fillColor: const Color(0xfff7f8fb),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(15),
-                  borderSide: const BorderSide(color: border),
-                ),
-              ),
+              onClear: () {
+                search.clear();
+                filtersChanged();
+              },
+              onMic: toggleVoiceSearch,
             ),
-            if (listening)
-              const Padding(
-                padding: EdgeInsets.only(top: 7),
-                child: Text('सुन रहा हूँ…',
-                    style: TextStyle(color: Colors.red, fontSize: 12)),
-              ),
             const SizedBox(height: 16),
             _PhoneCategoryStrip(
               selected: support,
@@ -520,6 +510,14 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
                           color: navy,
                           fontSize: 18,
                           fontWeight: FontWeight.w900))),
+              if (api.user?['role'] == 'admin') ...[
+                IconButton.outlined(
+                  tooltip: 'Location Bulk Fix',
+                  onPressed: openLocationCorrection,
+                  icon: const Icon(Icons.edit_location_alt_rounded, size: 20),
+                ),
+                const SizedBox(width: 7),
+              ],
               IconButton.outlined(
                 tooltip: 'फ़िल्टर',
                 onPressed: openPhoneFilters,
@@ -629,6 +627,12 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
               icon: const Icon(Icons.print_rounded),
               label: Text(compact ? 'Bulk Print' : 'Smart Bulk Print'),
             ),
+            if (api.user?['role'] == 'admin')
+              OutlinedButton.icon(
+                onPressed: openLocationCorrection,
+                icon: const Icon(Icons.edit_location_alt_rounded),
+                label: Text(compact ? 'Location Fix' : 'Location Bulk Fix'),
+              ),
             FilledButton.icon(
               onPressed: () => showDialog(
                   context: context,
@@ -642,44 +646,21 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
       ),
       LayoutBuilder(builder: (context, constraints) {
         final compact = constraints.maxWidth < 620;
-        final searchBox = TextField(
+        final searchBox = _EasyVoterSearchField(
           controller: search,
+          listening: listening,
           onChanged: searchChanged,
-          textInputAction: TextInputAction.search,
           onSubmitted: (_) {
             searchDebounce?.cancel();
             filtersChanged();
           },
-          decoration: InputDecoration(
-            prefixIcon: const Icon(Icons.search_rounded),
-            hintText: compact
-                ? 'नाम, पिता/पति, मोबाइल, EPIC...'
-                : 'नाम, पिता/पति, मोबाइल, EPIC, घर, गाँव, पंचायत या पता खोजें...',
-            helperText: 'एक या अधिक शब्द लिखें—जैसे नाम + पिता का नाम + गाँव',
-            suffixIcon: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (search.text.isNotEmpty)
-                  IconButton(
-                    tooltip: 'खोज साफ करें',
-                    onPressed: () {
-                      searchDebounce?.cancel();
-                      search.clear();
-                      filtersChanged();
-                    },
-                    icon: const Icon(Icons.close_rounded),
-                  ),
-                IconButton(
-                  tooltip: listening ? 'सुनना बंद करें' : 'बोलकर खोजें',
-                  onPressed: toggleVoiceSearch,
-                  icon: Icon(
-                    listening ? Icons.mic_rounded : Icons.mic_none_rounded,
-                    color: listening ? Colors.red : blue,
-                  ),
-                ),
-              ],
-            ),
-          ),
+          onClear: () {
+            searchDebounce?.cancel();
+            search.clear();
+            filtersChanged();
+          },
+          onMic: toggleVoiceSearch,
+          compact: compact,
         );
         final filterButton = OutlinedButton.icon(
           onPressed: () =>
@@ -709,9 +690,11 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
       if (listening)
         const Padding(
           padding: EdgeInsets.only(top: 6),
-          child: Text('सुन रहा हूँ… नाम, मोबाइल, EPIC या गाँव बोलें',
+          child: Text('सुन रहा हूँ… नाम, पिता/पति, EPIC या मोबाइल बोलें',
               style: TextStyle(color: Colors.red, fontWeight: FontWeight.w700)),
         ),
+      const SizedBox(height: 8),
+      const _SearchHelpStrip(),
       _SmartSearchPanel(
         selectedLabels: selectedOptionLabels,
         onPick: openSmartFilter,
@@ -1018,7 +1001,7 @@ class _SmartSearchPanel extends StatelessWidget {
   Widget build(BuildContext context) => SectionCard(
         title: 'स्मार्ट खोज',
         subtitle:
-            'Database में मौजूद option चुनें या नीचे Advanced Filter में type करके खोजें',
+            'नाम, पिता/पति का नाम, EPIC, मोबाइल या घर संख्या लिखकर तुरंत खोजें',
         icon: Icons.manage_search_rounded,
         action: onClearAll == null
             ? null
@@ -1057,10 +1040,214 @@ class _SmartSearchPanel extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 10),
+          const Wrap(
+            spacing: 7,
+            runSpacing: 7,
+            children: [
+              _SearchHintChip(Icons.person_search_rounded, 'मतदाता नाम'),
+              _SearchHintChip(Icons.family_restroom_rounded, 'पिता/पति नाम'),
+              _SearchHintChip(Icons.badge_outlined, 'EPIC'),
+              _SearchHintChip(Icons.home_rounded, 'घर संख्या'),
+              _SearchHintChip(Icons.phone_rounded, 'मोबाइल'),
+            ],
+          ),
+          const SizedBox(height: 10),
           const Text(
-            'Tip: गाँव/पंचायत/भाग select करते ही उसी से जुड़े सभी voter list में दिखेंगे।',
+            'Tip: “रामलाल मोहन” जैसे नाम + पिता/पति नाम साथ लिखने पर भी search चलेगा।',
             style: TextStyle(color: muted, fontSize: 12),
           ),
+        ]),
+      );
+}
+
+class _EasyVoterSearchCard extends StatelessWidget {
+  const _EasyVoterSearchCard({
+    required this.controller,
+    required this.listening,
+    required this.onChanged,
+    required this.onSubmitted,
+    required this.onClear,
+    required this.onMic,
+  });
+
+  final TextEditingController controller;
+  final bool listening;
+  final ValueChanged<String> onChanged;
+  final ValueChanged<String> onSubmitted;
+  final VoidCallback onClear;
+  final VoidCallback onMic;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: border),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x0f071b4b),
+              blurRadius: 18,
+              offset: Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Row(children: [
+            CircleAvatar(
+              radius: 18,
+              backgroundColor: softBlue,
+              child: Icon(Icons.manage_search_rounded, color: blue, size: 20),
+            ),
+            SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('आसान खोज',
+                      style: TextStyle(
+                          color: navy,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w900)),
+                  SizedBox(height: 2),
+                  Text('नाम, पिता/पति, EPIC, मोबाइल या घर संख्या लिखें',
+                      style: TextStyle(color: muted, fontSize: 12)),
+                ],
+              ),
+            ),
+          ]),
+          const SizedBox(height: 12),
+          _EasyVoterSearchField(
+            controller: controller,
+            listening: listening,
+            onChanged: onChanged,
+            onSubmitted: onSubmitted,
+            onClear: onClear,
+            onMic: onMic,
+            compact: true,
+          ),
+          if (listening) ...[
+            const SizedBox(height: 8),
+            const Text('सुन रहा हूँ… नाम, पिता/पति, EPIC या मोबाइल बोलें',
+                style: TextStyle(
+                    color: Colors.red,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800)),
+          ],
+          const SizedBox(height: 11),
+          const _SearchHelpStrip(compact: true),
+        ]),
+      );
+}
+
+class _EasyVoterSearchField extends StatelessWidget {
+  const _EasyVoterSearchField({
+    required this.controller,
+    required this.listening,
+    required this.onChanged,
+    required this.onSubmitted,
+    required this.onClear,
+    required this.onMic,
+    this.compact = false,
+  });
+
+  final TextEditingController controller;
+  final bool listening;
+  final ValueChanged<String> onChanged;
+  final ValueChanged<String> onSubmitted;
+  final VoidCallback onClear;
+  final VoidCallback onMic;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) => TextField(
+        controller: controller,
+        onChanged: onChanged,
+        textInputAction: TextInputAction.search,
+        onSubmitted: onSubmitted,
+        style: const TextStyle(fontWeight: FontWeight.w800, color: navy),
+        decoration: InputDecoration(
+          hintText: compact
+              ? 'नाम, पिता/पति, EPIC, मोबाइल...'
+              : 'नाम, पिता/पति, EPIC, मोबाइल, घर, गाँव या पंचायत खोजें...',
+          hintStyle: const TextStyle(color: muted, fontWeight: FontWeight.w600),
+          prefixIcon: const Icon(Icons.search_rounded, color: blue),
+          suffixIcon: Row(mainAxisSize: MainAxisSize.min, children: [
+            if (controller.text.isNotEmpty)
+              IconButton(
+                tooltip: 'खोज साफ करें',
+                onPressed: onClear,
+                icon: const Icon(Icons.close_rounded),
+              ),
+            IconButton(
+              tooltip: listening ? 'सुनना बंद करें' : 'बोलकर खोजें',
+              onPressed: onMic,
+              icon: Icon(
+                listening ? Icons.mic_rounded : Icons.mic_none_rounded,
+                color: listening ? Colors.red : blue,
+              ),
+            ),
+          ]),
+          filled: true,
+          fillColor: const Color(0xfff7f9ff),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 14, vertical: 15),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: const BorderSide(color: border),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: const BorderSide(color: border),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: const BorderSide(color: blue, width: 1.4),
+          ),
+        ),
+      );
+}
+
+class _SearchHelpStrip extends StatelessWidget {
+  const _SearchHelpStrip({this.compact = false});
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) => Wrap(
+        spacing: 7,
+        runSpacing: 7,
+        children: [
+          const _SearchHintChip(Icons.person_search_rounded, 'नाम'),
+          const _SearchHintChip(Icons.family_restroom_rounded, 'पिता/पति'),
+          const _SearchHintChip(Icons.badge_outlined, 'EPIC'),
+          const _SearchHintChip(Icons.home_rounded, 'घर'),
+          const _SearchHintChip(Icons.phone_rounded, 'मोबाइल'),
+          if (!compact)
+            const _SearchHintChip(
+                Icons.lightbulb_outline_rounded, 'जैसे: राम मोहन'),
+        ],
+      );
+}
+
+class _SearchHintChip extends StatelessWidget {
+  const _SearchHintChip(this.icon, this.label);
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+        decoration: BoxDecoration(
+          color: const Color(0xfff6f8fc),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: border),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, color: blue, size: 14),
+          const SizedBox(width: 5),
+          Text(label,
+              style: const TextStyle(
+                  color: navy, fontSize: 12, fontWeight: FontWeight.w800)),
         ]),
       );
 }
@@ -1791,6 +1978,266 @@ class _PrintOptions {
   final String orientation;
 }
 
+class _LocationCorrectionDialog extends StatefulWidget {
+  const _LocationCorrectionDialog();
+
+  @override
+  State<_LocationCorrectionDialog> createState() =>
+      _LocationCorrectionDialogState();
+}
+
+class _LocationCorrectionDialogState extends State<_LocationCorrectionDialog> {
+  final sourceAssemblyNumber = TextEditingController();
+  final sourceAssemblyName = TextEditingController();
+  final sourceGramPanchayat = TextEditingController();
+  final sourceVillage = TextEditingController();
+  final sourcePartNumber = TextEditingController();
+
+  final newAssemblyNumber = TextEditingController();
+  final newAssemblyName = TextEditingController();
+  final newGramPanchayat = TextEditingController();
+  final newVillage = TextEditingController();
+  final newPartNumber = TextEditingController();
+  final newTehsil = TextEditingController();
+
+  bool loading = false;
+  int? matched;
+  List<Map<String, dynamic>> sample = const [];
+  String? error;
+
+  Map<String, String> get source => {
+        'assemblyNumber': sourceAssemblyNumber.text.trim(),
+        'assemblyName': sourceAssemblyName.text.trim(),
+        'gramPanchayat': sourceGramPanchayat.text.trim(),
+        'village': sourceVillage.text.trim(),
+        'partNumber': sourcePartNumber.text.trim(),
+      }..removeWhere((_, value) => value.isEmpty);
+
+  Map<String, String> get updates => {
+        'assemblyNumber': newAssemblyNumber.text.trim(),
+        'assemblyName': newAssemblyName.text.trim(),
+        'gramPanchayat': newGramPanchayat.text.trim(),
+        'village': newVillage.text.trim(),
+        'partNumber': newPartNumber.text.trim(),
+        'tehsil': newTehsil.text.trim(),
+      }..removeWhere((_, value) => value.isEmpty);
+
+  bool get validSource =>
+      sourceVillage.text.trim().isNotEmpty && source.length >= 2;
+
+  Future<void> preview() async {
+    if (!validSource) {
+      setState(() => error =
+          'गाँव अकेला unique नहीं है। Source में गाँव + विधानसभा/पंचायत/भाग भरें।');
+      return;
+    }
+    setState(() {
+      loading = true;
+      error = null;
+      matched = null;
+      sample = const [];
+    });
+    try {
+      final res = await api.post('/api/members/bulk-location-correction', {
+        'dryRun': true,
+        'source': source,
+        'updates':
+            updates.isEmpty ? {'village': sourceVillage.text.trim()} : updates,
+      });
+      setState(() {
+        matched = res['matched'] as int? ?? 0;
+        sample = List<Map<String, dynamic>>.from(
+          (res['sample'] as List? ?? const []).map(
+            (item) => Map<String, dynamic>.from(item),
+          ),
+        );
+      });
+    } catch (e) {
+      setState(() => error = '$e'.replaceFirst('Exception: ', ''));
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
+  }
+
+  Future<void> apply() async {
+    if ((matched ?? 0) < 1) return;
+    if (updates.isEmpty) {
+      setState(() => error = 'Correct values में कम से कम एक field भरें।');
+      return;
+    }
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Bulk update confirm करें'),
+        content: Text(
+            '$matched voters update होंगे। यह गाँव को अकेला नहीं, पूरी location key से match करेगा।'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Update')),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    setState(() {
+      loading = true;
+      error = null;
+    });
+    try {
+      final res = await api.post('/api/members/bulk-location-correction', {
+        'dryRun': false,
+        'source': source,
+        'updates': updates,
+      });
+      if (!mounted) return;
+      Navigator.pop(context, true);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('${res['updated'] ?? 0} voters location corrected')));
+    } catch (e) {
+      setState(() => error = '$e'.replaceFirst('Exception: ', ''));
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final controller in [
+      sourceAssemblyNumber,
+      sourceAssemblyName,
+      sourceGramPanchayat,
+      sourceVillage,
+      sourcePartNumber,
+      newAssemblyNumber,
+      newAssemblyName,
+      newGramPanchayat,
+      newVillage,
+      newPartNumber,
+      newTehsil,
+    ]) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  Widget field(TextEditingController controller, String label, IconData icon) =>
+      SizedBox(
+        width: 240,
+        child: TextField(
+          controller: controller,
+          onChanged: (_) => setState(() => matched = null),
+          decoration: InputDecoration(labelText: label, prefixIcon: Icon(icon)),
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: const Text('Location Master + Bulk Correction'),
+        content: SizedBox(
+          width: 780,
+          child: SingleChildScrollView(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: softBlue,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: blue.withValues(alpha: .18)),
+                ),
+                child: const Text(
+                  'Safe rule: गाँव कभी अकेला unique नहीं माना जाएगा। Source key = विधानसभा + ग्राम पंचायत + गाँव + भाग/बूथ.',
+                  style: TextStyle(color: navy, fontWeight: FontWeight.w800),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text('1. पुरानी / गलत location key',
+                  style: TextStyle(
+                      color: navy, fontSize: 15, fontWeight: FontWeight.w900)),
+              const SizedBox(height: 10),
+              Wrap(spacing: 10, runSpacing: 10, children: [
+                field(sourceAssemblyNumber, 'विधानसभा संख्या',
+                    Icons.account_balance_outlined),
+                field(sourceAssemblyName, 'विधानसभा नाम',
+                    Icons.account_balance_rounded),
+                field(sourceGramPanchayat, 'ग्राम पंचायत',
+                    Icons.holiday_village_outlined),
+                field(sourceVillage, 'गाँव *', Icons.location_city_rounded),
+                field(sourcePartNumber, 'भाग / बूथ', Icons.how_to_vote_rounded),
+              ]),
+              const SizedBox(height: 18),
+              const Text('2. सही value सेट करें',
+                  style: TextStyle(
+                      color: navy, fontSize: 15, fontWeight: FontWeight.w900)),
+              const SizedBox(height: 10),
+              Wrap(spacing: 10, runSpacing: 10, children: [
+                field(newAssemblyNumber, 'नई विधानसभा संख्या',
+                    Icons.account_balance_outlined),
+                field(newAssemblyName, 'नई विधानसभा नाम',
+                    Icons.account_balance_rounded),
+                field(newGramPanchayat, 'नई ग्राम पंचायत',
+                    Icons.holiday_village_outlined),
+                field(newVillage, 'नया गाँव', Icons.location_city_rounded),
+                field(
+                    newPartNumber, 'नया भाग / बूथ', Icons.how_to_vote_rounded),
+                field(newTehsil, 'नई तहसील / ब्लॉक', Icons.apartment_rounded),
+              ]),
+              const SizedBox(height: 14),
+              if (error != null)
+                Text(error!, style: const TextStyle(color: Colors.red)),
+              if (matched != null) ...[
+                Container(
+                  margin: const EdgeInsets.only(top: 8),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xfff7f9ff),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: border),
+                  ),
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('$matched voters match हुए',
+                            style: const TextStyle(
+                                color: navy, fontWeight: FontWeight.w900)),
+                        const SizedBox(height: 6),
+                        ...sample.take(5).map((voter) => Text(
+                            '• ${voter['name'] ?? '-'} · EPIC ${voter['voterId'] ?? '-'} · घर ${voter['houseNumber'] ?? '-'}',
+                            style:
+                                const TextStyle(color: muted, fontSize: 12))),
+                      ]),
+                ),
+              ],
+            ]),
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: loading ? null : () => Navigator.pop(context, false),
+              child: const Text('Close')),
+          OutlinedButton.icon(
+            onPressed: loading ? null : preview,
+            icon: loading
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.visibility_outlined),
+            label: const Text('Preview'),
+          ),
+          FilledButton.icon(
+            onPressed:
+                loading || matched == null || matched == 0 ? null : apply,
+            icon: const Icon(Icons.done_all_rounded),
+            label: const Text('Apply correction'),
+          ),
+        ],
+      );
+}
+
 class _PrintOptionsDialog extends StatefulWidget {
   const _PrintOptionsDialog({required this.selectedCount});
   final int selectedCount;
@@ -2106,7 +2553,8 @@ class VoterTable extends StatelessWidget {
               ? const EmptyIllustration(
                   icon: Icons.search_off_rounded,
                   title: 'कोई मतदाता नहीं मिला',
-                  subtitle: 'Search या filters बदलकर फिर कोशिश करें',
+                  subtitle:
+                      'नाम, पिता/पति का नाम, EPIC, मोबाइल या घर संख्या से खोजें',
                 )
               : Column(
                   children: items
@@ -2287,6 +2735,7 @@ class _VoterRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final name = '${member['name'] ?? '-'}';
     final epic = '${member['voterId'] ?? '-'}';
+    final guardian = '${member['guardianName'] ?? ''}'.trim();
     final mobile = '${member['mobile'] ?? ''}'.trim();
     final house = '${member['houseNumber'] ?? '-'}';
     final place = [
@@ -2354,6 +2803,15 @@ class _VoterRow extends StatelessWidget {
                           ),
                         ]),
                         const SizedBox(height: 5),
+                        Text(
+                            guardian.isEmpty
+                                ? 'पिता/पति: उपलब्ध नहीं'
+                                : 'पिता/पति: $guardian',
+                            style: const TextStyle(
+                                color: navy,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800)),
+                        const SizedBox(height: 4),
                         Text('EPIC: $epic',
                             style: const TextStyle(
                                 color: muted,
@@ -2364,6 +2822,8 @@ class _VoterRow extends StatelessWidget {
                           _InfoPill(Icons.home_rounded, 'घर $house'),
                           if (place.isNotEmpty)
                             _InfoPill(Icons.location_on_rounded, place),
+                          if (mobile.isNotEmpty)
+                            _InfoPill(Icons.phone_rounded, mobile),
                         ]),
                       ]),
                 ),
@@ -2809,6 +3269,10 @@ class VoterForm extends StatefulWidget {
 class _VoterFormState extends State<VoterForm> {
   final ctrls = <String, TextEditingController>{};
   String support = 'undecided';
+  String gender = '';
+  PlatformFile? selectedPhoto;
+  bool saving = false;
+  String? formError;
 
   @override
   void initState() {
@@ -2818,7 +3282,6 @@ class _VoterFormState extends State<VoterForm> {
       'guardianName',
       'age',
       'dob',
-      'gender',
       'mobile',
       'altMobile',
       'voterId',
@@ -2833,20 +3296,78 @@ class _VoterFormState extends State<VoterForm> {
       ctrls[f] = TextEditingController(text: '${widget.voter?[f] ?? ''}');
     }
     support = widget.voter?['supportLevel'] ?? 'undecided';
+    gender = '${widget.voter?['gender'] ?? ''}';
   }
 
   Future<void> save() async {
-    final body = {
-      for (final e in ctrls.entries) e.key: e.value.text,
-      'supportLevel': support
-    };
-    if (widget.voter == null) {
-      await api.post('/api/members', body);
-    } else {
-      await api.put('/api/members/${widget.voter!['_id']}', body);
+    if (saving) return;
+    if (ctrls['name']!.text.trim().isEmpty) {
+      showError('मतदाता का नाम जरूरी है।');
+      return;
     }
-    widget.onSaved();
-    if (mounted) Navigator.pop(context);
+    if (ctrls['voterId']!.text.trim().isEmpty) {
+      showError('EPIC / मतदाता आईडी जरूरी है।');
+      return;
+    }
+    setState(() {
+      saving = true;
+      formError = null;
+    });
+    final body = <String, dynamic>{
+      for (final e in ctrls.entries) e.key: e.value.text.trim(),
+      'gender': gender,
+      'supportLevel': support,
+    };
+    try {
+      if (selectedPhoto != null) {
+        await api.uploadFile(
+          widget.voter == null
+              ? '/api/members'
+              : '/api/members/${widget.voter!['_id']}',
+          method: widget.voter == null ? 'POST' : 'PUT',
+          filename: selectedPhoto!.name,
+          fileField: 'photo',
+          filePath: pickedFilePath(selectedPhoto!),
+          bytes: pickedFileBytes(selectedPhoto!),
+          fields: body.map((key, value) => MapEntry(key, '$value')),
+        );
+      } else if (widget.voter == null) {
+        await api.post('/api/members', body);
+      } else {
+        await api.put('/api/members/${widget.voter!['_id']}', body);
+      }
+      widget.onSaved();
+      if (!mounted) return;
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('मतदाता सफलतापूर्वक सहेजा गया')),
+      );
+    } catch (e) {
+      showError('$e'.replaceFirst('Exception: ', ''));
+    } finally {
+      if (mounted) setState(() => saving = false);
+    }
+  }
+
+  Future<void> pickPhoto() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.image,
+      withData: true,
+      withReadStream: false,
+    );
+    if (result == null || !mounted) return;
+    final file = result.files.single;
+    if (file.size > 10 * 1024 * 1024) {
+      showError('Photo 10 MB से छोटी होनी चाहिए।');
+      return;
+    }
+    setState(() => selectedPhoto = file);
+  }
+
+  void showError(String message) {
+    if (mounted) setState(() => formError = message);
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -2857,38 +3378,198 @@ class _VoterFormState extends State<VoterForm> {
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final mobile = MediaQuery.sizeOf(context).width < 700;
-    final title =
-        widget.voter == null ? 'नया मतदाता जोड़ें' : 'मतदाता संपादित करें';
-    final fields = Wrap(spacing: 12, runSpacing: 12, children: [
-      for (final e in ctrls.entries)
-        SizedBox(
-          width: mobile ? double.infinity : 340,
-          child: TextField(
-            controller: e.value,
-            keyboardType: ['mobile', 'altMobile', 'age'].contains(e.key)
-                ? TextInputType.number
-                : TextInputType.text,
-            decoration: InputDecoration(labelText: voterFieldLabel(e.key)),
+  Widget photoPicker() {
+    final bytes = selectedPhoto?.bytes;
+    return Center(
+      child: InkWell(
+        onTap: saving ? null : pickPhoto,
+        borderRadius: BorderRadius.circular(70),
+        child: Column(children: [
+          Stack(clipBehavior: Clip.none, children: [
+            Container(
+              width: 96,
+              height: 96,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: const Color(0xffeef2f8),
+                border: Border.all(color: Colors.white, width: 4),
+                boxShadow: const [
+                  BoxShadow(
+                      color: Color(0x17071b4b),
+                      blurRadius: 18,
+                      offset: Offset(0, 8)),
+                ],
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: bytes != null
+                  ? Image.memory(bytes, fit: BoxFit.cover)
+                  : widget.voter?['photo'] != null
+                      ? _VoterPhoto(photo: widget.voter?['photo'], radius: 48)
+                      : const Icon(Icons.camera_alt_rounded,
+                          color: muted, size: 34),
+            ),
+            Positioned(
+              right: -2,
+              bottom: 2,
+              child: Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: blue,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 3),
+                ),
+                child: const Icon(Icons.add_a_photo_rounded,
+                    color: Colors.white, size: 15),
+              ),
+            ),
+          ]),
+          const SizedBox(height: 8),
+          Text(
+            selectedPhoto == null
+                ? 'फोटो जोड़ें'
+                : '${selectedPhoto!.name} · बदलने के लिए tap करें',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+                color: muted, fontSize: 12, fontWeight: FontWeight.w700),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  Widget formField(String key,
+          {IconData? icon,
+          TextInputType? keyboardType,
+          bool required = false}) =>
+      TextField(
+        controller: ctrls[key],
+        keyboardType: keyboardType,
+        decoration: InputDecoration(
+          labelText: '${voterFieldLabel(key)}${required ? ' *' : ''}',
+          prefixIcon: icon == null ? null : Icon(icon),
+        ),
+      );
+
+  Widget genderOption(String value, String label, IconData icon) => Expanded(
+        child: InkWell(
+          onTap: () => setState(() => gender = value),
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            decoration: BoxDecoration(
+              color: gender == value ? softBlue : Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: gender == value ? blue : border),
+            ),
+            child: Column(children: [
+              Icon(icon, color: gender == value ? blue : muted),
+              const SizedBox(height: 4),
+              Text(label,
+                  style: TextStyle(
+                      color: gender == value ? blue : navy,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800)),
+            ]),
           ),
         ),
-      SizedBox(
-        width: mobile ? double.infinity : 340,
-        child: DropdownButtonFormField<String>(
+      );
+
+  List<Widget> formChildren() => [
+        photoPicker(),
+        const SizedBox(height: 18),
+        if (formError != null) ...[
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xfffff1f3),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: rose.withValues(alpha: .25)),
+            ),
+            child: Text(formError!,
+                style: const TextStyle(
+                    color: navy, fontSize: 12, fontWeight: FontWeight.w800)),
+          ),
+          const SizedBox(height: 12),
+        ],
+        formField('name', icon: Icons.person_outline, required: true),
+        const SizedBox(height: 12),
+        formField('guardianName', icon: Icons.family_restroom_outlined),
+        const SizedBox(height: 12),
+        formField('houseNumber', icon: Icons.home_outlined),
+        const SizedBox(height: 12),
+        const Text('लिंग',
+            style: TextStyle(color: navy, fontWeight: FontWeight.w900)),
+        const SizedBox(height: 8),
+        Row(children: [
+          genderOption('male', 'पुरुष', Icons.male_rounded),
+          const SizedBox(width: 9),
+          genderOption('female', 'महिला', Icons.female_rounded),
+          const SizedBox(width: 9),
+          genderOption('other', 'अन्य', Icons.person_outline_rounded),
+        ]),
+        const SizedBox(height: 12),
+        formField('age',
+            icon: Icons.cake_outlined,
+            keyboardType: TextInputType.number,
+            required: true),
+        const SizedBox(height: 12),
+        formField('dob', icon: Icons.calendar_today_outlined),
+        const SizedBox(height: 12),
+        formField('mobile',
+            icon: Icons.phone_outlined, keyboardType: TextInputType.phone),
+        const SizedBox(height: 12),
+        formField('altMobile',
+            icon: Icons.phone_android_outlined,
+            keyboardType: TextInputType.phone),
+        const SizedBox(height: 12),
+        formField('voterId', icon: Icons.badge_outlined, required: true),
+        const SizedBox(height: 12),
+        formField('address', icon: Icons.location_on_outlined),
+        const SizedBox(height: 12),
+        DropdownButtonFormField<String>(
           initialValue: support,
-          decoration: const InputDecoration(labelText: 'समर्थन स्तर'),
+          decoration: const InputDecoration(
+              labelText: 'समर्थन स्तर', prefixIcon: Icon(Icons.how_to_vote)),
           items: const [
             DropdownMenuItem(value: 'supporter', child: Text('समर्थक मतदाता')),
             DropdownMenuItem(value: 'opposite', child: Text('विरोधी मतदाता')),
             DropdownMenuItem(value: 'neutral', child: Text('तटस्थ')),
             DropdownMenuItem(value: 'undecided', child: Text('अनिर्णीत')),
           ],
-          onChanged: (value) => setState(() => support = value ?? 'undecided'),
+          onChanged: (v) => setState(() => support = v ?? 'undecided'),
         ),
-      ),
-    ]);
+        const SizedBox(height: 12),
+        ExpansionTile(
+          tilePadding: EdgeInsets.zero,
+          title: const Text('अधिक जानकारी',
+              style: TextStyle(color: navy, fontWeight: FontWeight.w900)),
+          children: [
+            formField('occupation', icon: Icons.work_outline),
+            const SizedBox(height: 12),
+            formField('education', icon: Icons.school_outlined),
+            const SizedBox(height: 12),
+            formField('notes', icon: Icons.notes_outlined),
+            const SizedBox(height: 12),
+            formField('ward', icon: Icons.location_city_outlined),
+            const SizedBox(height: 12),
+            formField('booth', icon: Icons.how_to_vote_outlined),
+          ],
+        ),
+      ];
+
+  @override
+  Widget build(BuildContext context) {
+    final mobile = MediaQuery.sizeOf(context).width < 700;
+    final title =
+        widget.voter == null ? 'नया संपर्क जोड़ें' : 'संपर्क संपादित करें';
+    final subtitle =
+        widget.voter == null ? 'नया मतदाता जोड़ें' : 'मतदाता अपडेट करें';
+    final form = ListView(
+      padding: EdgeInsets.fromLTRB(16, mobile ? 12 : 18, 16, 22),
+      shrinkWrap: !mobile,
+      children: formChildren(),
+    );
     if (mobile) {
       return Dialog.fullscreen(
         child: Scaffold(
@@ -2898,76 +3579,55 @@ class _VoterFormState extends State<VoterForm> {
             foregroundColor: navy,
             elevation: 0,
             leading: IconButton(
-              onPressed: () => Navigator.pop(context),
-              icon: const Icon(Icons.close_rounded),
+              onPressed: saving ? null : () => Navigator.pop(context),
+              icon: const Icon(Icons.arrow_back_rounded),
             ),
-            title: Text(title,
-                style:
-                    const TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
-            centerTitle: true,
+            title:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(title,
+                  style: const TextStyle(
+                      fontSize: 17, fontWeight: FontWeight.w900)),
+              Text(subtitle,
+                  style: const TextStyle(color: muted, fontSize: 11)),
+            ]),
             actions: [
-              IconButton(
-                tooltip: 'सहेजें',
-                onPressed: save,
-                icon: const Icon(Icons.check_rounded, color: blue),
-              ),
-            ],
-          ),
-          body: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 22, 16, 32),
-            children: [
-              Center(
-                child: Container(
-                  width: 82,
-                  height: 82,
-                  decoration: const BoxDecoration(
-                      shape: BoxShape.circle, color: Color(0xffeef1f6)),
-                  child: const Icon(Icons.add_a_photo_outlined,
-                      color: muted, size: 30),
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Center(
-                child: Text('मतदाता की जानकारी भरें',
-                    style: TextStyle(color: muted, fontSize: 12)),
-              ),
-              const SizedBox(height: 22),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: border),
-                ),
-                child: fields,
-              ),
-              const SizedBox(height: 18),
-              SizedBox(
-                height: 52,
+              Padding(
+                padding: const EdgeInsets.only(right: 10),
                 child: FilledButton.icon(
-                  onPressed: save,
-                  icon: const Icon(Icons.person_add_alt_1_rounded),
-                  label: Text(
-                      widget.voter == null ? 'मतदाता जोड़ें' : 'बदलाव सहेजें'),
+                  onPressed: saving ? null : save,
+                  icon: saving
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.save_rounded, size: 18),
+                  label: const Text('सहेजें'),
                 ),
-              ),
+              )
             ],
           ),
+          body: form,
         ),
       );
     }
     return AlertDialog(
       title: Text(title),
-      content:
-          SizedBox(width: 760, child: SingleChildScrollView(child: fields)),
+      content: SizedBox(width: 520, height: 680, child: form),
       actions: [
         TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: saving ? null : () => Navigator.pop(context),
             child: const Text('रद्द करें')),
         FilledButton.icon(
-            onPressed: save,
-            icon: const Icon(Icons.save),
-            label: const Text('सहेजें')),
+            onPressed: saving ? null : save,
+            icon: saving
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.white))
+                : const Icon(Icons.save),
+            label: Text(saving ? 'सहेज रहे हैं...' : 'सहेजें')),
       ],
     );
   }

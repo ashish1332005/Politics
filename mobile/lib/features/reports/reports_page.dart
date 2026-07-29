@@ -17,9 +17,21 @@ class ReportsPage extends StatelessWidget {
         load: () => api.get('/api/reports/dashboard'),
         builder: (data) {
           final total = _number(data['members']);
+          final families = _number(data['families']);
+          final booths = _number(data['booths']);
           final congress = _support(data, 'supporter');
           final bjp = _support(data, 'opposite');
           final other = (total - congress - bjp).clamp(0, total);
+          if (MediaQuery.sizeOf(context).width < 700) {
+            return _PhoneReports(
+              total: total,
+              families: families,
+              booths: booths,
+              supporter: congress,
+              opposite: bjp,
+              other: other,
+            );
+          }
           return AppPage(children: [
             PageHeading(
               title: 'रिपोर्ट',
@@ -176,6 +188,238 @@ class ReportsPage extends StatelessWidget {
           Expanded(child: Text(label, style: const TextStyle(fontSize: 11))),
           Text('$value', style: const TextStyle(fontWeight: FontWeight.w800)),
         ]),
+      );
+}
+
+class _PhoneReports extends StatelessWidget {
+  const _PhoneReports({
+    required this.total,
+    required this.families,
+    required this.booths,
+    required this.supporter,
+    required this.opposite,
+    required this.other,
+  });
+  final int total;
+  final int families;
+  final int booths;
+  final int supporter;
+  final int opposite;
+  final int other;
+
+  @override
+  Widget build(BuildContext context) => AppPage(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 110),
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xff173b88), Color(0xff1457f5)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(22),
+            ),
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Row(children: [
+                CircleAvatar(
+                  backgroundColor: Color(0x24ffffff),
+                  foregroundColor: Colors.white,
+                  child: Icon(Icons.insights_rounded),
+                ),
+                SizedBox(width: 11),
+                Text('मतदाता रिपोर्ट',
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900)),
+              ]),
+              const SizedBox(height: 18),
+              Row(children: [
+                _ReportHeroMetric(value: '$total', label: 'मतदाता'),
+                _ReportHeroMetric(value: '$families', label: 'परिवार'),
+                _ReportHeroMetric(value: '$booths', label: 'बूथ'),
+              ]),
+            ]),
+          ),
+          const Text('समर्थन स्थिति',
+              style: TextStyle(
+                  color: navy, fontSize: 17, fontWeight: FontWeight.w900)),
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: border),
+            ),
+            child: Column(children: [
+              _SupportProgress(
+                  label: 'समर्थक',
+                  value: supporter,
+                  total: total,
+                  color: green),
+              _SupportProgress(
+                  label: 'विरोधी', value: opposite, total: total, color: rose),
+              _SupportProgress(
+                  label: 'अन्य / तटस्थ',
+                  value: other,
+                  total: total,
+                  color: purple),
+            ]),
+          ),
+          const Text('डाउनलोड और प्रिंट',
+              style: TextStyle(
+                  color: navy, fontSize: 17, fontWeight: FontWeight.w900)),
+          _ReportAction(
+            icon: Icons.picture_as_pdf_rounded,
+            color: rose,
+            title: 'Photo सहित PDF रिपोर्ट',
+            subtitle: 'मतदाता profile cards की PDF डाउनलोड करें',
+            onTap: () => saveApiFile(context,
+                path: '/api/export/members.profiles.pdf',
+                fallbackName: 'voter-report.pdf'),
+          ),
+          _ReportAction(
+            icon: Icons.table_view_rounded,
+            color: green,
+            title: 'Excel मतदाता सूची',
+            subtitle: 'Search और sorting के लिए पूरी Excel file',
+            onTap: () => saveApiFile(context,
+                path: '/api/export/members.xlsx', fallbackName: 'voters.xlsx'),
+          ),
+          _ReportAction(
+            icon: Icons.print_rounded,
+            color: blue,
+            title: 'Custom Print बनाएं',
+            subtitle: 'Fields, columns और photo अपनी जरूरत से चुनें',
+            onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => const ConfigurablePrintPage())),
+          ),
+        ],
+      );
+}
+
+class _ReportHeroMetric extends StatelessWidget {
+  const _ReportHeroMetric({required this.value, required this.label});
+  final String value;
+  final String label;
+  @override
+  Widget build(BuildContext context) => Expanded(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(value,
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900)),
+          Text(label,
+              style: const TextStyle(color: Colors.white70, fontSize: 11)),
+        ]),
+      );
+}
+
+class _SupportProgress extends StatelessWidget {
+  const _SupportProgress({
+    required this.label,
+    required this.value,
+    required this.total,
+    required this.color,
+  });
+  final String label;
+  final int value;
+  final int total;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final ratio = total <= 0 ? 0.0 : (value / total).clamp(0, 1).toDouble();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 17),
+      child: Column(children: [
+        Row(children: [
+          Container(
+              width: 9,
+              height: 9,
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+          const SizedBox(width: 8),
+          Expanded(
+              child: Text(label,
+                  style: const TextStyle(
+                      color: navy, fontWeight: FontWeight.w700))),
+          Text('$value · ${(ratio * 100).round()}%',
+              style: const TextStyle(
+                  color: muted, fontSize: 12, fontWeight: FontWeight.w800)),
+        ]),
+        const SizedBox(height: 8),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: LinearProgressIndicator(
+              value: ratio,
+              minHeight: 8,
+              color: color,
+              backgroundColor: color.withValues(alpha: .1)),
+        ),
+      ]),
+    );
+  }
+}
+
+class _ReportAction extends StatelessWidget {
+  const _ReportAction({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Material(
+        color: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: const BorderSide(color: border),
+        ),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(18),
+          child: Padding(
+            padding: const EdgeInsets.all(15),
+            child: Row(children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                    shape: BoxShape.circle, color: color.withValues(alpha: .1)),
+                child: Icon(icon, color: color),
+              ),
+              const SizedBox(width: 13),
+              Expanded(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title,
+                          style: const TextStyle(
+                              color: navy,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w900)),
+                      const SizedBox(height: 3),
+                      Text(subtitle,
+                          style: const TextStyle(color: muted, fontSize: 11)),
+                    ]),
+              ),
+              const Icon(Icons.chevron_right_rounded, color: muted),
+            ]),
+          ),
+        ),
       );
 }
 

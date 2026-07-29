@@ -5,6 +5,7 @@ import '../../core/api_client.dart';
 import '../../core/theme.dart';
 import '../../layout/app_layout.dart';
 import '../../widgets/common.dart';
+import '../../widgets/mobile_components.dart';
 
 class BoothUserPage extends StatefulWidget {
   const BoothUserPage({super.key});
@@ -56,10 +57,12 @@ class _BoothUserPageState extends State<BoothUserPage> {
             final totalVoters = heads.fold<int>(
                 0, (sum, user) => sum + _stat(user, 'boothVoterCount'));
             return AppPage(children: [
-              PageHeading(
-                title: 'Booth Manager',
+              PremiumFeatureHero(
+                title: 'बूथ मैनेजर',
                 subtitle:
-                    'Find a booth, review voters, assign managers, and control access.',
+                    'बूथ खोजें, मतदाता देखें और सही manager को सुरक्षित access दें।',
+                icon: Icons.manage_accounts_rounded,
+                badges: const ['Role access', 'Booth wise', 'Secure'],
                 action: FilledButton.icon(
                   onPressed: booths.isEmpty
                       ? null

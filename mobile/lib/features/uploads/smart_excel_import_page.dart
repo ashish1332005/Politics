@@ -5,8 +5,10 @@ import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
 import '../../core/offline_voter_cache.dart';
 import '../../core/picked_file_source.dart';
+import '../../core/theme.dart';
 import '../../layout/app_layout.dart';
 import '../../widgets/common.dart';
+import '../../widgets/mobile_components.dart';
 
 class SmartExcelImportPage extends StatefulWidget {
   const SmartExcelImportPage({super.key});
@@ -80,15 +82,31 @@ class _SmartExcelImportPageState extends State<SmartExcelImportPage> {
 
   @override
   Widget build(BuildContext context) => AppPage(children: [
-        PageHeading(
+        PremiumFeatureHero(
           title: 'Excel से मतदाता आयात',
-          subtitle: 'पहले जानकारी जांचें और कॉलम मिलाएं, फिर मतदाता जोड़ें',
+          subtitle:
+              'कॉलम मिलाएं, records validate करें और जांच के बाद ही मतदाता जोड़ें।',
+          icon: Icons.table_view_rounded,
+          accent: green,
+          badges: const ['Preview', 'Validation', 'Safe import'],
           action: FilledButton.icon(
               onPressed: busy ? null : pick,
               icon: const Icon(Icons.upload_file),
               label: const Text('Excel चुनें')),
         ),
         if (busy) const LinearProgressIndicator(),
+        if (!busy && preview == null)
+          PremiumEmptyState(
+            icon: Icons.upload_file_rounded,
+            title: 'Excel या CSV फाइल चुनें',
+            subtitle:
+                'पहले preview और validation दिखेगा—आपकी मंजूरी के बिना records import नहीं होंगे।',
+            action: FilledButton.icon(
+              onPressed: pick,
+              icon: const Icon(Icons.folder_open_rounded),
+              label: const Text('फाइल चुनें'),
+            ),
+          ),
         if (preview != null) ...[
           _summary(),
           _invalidCorrectionPanel(),

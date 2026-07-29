@@ -5,6 +5,7 @@ import '../../core/theme.dart';
 import '../../layout/app_layout.dart';
 import '../../widgets/common.dart';
 import '../../widgets/mobile_components.dart';
+import '../activity/activity_page.dart';
 import '../areas/area_directory_page.dart';
 import '../families/family_page.dart';
 import '../reports/configurable_print_page.dart';
@@ -297,12 +298,15 @@ class _PhoneDashboard extends StatelessWidget {
           const SizedBox(height: 22),
           Row(children: [
             const Expanded(
-              child: Text('Recent Activities',
+              child: Text('हाल की गतिविधियाँ',
                   style: TextStyle(
                       color: navy, fontSize: 17, fontWeight: FontWeight.w900)),
             ),
             TextButton(
-                onPressed: () => onNavigate(3), child: const Text('View All')),
+              onPressed: () => Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const ActivityPage())),
+              child: const Text('सभी देखें'),
+            ),
           ]),
           Container(
             decoration: BoxDecoration(
@@ -322,14 +326,15 @@ class _PhoneDashboard extends StatelessWidget {
                     children: activities.take(6).map((activity) {
                       final item = activity is Map ? activity : const {};
                       final action =
-                          '${item['action'] ?? item['type'] ?? 'Update'}';
-                      final description =
-                          '${item['description'] ?? item['message'] ?? item['name'] ?? ''}';
+                          _activityLabel(item['action'] ?? item['type']);
+                      final description = _activityDescription(item);
+                      final visual =
+                          _activityVisual(item['action'] ?? item['type']);
                       return ListTile(
-                        leading: const CircleAvatar(
-                          backgroundColor: softBlue,
-                          foregroundColor: blue,
-                          child: Icon(Icons.history_rounded, size: 20),
+                        leading: CircleAvatar(
+                          backgroundColor: visual.$2.withValues(alpha: .11),
+                          foregroundColor: visual.$2,
+                          child: Icon(visual.$1, size: 20),
                         ),
                         title: Text(action,
                             maxLines: 1,
@@ -1036,4 +1041,53 @@ String _formatDate(dynamic value) {
   if (date == null) return '';
   String two(int number) => number.toString().padLeft(2, '0');
   return '${two(date.day)}/${two(date.month)}/${date.year}  ${two(date.hour)}:${two(date.minute)}';
+}
+
+String _activityLabel(dynamic raw) {
+  final action = '${raw ?? ''}'.trim().toLowerCase();
+  const labels = <String, String>{
+    'member.created': 'नया मतदाता जोड़ा गया',
+    'member.updated': 'मतदाता जानकारी बदली गई',
+    'member.deleted': 'मतदाता रिकॉर्ड हटाया गया',
+    'members.imported': 'मतदाता सूची आयात हुई',
+    'import.completed': 'फाइल आयात पूरा हुआ',
+    'family.created': 'नया परिवार बनाया गया',
+    'family.updated': 'परिवार जानकारी बदली गई',
+    'user.created': 'नया उपयोगकर्ता जोड़ा गया',
+    'booth.created': 'नया बूथ जोड़ा गया',
+    'booth.updated': 'बूथ जानकारी बदली गई',
+    'auth.login': 'ऐप में लॉगिन किया गया',
+  };
+  if (labels.containsKey(action)) return labels[action]!;
+  if (action.contains('import')) return 'डेटा आयात किया गया';
+  if (action.contains('update')) return 'जानकारी अपडेट की गई';
+  if (action.contains('create')) return 'नया रिकॉर्ड जोड़ा गया';
+  if (action.contains('delete')) return 'रिकॉर्ड हटाया गया';
+  return 'ऐप गतिविधि';
+}
+
+String _activityDescription(Map item) {
+  final after = item['after'];
+  final before = item['before'];
+  final person = after is Map
+      ? '${after['name'] ?? after['title'] ?? ''}'.trim()
+      : before is Map
+          ? '${before['name'] ?? before['title'] ?? ''}'.trim()
+          : '';
+  final actor = item['user'] is Map
+      ? '${item['user']['name'] ?? ''}'.trim()
+      : '${item['userName'] ?? ''}'.trim();
+  final date = _formatDate(item['createdAt']);
+  return [person, if (actor.isNotEmpty) 'द्वारा $actor', date]
+      .where((value) => value.isNotEmpty)
+      .join(' · ');
+}
+
+(IconData, Color) _activityVisual(dynamic raw) {
+  final action = '${raw ?? ''}'.toLowerCase();
+  if (action.contains('import')) return (Icons.upload_file_rounded, orange);
+  if (action.contains('delete')) return (Icons.delete_outline_rounded, rose);
+  if (action.contains('create')) return (Icons.person_add_alt_rounded, green);
+  if (action.contains('update')) return (Icons.edit_note_rounded, blue);
+  return (Icons.history_rounded, purple);
 }
