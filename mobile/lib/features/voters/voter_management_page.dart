@@ -2766,12 +2766,25 @@ class _LocationCorrectionDialogState extends State<_LocationCorrectionDialog> {
 
   bool get validSource => advancedMode
       ? sourceVillage.text.trim().isNotEmpty && source.length >= 2
-      : smartQuery.text.trim().length >= 2 || source.length >= 2;
+      : smartQuery.text.trim().length >= 2 ||
+          (sourceVillage.text.trim().isNotEmpty && source.length >= 2);
+
+  int get step {
+    if (matched != null) return 3;
+    if (updates.isNotEmpty && validSource) return 2;
+    if (validSource) return 1;
+    return 0;
+  }
+
+  void clearPreview() {
+    matched = null;
+    sample = const [];
+  }
 
   void schedulePreview() {
     previewDebounce?.cancel();
     if (!validSource) return;
-    previewDebounce = Timer(const Duration(milliseconds: 650), () {
+    previewDebounce = Timer(const Duration(milliseconds: 550), () {
       if (mounted) preview(silent: true);
     });
   }
@@ -2799,17 +2812,17 @@ class _LocationCorrectionDialogState extends State<_LocationCorrectionDialog> {
       final key = Map<String, dynamic>.from(selected['key'] as Map? ?? {});
       setState(() {
         advancedMode = true;
-        sourceAssemblyNumber.text = '${key['assemblyNumber'] ?? ''}';
-        sourceAssemblyName.text = '${key['assemblyName'] ?? ''}';
-        sourceGramPanchayat.text = '${key['gramPanchayat'] ?? ''}';
-        sourceVillage.text = '${key['village'] ?? ''}';
-        sourcePartNumber.text = '${key['partNumber'] ?? ''}';
+        sourceAssemblyNumber.text = "${key['assemblyNumber'] ?? ''}";
+        sourceAssemblyName.text = "${key['assemblyName'] ?? ''}";
+        sourceGramPanchayat.text = "${key['gramPanchayat'] ?? ''}";
+        sourceVillage.text = "${key['village'] ?? ''}";
+        sourcePartNumber.text = "${key['partNumber'] ?? ''}";
         newAssemblyNumber.text = sourceAssemblyNumber.text;
         newAssemblyName.text = sourceAssemblyName.text;
         newGramPanchayat.text = sourceGramPanchayat.text;
         newVillage.text = sourceVillage.text;
         newPartNumber.text = sourcePartNumber.text;
-        matched = null;
+        clearPreview();
       });
     } catch (e) {
       setState(() => error = '$e'.replaceFirst('Exception: ', ''));
@@ -2822,8 +2835,8 @@ class _LocationCorrectionDialogState extends State<_LocationCorrectionDialog> {
     if (!validSource) {
       if (!silent) {
         setState(() => error = advancedMode
-            ? 'गाँव अकेला unique नहीं है। Source में गाँव + विधानसभा/पंचायत/भाग भरें।'
-            : 'पुरानी जानकारी search में कम से कम 2 अक्षर लिखें।');
+            ? 'Source me village + panchayat/part/assembly me se ek aur value bharein.'
+            : 'Old/wrong info me kam se kam 2 letters likhein, jaise sahara bheeta ya Hier.');
       }
       return;
     }
@@ -2857,22 +2870,23 @@ class _LocationCorrectionDialogState extends State<_LocationCorrectionDialog> {
   Future<void> apply() async {
     if ((matched ?? 0) < 1) return;
     if (updates.isEmpty) {
-      setState(() => error = 'Correct values में कम से कम एक field भरें।');
+      setState(
+          () => error = 'Correct location me kam se kam ek field bharein.');
       return;
     }
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('Bulk update confirm करें'),
+        title: const Text('Correction apply karein?'),
         content: Text(
-            '$matched voters update होंगे। यह गाँव को अकेला नहीं, पूरी location key से match करेगा।'),
+            '$matched voters update honge. Same value fields ignore honge, blank new fields old value rakhenge.'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context, false),
               child: const Text('Cancel')),
           FilledButton(
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('Update')),
+              child: const Text('Apply')),
         ],
       ),
     );
@@ -2890,9 +2904,10 @@ class _LocationCorrectionDialogState extends State<_LocationCorrectionDialog> {
       if (!mounted) return;
       Navigator.pop(context, true);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(res['noChange'] == true
-              ? 'कोई नया बदलाव नहीं मिला।'
-              : '${res['updated'] ?? 0} voters location corrected')));
+        content: Text(res['noChange'] == true
+            ? 'Koi naya badlav nahi mila.'
+            : "${res['updated'] ?? 0} voters ki location update ho gayi."),
+      ));
     } catch (e) {
       setState(() => error = '$e'.replaceFirst('Exception: ', ''));
     } finally {
@@ -2922,497 +2937,452 @@ class _LocationCorrectionDialogState extends State<_LocationCorrectionDialog> {
     super.dispose();
   }
 
-  Widget field(TextEditingController controller, String label, IconData icon) =>
-      SizedBox(
-        width: 250,
-        child: TextField(
-          controller: controller,
-          onChanged: (_) => setState(() {
-            matched = null;
-            if (!advancedMode) schedulePreview();
-          }),
-          decoration: InputDecoration(labelText: label, prefixIcon: Icon(icon)),
+  Widget input(TextEditingController controller, String label, IconData icon,
+          {String? hint, bool sourceField = false}) =>
+      TextField(
+        controller: controller,
+        onChanged: (_) => setState(() {
+          clearPreview();
+          if (sourceField && !advancedMode) schedulePreview();
+        }),
+        decoration: InputDecoration(
+          labelText: label,
+          hintText: hint,
+          prefixIcon: Icon(icon),
+          filled: true,
+          fillColor: const Color(0xfff7f9ff),
         ),
       );
 
-  Widget sectionCard({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required Widget child,
-    Color color = blue,
-  }) =>
+  Widget stepPill(int number, String label) {
+    final active = step >= number;
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: active ? blue : const Color(0xffeef3ff),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(children: [
+          Text('$number',
+              style: TextStyle(
+                  color: active ? Colors.white : navy,
+                  fontWeight: FontWeight.w900)),
+          const SizedBox(height: 2),
+          Text(label,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                  color: active ? Colors.white : muted,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800)),
+        ]),
+      ),
+    );
+  }
+
+  Widget card(
+          {required String title,
+          required IconData icon,
+          required Widget child,
+          String? subtitle,
+          Color color = blue}) =>
       Container(
         width: double.infinity,
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(16),
+        margin: const EdgeInsets.only(bottom: 14),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(22),
           border: Border.all(color: border),
           boxShadow: const [
             BoxShadow(
-                color: Color(0x0c071b4b), blurRadius: 16, offset: Offset(0, 8)),
+                color: Color(0x0c071b4b), blurRadius: 18, offset: Offset(0, 8))
           ],
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: .10),
-                borderRadius: BorderRadius.circular(15),
-              ),
-              child: Icon(icon, color: color),
-            ),
-            const SizedBox(width: 11),
+          Row(children: [
+            CircleAvatar(
+                backgroundColor: color.withValues(alpha: .10),
+                child: Icon(icon, color: color)),
+            const SizedBox(width: 12),
             Expanded(
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(title,
-                        style: const TextStyle(
-                            color: navy,
-                            fontSize: 17,
-                            fontWeight: FontWeight.w900)),
-                    const SizedBox(height: 2),
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                  Text(title,
+                      style: const TextStyle(
+                          color: navy,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900)),
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 3),
                     Text(subtitle,
                         style: const TextStyle(
                             color: muted,
                             fontSize: 12,
                             fontWeight: FontWeight.w700)),
-                  ]),
-            ),
+                  ],
+                ])),
           ]),
-          const SizedBox(height: 13),
+          const SizedBox(height: 14),
           child,
         ]),
       );
 
-  int get correctionStep {
-    if (matched != null) return 3;
-    if (updates.isNotEmpty && validSource) return 2;
-    if (source.isNotEmpty) return 1;
-    return 0;
-  }
-
-  Widget stepBadge(int number, String title) {
-    final active = correctionStep >= number - 1;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: active ? softBlue : const Color(0xfff7f9ff),
-        borderRadius: BorderRadius.circular(14),
-        border:
-            Border.all(color: active ? blue.withValues(alpha: .30) : border),
-      ),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        CircleAvatar(
-          radius: 13,
-          backgroundColor: active ? blue : const Color(0xffe7edf7),
-          child: Text('$number',
-              style: TextStyle(
-                  color: active ? Colors.white : muted,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w900)),
-        ),
-        const SizedBox(width: 7),
-        Text(title,
-            style: TextStyle(
-                color: active ? navy : muted,
-                fontWeight: FontWeight.w900,
-                fontSize: 12)),
-      ]),
-    );
-  }
-
-  Widget stepHeader(int number, String title, String subtitle, IconData icon) =>
-      Padding(
-        padding: const EdgeInsets.only(top: 18, bottom: 10),
-        child: Row(children: [
-          CircleAvatar(
-            backgroundColor: softBlue,
-            child: Icon(icon, color: blue, size: 20),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child:
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('$number. $title',
-                  style: const TextStyle(
-                      color: navy, fontSize: 16, fontWeight: FontWeight.w900)),
-              const SizedBox(height: 2),
-              Text(subtitle,
-                  style: const TextStyle(
-                      color: muted, fontSize: 12, fontWeight: FontWeight.w700)),
-            ]),
-          ),
-        ]),
-      );
-
-  Widget duplicateWarning() {
-    final onlyVillage =
-        sourceVillage.text.trim().isNotEmpty && source.length < 2;
-    if (!onlyVillage) return const SizedBox.shrink();
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(top: 10),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xfffff7ed),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: orange.withValues(alpha: .35)),
-      ),
-      child: const Row(children: [
-        Icon(Icons.warning_amber_rounded, color: orange),
-        SizedBox(width: 10),
-        Expanded(
-          child: Text(
-            'Safe rule: गाँव या गलत OCR text अकेला unique नहीं है। विधानसभा / पंचायत / भाग में से कम से कम एक और value चुनें।',
-            style: TextStyle(color: navy, fontWeight: FontWeight.w800),
-          ),
-        ),
-      ]),
-    );
-  }
-
   Widget comparisonTable() {
     const labels = {
-      'assemblyNumber': 'विधानसभा संख्या',
-      'assemblyName': 'विधानसभा नाम',
-      'gramPanchayat': 'ग्राम पंचायत',
-      'village': 'गाँव',
-      'partNumber': 'भाग / बूथ',
-      'tehsil': 'तहसील',
+      'assemblyNumber': 'Assembly number',
+      'assemblyName': 'Assembly name',
+      'gramPanchayat': 'Gram panchayat',
+      'village': 'Village',
+      'partNumber': 'Part / Booth',
+      'tehsil': 'Tehsil',
     };
-    String oldValue(String key) => source[key] ?? '-';
+    String oldValue(String key) => source[key] ?? 'Blank';
     String newValue(String key) => updates[key] ?? oldValue(key);
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(top: 10),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: border),
-      ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text('Old vs New comparison',
-            style: TextStyle(color: navy, fontWeight: FontWeight.w900)),
-        const SizedBox(height: 8),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: DataTable(
-            headingRowHeight: 34,
-            dataRowMinHeight: 38,
-            dataRowMaxHeight: 46,
-            columns: const [
-              DataColumn(label: Text('Field')),
-              DataColumn(label: Text('Old')),
-              DataColumn(label: Text('New')),
-            ],
-            rows: labels.entries
-                .map((entry) => DataRow(cells: [
-                      DataCell(Text(entry.value)),
-                      DataCell(Text(oldValue(entry.key))),
-                      DataCell(Text(newValue(entry.key),
-                          style: TextStyle(
-                              color: newValue(entry.key) == oldValue(entry.key)
-                                  ? muted
-                                  : green,
-                              fontWeight: FontWeight.w900))),
-                    ]))
-                .toList(),
-          ),
-        ),
-      ]),
-    );
-  }
-
-  List<Widget> currentLocationSummary() {
-    if (sample.isEmpty) return const [];
-    String values(String key) {
-      final set = sample
-          .map((voter) => '${voter[key] ?? ''}'.trim())
-          .where((value) => value.isNotEmpty)
-          .toSet()
-          .take(4)
-          .toList();
-      return set.isEmpty ? 'खाली' : set.join(', ');
-    }
-
-    return [
-      const SizedBox(height: 10),
-      const Divider(),
-      const Text('अभी database में values',
+    final rows = labels.entries
+        .where((entry) =>
+            updates.containsKey(entry.key) || source.containsKey(entry.key))
+        .toList();
+    if (rows.isEmpty) return const SizedBox.shrink();
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const Text('Old vs New preview',
           style: TextStyle(color: navy, fontWeight: FontWeight.w900)),
       const SizedBox(height: 8),
-      Wrap(spacing: 8, runSpacing: 8, children: [
-        Chip(label: Text('पंचायत: ${values('gramPanchayat')}')),
-        Chip(label: Text('गाँव: ${values('village')}')),
-        Chip(label: Text('भाग: ${values('partNumber')}')),
-        Chip(label: Text('तहसील: ${values('tehsil')}')),
-      ]),
-    ];
+      ...rows.map((entry) {
+        final oldText = oldValue(entry.key);
+        final newText = newValue(entry.key);
+        final changed = oldText != newText;
+        return Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: changed ? const Color(0xfff0fff6) : const Color(0xfff7f9ff),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+                color: changed ? green.withValues(alpha: .25) : border),
+          ),
+          child: Row(children: [
+            Expanded(
+                child: Text(entry.value,
+                    style: const TextStyle(
+                        color: navy, fontWeight: FontWeight.w900))),
+            Expanded(
+                child: Text(oldText,
+                    style: const TextStyle(
+                        color: muted, fontWeight: FontWeight.w700))),
+            const Icon(Icons.arrow_forward_rounded, color: muted, size: 18),
+            Expanded(
+                child: Text(newText,
+                    style: TextStyle(
+                        color: changed ? green : muted,
+                        fontWeight: FontWeight.w900))),
+          ]),
+        );
+      }),
+    ]);
+  }
+
+  Widget samplePreview() {
+    if (matched == null) {
+      return const Text(
+          'Preview dabane par matched voters, sample aur current values yahan dikhenge.',
+          style: TextStyle(color: muted, fontWeight: FontWeight.w700));
+    }
+    final currentVillages = sample
+        .map((v) => "${v['village'] ?? ''}".trim())
+        .where((v) => v.isNotEmpty)
+        .toSet()
+        .take(4)
+        .join(', ');
+    final currentPanchayats = sample
+        .map((v) => "${v['gramPanchayat'] ?? ''}".trim())
+        .where((v) => v.isNotEmpty)
+        .toSet()
+        .take(4)
+        .join(', ');
+    final currentParts = sample
+        .map((v) => "${v['partNumber'] ?? ''}".trim())
+        .where((v) => v.isNotEmpty)
+        .toSet()
+        .take(4)
+        .join(', ');
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+            color: softBlue,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: blue.withValues(alpha: .18))),
+        child: Text('$matched voters found',
+            style: const TextStyle(
+                color: navy, fontSize: 20, fontWeight: FontWeight.w900)),
+      ),
+      const SizedBox(height: 10),
+      if (sample.isNotEmpty) ...[
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          Chip(
+              label: Text(
+                  "Village: ${currentVillages.isEmpty ? 'Blank' : currentVillages}")),
+          Chip(
+              label: Text(
+                  "Panchayat: ${currentPanchayats.isEmpty ? 'Blank' : currentPanchayats}")),
+          Chip(
+              label: Text(
+                  "Part: ${currentParts.isEmpty ? 'Blank' : currentParts}")),
+        ]),
+        const SizedBox(height: 10),
+        ...sample.take(5).map((voter) => Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                  color: const Color(0xfff7f9ff),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: border)),
+              child: Row(children: [
+                const CircleAvatar(
+                    backgroundColor: softBlue,
+                    child: Icon(Icons.person_rounded, color: blue)),
+                const SizedBox(width: 10),
+                Expanded(
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                      Text("${voter['name'] ?? '-'}",
+                          style: const TextStyle(
+                              color: navy, fontWeight: FontWeight.w900)),
+                      Text(
+                          "EPIC ${voter['voterId'] ?? '-'} ? ?? ${voter['houseNumber'] ?? '-'}",
+                          style: const TextStyle(color: muted, fontSize: 12)),
+                    ])),
+              ]),
+            )),
+      ],
+      if (source.length < 3)
+        Container(
+          margin: const EdgeInsets.only(top: 8),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+              color: const Color(0xfffff7ed),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: orange.withValues(alpha: .28))),
+          child: const Text(
+              'Warning: Village alone is not unique. If result is large, add panchayat/part/assembly too.',
+              style: TextStyle(color: navy, fontWeight: FontWeight.w800)),
+        ),
+    ]);
   }
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
-        insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-        contentPadding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
-        actionsPadding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
-        titlePadding: const EdgeInsets.fromLTRB(18, 16, 8, 0),
-        title: Row(children: [
-          const CircleAvatar(
-            backgroundColor: softBlue,
-            child: Icon(Icons.edit_location_alt_rounded, color: blue),
-          ),
-          const SizedBox(width: 12),
-          const Expanded(
-            child:
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Bulk Location Fix',
-                  style: TextStyle(color: navy, fontWeight: FontWeight.w900)),
-              SizedBox(height: 2),
-              Text('गलत/अधूरी location को safely सुधारें',
-                  style: TextStyle(color: muted, fontSize: 12)),
-            ]),
-          ),
-          IconButton(
-            onPressed: loading ? null : () => Navigator.pop(context, false),
-            icon: const Icon(Icons.close_rounded),
-          ),
-        ]),
-        content: SizedBox(
-          width: 760,
-          child: SingleChildScrollView(
-            child:
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [
-                Expanded(child: stepBadge(1, 'Search')),
-                const SizedBox(width: 6),
-                Expanded(child: stepBadge(2, 'Correct')),
-                const SizedBox(width: 6),
-                Expanded(child: stepBadge(3, 'Preview')),
-              ]),
-              const SizedBox(height: 12),
-              sectionCard(
-                icon: Icons.search_rounded,
-                title: advancedMode
-                    ? 'Safe Key से पुरानी location'
-                    : 'Smart Fix: पुरानी info खोजें',
-                subtitle: advancedMode
-                    ? 'जब exact विधानसभा + पंचायत + गाँव + भाग पता हो।'
-                    : 'जैसे sahara bheeta / Hier / भीटा 47 लिखें।',
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SegmentedButton<bool>(
-                        segments: const [
-                          ButtonSegment(
-                              value: false,
-                              icon: Icon(Icons.auto_fix_high_rounded),
-                              label: Text('Smart')),
-                          ButtonSegment(
-                              value: true,
-                              icon: Icon(Icons.vpn_key_rounded),
-                              label: Text('Advanced')),
-                        ],
-                        selected: {advancedMode},
-                        onSelectionChanged: (value) => setState(() {
-                          advancedMode = value.first;
-                          matched = null;
-                          sample = const [];
-                          error = null;
-                        }),
-                      ),
-                      const SizedBox(height: 12),
-                      if (!advancedMode) ...[
-                        TextField(
-                          controller: smartQuery,
-                          onChanged: (_) => setState(() {
-                            matched = null;
-                            sample = const [];
-                            schedulePreview();
-                          }),
-                          decoration: InputDecoration(
-                            prefixIcon: const Icon(Icons.search_rounded),
-                            labelText: 'Old/wrong info',
-                            hintText: 'sahara bheeta / Hier / भीटा 47',
-                            helperText:
-                                '2 अक्षर लिखते ही affected voters preview होगा',
-                            suffixIcon: smartQuery.text.isEmpty
-                                ? null
-                                : IconButton(
-                                    onPressed: () => setState(() {
-                                      smartQuery.clear();
-                                      matched = null;
-                                      sample = const [];
-                                    }),
-                                    icon: const Icon(Icons.close_rounded),
-                                  ),
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        Container(
-                          padding: const EdgeInsets.all(11),
-                          decoration: BoxDecoration(
-                            color: const Color(0xfffff7ed),
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(
-                                color: orange.withValues(alpha: .25)),
-                          ),
-                          child: const Row(children: [
-                            Icon(Icons.info_outline_rounded, color: orange),
-                            SizedBox(width: 9),
-                            Expanded(
-                              child: Text(
-                                'गाँव अकेला unique नहीं होता। ज्यादा result आए तो पंचायत/भाग भी search में लिखें।',
-                                style: TextStyle(
-                                    color: navy,
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 12),
-                              ),
-                            ),
-                          ]),
-                        ),
-                      ] else ...[
-                        SizedBox(
-                          width: double.infinity,
-                          height: 48,
-                          child: FilledButton.icon(
-                            onPressed:
-                                loading ? null : chooseSourceFromDatabase,
-                            icon: const Icon(Icons.dataset_rounded),
-                            label: const Text('Database से location चुनें'),
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        Wrap(spacing: 10, runSpacing: 10, children: [
-                          field(sourceAssemblyNumber, 'विधानसभा संख्या',
-                              Icons.account_balance_outlined),
-                          field(sourceAssemblyName, 'विधानसभा नाम',
-                              Icons.account_balance_rounded),
-                          field(sourceGramPanchayat, 'ग्राम पंचायत',
-                              Icons.holiday_village_outlined),
-                          field(sourceVillage, 'गाँव / गलत OCR text *',
-                              Icons.location_city_rounded),
-                          field(sourcePartNumber, 'भाग / बूथ',
-                              Icons.how_to_vote_rounded),
-                        ]),
-                      ],
-                    ]),
-              ),
-              sectionCard(
-                icon: Icons.edit_location_alt_rounded,
-                title: 'सही जानकारी भरें',
-                subtitle:
-                    'सिर्फ वही field भरें जो बदलनी/जोड़नी है; बाकी खाली छोड़ें।',
-                color: green,
-                child: Wrap(spacing: 10, runSpacing: 10, children: [
-                  field(newGramPanchayat, 'नई ग्राम पंचायत',
-                      Icons.holiday_village_outlined),
-                  field(newVillage, 'नया गाँव', Icons.location_city_rounded),
-                  field(newPartNumber, 'नया भाग / बूथ',
-                      Icons.how_to_vote_rounded),
-                  field(newTehsil, 'नई तहसील / ब्लॉक', Icons.apartment_rounded),
-                  field(newAssemblyNumber, 'नई विधानसभा संख्या',
-                      Icons.account_balance_outlined),
-                  field(newAssemblyName, 'नई विधानसभा नाम',
-                      Icons.account_balance_rounded),
+  Widget build(BuildContext context) => Dialog.fullscreen(
+        child: Scaffold(
+          backgroundColor: bg,
+          appBar: AppBar(
+            title: const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Location Master + Bulk Correction'),
+                  SizedBox(height: 2),
+                  Text('Safely fix wrong OCR location',
+                      style: TextStyle(color: muted, fontSize: 12)),
                 ]),
-              ),
-              comparisonTable(),
-              const SizedBox(height: 14),
-              if (error != null)
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xfffff1f2),
-                    borderRadius: BorderRadius.circular(14),
-                    border:
-                        Border.all(color: Colors.red.withValues(alpha: .20)),
-                  ),
-                  child: Text(error!,
-                      style: const TextStyle(
-                          color: Colors.red, fontWeight: FontWeight.w800)),
-                ),
-              sectionCard(
-                icon: Icons.visibility_rounded,
-                title: 'Preview affected voters',
-                subtitle: 'Apply से पहले count और sample जरूर confirm करें।',
-                color: purple,
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (matched != null) ...[
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: const Color(0xfff7f9ff),
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: border),
-                          ),
-                          child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('$matched voters match हुए',
-                                    style: const TextStyle(
-                                        color: navy,
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w900)),
-                                const SizedBox(height: 6),
-                                ...sample.take(5).map((voter) => Text(
-                                    '• ${voter['name'] ?? '-'} · EPIC ${voter['voterId'] ?? '-'} · घर ${voter['houseNumber'] ?? '-'}',
-                                    style: const TextStyle(
-                                        color: muted, fontSize: 12))),
-                                ...currentLocationSummary(),
-                              ]),
-                        ),
-                      ] else ...[
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: const Color(0xfff7f9ff),
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: border),
-                          ),
-                          child: const Text(
-                            'Preview दबाने पर affected voter count और sample यहाँ दिखेंगे।',
-                            style: TextStyle(
-                                color: muted, fontWeight: FontWeight.w700),
-                          ),
-                        ),
-                      ],
+            actions: [
+              IconButton(
+                  onPressed:
+                      loading ? null : () => Navigator.pop(context, false),
+                  icon: const Icon(Icons.close_rounded))
+            ],
+          ),
+          body: SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 110),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                              colors: [Color(0xff1457f5), Color(0xff2188ff)]),
+                          borderRadius: BorderRadius.circular(24)),
+                      child: const Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(Icons.location_on_rounded,
+                                color: Colors.white, size: 34),
+                            SizedBox(height: 10),
+                            Text('Village alone is not unique',
+                                style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w900)),
+                            SizedBox(height: 6),
+                            Text(
+                                'Best key = Assembly + Panchayat + Village + Part/Booth',
+                                style: TextStyle(
+                                    color: Colors.white70,
+                                    fontWeight: FontWeight.w700)),
+                          ]),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(children: [
+                      stepPill(1, 'Old info'),
+                      const SizedBox(width: 8),
+                      stepPill(2, 'Correct'),
+                      const SizedBox(width: 8),
+                      stepPill(3, 'Preview')
                     ]),
-              ),
-            ]),
+                    const SizedBox(height: 14),
+                    card(
+                      title: '1. Search old / wrong info',
+                      subtitle: 'Example: sahara bheeta, Hier, bheeta 47',
+                      icon: Icons.search_rounded,
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SegmentedButton<bool>(
+                              segments: const [
+                                ButtonSegment(
+                                    value: false,
+                                    icon: Icon(Icons.auto_fix_high_rounded),
+                                    label: Text('Smart Fix')),
+                                ButtonSegment(
+                                    value: true,
+                                    icon: Icon(Icons.vpn_key_rounded),
+                                    label: Text('Safe Key')),
+                              ],
+                              selected: {advancedMode},
+                              onSelectionChanged: (value) => setState(() {
+                                advancedMode = value.first;
+                                error = null;
+                                clearPreview();
+                              }),
+                            ),
+                            const SizedBox(height: 12),
+                            if (!advancedMode)
+                              input(smartQuery, 'Old search text',
+                                  Icons.search_rounded,
+                                  hint: 'sahara bheeta / Hier / bheeta',
+                                  sourceField: true)
+                            else ...[
+                              SizedBox(
+                                  width: double.infinity,
+                                  child: FilledButton.icon(
+                                      onPressed: loading
+                                          ? null
+                                          : chooseSourceFromDatabase,
+                                      icon: const Icon(Icons.dataset_rounded),
+                                      label: const Text(
+                                          'Choose location from database'))),
+                              const SizedBox(height: 12),
+                              input(sourceAssemblyNumber, 'Assembly number',
+                                  Icons.account_balance_outlined,
+                                  sourceField: true),
+                              const SizedBox(height: 10),
+                              input(sourceGramPanchayat, 'Gram panchayat',
+                                  Icons.holiday_village_outlined,
+                                  sourceField: true),
+                              const SizedBox(height: 10),
+                              input(sourceVillage, 'Village / OCR text *',
+                                  Icons.location_city_rounded,
+                                  sourceField: true),
+                              const SizedBox(height: 10),
+                              input(sourcePartNumber, 'Part / Booth',
+                                  Icons.how_to_vote_rounded,
+                                  sourceField: true),
+                              const SizedBox(height: 10),
+                              input(sourceAssemblyName, 'Assembly name',
+                                  Icons.account_balance_rounded,
+                                  sourceField: true),
+                            ],
+                          ]),
+                    ),
+                    card(
+                      title: '2. Fill correct information',
+                      subtitle:
+                          'Fill only fields you want to change/add. Same value is allowed.',
+                      icon: Icons.edit_location_alt_rounded,
+                      color: green,
+                      child: Column(children: [
+                        input(newGramPanchayat, 'New gram panchayat',
+                            Icons.holiday_village_outlined),
+                        const SizedBox(height: 10),
+                        input(newVillage, 'New village',
+                            Icons.location_city_rounded),
+                        const SizedBox(height: 10),
+                        input(newPartNumber, 'New part / booth',
+                            Icons.how_to_vote_rounded),
+                        const SizedBox(height: 10),
+                        input(newTehsil, 'New tehsil / block',
+                            Icons.apartment_rounded),
+                        const SizedBox(height: 10),
+                        input(newAssemblyNumber, 'New assembly number',
+                            Icons.account_balance_outlined),
+                        const SizedBox(height: 10),
+                        input(newAssemblyName, 'New assembly name',
+                            Icons.account_balance_rounded),
+                        const SizedBox(height: 14),
+                        comparisonTable(),
+                      ]),
+                    ),
+                    if (error != null)
+                      Container(
+                        width: double.infinity,
+                        margin: const EdgeInsets.only(bottom: 14),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                            color: const Color(0xfffff1f2),
+                            borderRadius: BorderRadius.circular(16),
+                            border:
+                                Border.all(color: rose.withValues(alpha: .22))),
+                        child: Text(error!,
+                            style: const TextStyle(
+                                color: rose, fontWeight: FontWeight.w900)),
+                      ),
+                    card(
+                        title: '3. Preview affected voters',
+                        subtitle: 'Check count and sample before Apply.',
+                        icon: Icons.visibility_rounded,
+                        color: purple,
+                        child: samplePreview()),
+                  ]),
+            ),
+          ),
+          bottomNavigationBar: SafeArea(
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+              decoration: const BoxDecoration(color: Colors.white, boxShadow: [
+                BoxShadow(
+                    color: Color(0x14071b4b),
+                    blurRadius: 18,
+                    offset: Offset(0, -8))
+              ]),
+              child: Row(children: [
+                Expanded(
+                    child: OutlinedButton.icon(
+                        onPressed: loading ? null : () => preview(),
+                        icon: loading
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2))
+                            : const Icon(Icons.visibility_outlined),
+                        label: const Text('Preview'))),
+                const SizedBox(width: 10),
+                Expanded(
+                    child: FilledButton.icon(
+                        onPressed: loading || matched == null || matched == 0
+                            ? null
+                            : apply,
+                        icon: const Icon(Icons.done_all_rounded),
+                        label: const Text('Apply correction'))),
+              ]),
+            ),
           ),
         ),
-        actions: [
-          TextButton(
-              onPressed: loading ? null : () => Navigator.pop(context, false),
-              child: const Text('Close')),
-          OutlinedButton.icon(
-            onPressed: loading ? null : preview,
-            icon: loading
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2))
-                : const Icon(Icons.visibility_outlined),
-            label: const Text('Preview'),
-          ),
-          FilledButton.icon(
-            onPressed:
-                loading || matched == null || matched == 0 ? null : apply,
-            icon: const Icon(Icons.done_all_rounded),
-            label: const Text('Apply correction'),
-          ),
-        ],
       );
 }
 
@@ -3431,11 +3401,11 @@ class _LocationGroupPickerState extends State<_LocationGroupPicker> {
   Widget build(BuildContext context) {
     final query = q.toLowerCase();
     final items = widget.items.where((item) {
-      final label = '${item['label'] ?? ''}'.toLowerCase();
+      final label = "${item['label'] ?? ''}".toLowerCase();
       return query.isEmpty || label.contains(query);
     }).toList();
     return AlertDialog(
-      title: const Text('Source location चुनें'),
+      title: const Text('Choose source location'),
       content: SizedBox(
         width: 620,
         height: 560,
@@ -3443,14 +3413,13 @@ class _LocationGroupPickerState extends State<_LocationGroupPicker> {
           TextField(
             onChanged: (value) => setState(() => q = value),
             decoration: const InputDecoration(
-              prefixIcon: Icon(Icons.search_rounded),
-              hintText: 'गाँव, पंचायत, विधानसभा या भाग खोजें...',
-            ),
+                prefixIcon: Icon(Icons.search_rounded),
+                hintText: 'Search village, panchayat, assembly or part...'),
           ),
           const SizedBox(height: 12),
           Expanded(
             child: items.isEmpty
-                ? const Center(child: Text('कोई location group नहीं मिला'))
+                ? const Center(child: Text('No location group found'))
                 : ListView.separated(
                     itemCount: items.length,
                     separatorBuilder: (_, __) => const SizedBox(height: 8),
@@ -3463,31 +3432,29 @@ class _LocationGroupPickerState extends State<_LocationGroupPicker> {
                         child: Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: border),
-                          ),
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: border)),
                           child: Row(children: [
                             const CircleAvatar(
-                              backgroundColor: softBlue,
-                              child:
-                                  Icon(Icons.location_on_rounded, color: blue),
-                            ),
+                                backgroundColor: softBlue,
+                                child: Icon(Icons.location_on_rounded,
+                                    color: blue)),
                             const SizedBox(width: 12),
                             Expanded(
-                              child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text('${item['label'] ?? '-'}',
-                                        style: const TextStyle(
-                                            color: navy,
-                                            fontWeight: FontWeight.w900)),
-                                    const SizedBox(height: 3),
-                                    Text('$count voters',
-                                        style: const TextStyle(
-                                            color: muted, fontSize: 12)),
-                                  ]),
-                            ),
+                                child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                  Text("${item['label'] ?? '-'}",
+                                      style: const TextStyle(
+                                          color: navy,
+                                          fontWeight: FontWeight.w900)),
+                                  const SizedBox(height: 3),
+                                  Text('$count voters',
+                                      style: const TextStyle(
+                                          color: muted, fontSize: 12)),
+                                ])),
                             const Icon(Icons.chevron_right_rounded,
                                 color: muted),
                           ]),
@@ -3500,8 +3467,7 @@ class _LocationGroupPickerState extends State<_LocationGroupPicker> {
       ),
       actions: [
         TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close')),
+            onPressed: () => Navigator.pop(context), child: const Text('Close'))
       ],
     );
   }

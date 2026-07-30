@@ -263,30 +263,33 @@ const cleanLocationUpdates = (updates = {}) => {
   return cleaned;
 };
 
+const locationSearchFields = ['assemblyNumber', 'assemblyName', 'gramPanchayat', 'village', 'partNumber', 'tehsil', 'municipality', 'sectionNumber', 'sectionName', 'location', 'address'];
+
+const locationVariantsFor = (token) => {
+  const lower = cleanText(token).toLowerCase();
+  const variants = new Set([cleanText(token)]);
+  if (['bheeta', 'bhita', 'beeta', 'hier'].includes(lower) || /भीट|हीर|हियर/.test(token)) {
+    ['bheeta', 'bhita', 'beeta', 'भीटा', 'भीट', 'hier', 'हीर', 'हियर'].forEach((value) => variants.add(value));
+  }
+  if (['shara', 'sahara', 'sahada', 'sahra'].includes(lower) || /सहाड़|सहारा|सहरा/.test(token)) {
+    ['shara', 'sahara', 'sahada', 'sahra', 'सहाड़ा', 'सहारा', 'सहरा'].forEach((value) => variants.add(value));
+  }
+  return [...variants].filter(Boolean);
+};
+
+const regexesForLocationValue = (value) => [...new Set(locationVariantsFor(value))]
+  .map((variant) => new RegExp(escapeRegExp(variant), 'i'));
+
 const addSmartLocationSearch = (filter, query) => {
   const tokens = cleanText(query).split(/\s+/).filter((token) => token.length >= 2).slice(0, 6);
   if (!tokens.length) return;
-  const fields = ['assemblyNumber', 'assemblyName', 'gramPanchayat', 'village', 'partNumber', 'tehsil', 'municipality', 'sectionNumber', 'sectionName', 'location', 'address'];
-  const variantsFor = (token) => {
-    const lower = token.toLowerCase();
-    const variants = new Set([token]);
-    if (['bheeta', 'bhita', 'beeta'].includes(lower) || /भीट/.test(token)) {
-      ['bheeta', 'bhita', 'beeta', 'भीटा', 'hier'].forEach((value) => variants.add(value));
-    }
-    if (['shara', 'sahara'].includes(lower) || /सहा/.test(token)) {
-      ['shara', 'sahara', 'सहाड़ा', 'सहारा'].forEach((value) => variants.add(value));
-    }
-    if (lower === 'hier') ['hier', 'हीर', 'हियर'].forEach((value) => variants.add(value));
-    return [...variants];
-  };
-  const regexes = [...new Set(tokens.flatMap(variantsFor))]
+  const regexes = [...new Set(tokens.flatMap(locationVariantsFor))]
     .map((variant) => new RegExp(escapeRegExp(variant), 'i'));
   filter.$and = [
     ...(filter.$and || []),
-    { $or: fields.flatMap((field) => regexes.map((regex) => ({ [field]: regex }))) },
+    { $or: locationSearchFields.flatMap((field) => regexes.map((regex) => ({ [field]: regex }))) },
   ];
 };
-
 exports.locationGroups = async (req, res, next) => {
   try {
     const filter = applyMemberScope(req.currentUser, {});
@@ -356,12 +359,12 @@ exports.bulkLocationCorrection = async (req, res, next) => {
     const filter = applyMemberScope(req.currentUser, baseSource);
     addSmartLocationSearch(filter, smartQuery);
     if (looksLikeOcrGarbage) {
-      const escaped = source.village.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regexes = regexesForLocationValue(source.village);
       filter.$or = [
-        { village: new RegExp(escaped, 'i') },
-        { location: new RegExp(escaped, 'i') },
-        { address: new RegExp(escaped, 'i') },
-        { sectionName: new RegExp(escaped, 'i') },
+        ...regexes.map((regex) => ({ village: regex })),
+        ...regexes.map((regex) => ({ location: regex })),
+        ...regexes.map((regex) => ({ address: regex })),
+        ...regexes.map((regex) => ({ sectionName: regex })),
       ];
     }
     const count = await Member.countDocuments(filter);
