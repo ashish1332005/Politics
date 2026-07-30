@@ -3969,7 +3969,13 @@ class _VoterRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final name = '${member['name'] ?? '-'}';
-    final epic = '${member['voterId'] ?? '-'}';
+    final isPersonal = member['contactType'] == 'personal';
+    final epic = '${member['voterId'] ?? ''}'.trim();
+    final identityText = isPersonal
+        ? 'Personal contact'
+        : epic.isEmpty
+            ? 'EPIC not available'
+            : 'EPIC: $epic';
     final guardian = '${member['guardianName'] ?? ''}'.trim();
     final mobile = '${member['mobile'] ?? ''}'.trim();
     final house = '${member['houseNumber'] ?? '-'}';
@@ -4047,11 +4053,25 @@ class _VoterRow extends StatelessWidget {
                                 fontSize: 12,
                                 fontWeight: FontWeight.w800)),
                         const SizedBox(height: 4),
-                        Text('EPIC: $epic',
-                            style: const TextStyle(
-                                color: muted,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700)),
+                        Row(children: [
+                          Icon(
+                            isPersonal
+                                ? Icons.person_pin_circle_outlined
+                                : Icons.badge_outlined,
+                            size: 14,
+                            color: isPersonal ? purple : muted,
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(identityText,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                    color: isPersonal ? purple : muted,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w800)),
+                          ),
+                        ]),
                         const SizedBox(height: 6),
                         Wrap(spacing: 6, runSpacing: 6, children: [
                           _InfoPill(Icons.home_rounded, 'घर $house'),
@@ -4505,9 +4525,14 @@ class _VoterFormState extends State<VoterForm> {
   final ctrls = <String, TextEditingController>{};
   String support = 'undecided';
   String gender = '';
+  String contactType = 'voter';
   PlatformFile? selectedPhoto;
   bool saving = false;
   String? formError;
+
+  bool get isPersonal => contactType == 'personal';
+  bool get canChooseType =>
+      api.user?['role'] == 'admin' && widget.voter == null;
 
   @override
   void initState() {
@@ -4532,16 +4557,23 @@ class _VoterFormState extends State<VoterForm> {
     }
     support = widget.voter?['supportLevel'] ?? 'undecided';
     gender = '${widget.voter?['gender'] ?? ''}';
+    contactType = '${widget.voter?['contactType'] ?? 'voter'}';
   }
 
   Future<void> save() async {
     if (saving) return;
     if (ctrls['name']!.text.trim().isEmpty) {
-      showError('मतदाता का नाम जरूरी है।');
+      showError('Name is required.');
       return;
     }
-    if (ctrls['voterId']!.text.trim().isEmpty) {
-      showError('EPIC / मतदाता आईडी जरूरी है।');
+    if (!isPersonal && ctrls['voterId']!.text.trim().isEmpty) {
+      showError('EPIC is required for Matdata contact.');
+      return;
+    }
+    if (isPersonal &&
+        ctrls['mobile']!.text.trim().isEmpty &&
+        ctrls['address']!.text.trim().isEmpty) {
+      showError('Personal contact ke liye mobile ya address me se ek bharein.');
       return;
     }
     setState(() {
@@ -4552,7 +4584,11 @@ class _VoterFormState extends State<VoterForm> {
       for (final e in ctrls.entries) e.key: e.value.text.trim(),
       'gender': gender,
       'supportLevel': support,
+      'contactType': contactType,
     };
+    if (isPersonal && ctrls['voterId']!.text.trim().isEmpty) {
+      body.remove('voterId');
+    }
     try {
       if (selectedPhoto != null) {
         await api.uploadFile(
@@ -4575,7 +4611,10 @@ class _VoterFormState extends State<VoterForm> {
       if (!mounted) return;
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('मतदाता सफलतापूर्वक सहेजा गया')),
+        SnackBar(
+            content: Text(isPersonal
+                ? 'Personal contact saved.'
+                : 'Matdata contact saved.')),
       );
     } catch (e) {
       showError('$e'.replaceFirst('Exception: ', ''));
@@ -4585,15 +4624,12 @@ class _VoterFormState extends State<VoterForm> {
   }
 
   Future<void> pickPhoto() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.image,
-      withData: true,
-      withReadStream: false,
-    );
+    final result = await FilePicker.platform
+        .pickFiles(type: FileType.image, withData: true, withReadStream: false);
     if (result == null || !mounted) return;
     final file = result.files.single;
     if (file.size > 10 * 1024 * 1024) {
-      showError('Photo 10 MB से छोटी होनी चाहिए।');
+      showError('Photo 10 MB se chhoti honi chahiye.');
       return;
     }
     setState(() => selectedPhoto = file);
@@ -4632,7 +4668,7 @@ class _VoterFormState extends State<VoterForm> {
                   BoxShadow(
                       color: Color(0x17071b4b),
                       blurRadius: 18,
-                      offset: Offset(0, 8)),
+                      offset: Offset(0, 8))
                 ],
               ),
               clipBehavior: Clip.antiAlias,
@@ -4640,8 +4676,12 @@ class _VoterFormState extends State<VoterForm> {
                   ? Image.memory(bytes, fit: BoxFit.cover)
                   : widget.voter?['photo'] != null
                       ? _VoterPhoto(photo: widget.voter?['photo'], radius: 48)
-                      : const Icon(Icons.camera_alt_rounded,
-                          color: muted, size: 34),
+                      : Icon(
+                          isPersonal
+                              ? Icons.person_pin_circle_outlined
+                              : Icons.camera_alt_rounded,
+                          color: muted,
+                          size: 34),
             ),
             Positioned(
               right: -2,
@@ -4650,10 +4690,9 @@ class _VoterFormState extends State<VoterForm> {
                 width: 32,
                 height: 32,
                 decoration: BoxDecoration(
-                  color: blue,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 3),
-                ),
+                    color: blue,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 3)),
                 child: const Icon(Icons.add_a_photo_rounded,
                     color: Colors.white, size: 15),
               ),
@@ -4661,13 +4700,12 @@ class _VoterFormState extends State<VoterForm> {
           ]),
           const SizedBox(height: 8),
           Text(
-            selectedPhoto == null
-                ? 'फोटो जोड़ें'
-                : '${selectedPhoto!.name} · बदलने के लिए tap करें',
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-                color: muted, fontSize: 12, fontWeight: FontWeight.w700),
-          ),
+              selectedPhoto == null
+                  ? 'Add photo'
+                  : '${selectedPhoto!.name} ? tap to change',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                  color: muted, fontSize: 12, fontWeight: FontWeight.w700)),
         ]),
       ),
     );
@@ -4676,13 +4714,15 @@ class _VoterFormState extends State<VoterForm> {
   Widget formField(String key,
           {IconData? icon,
           TextInputType? keyboardType,
-          bool required = false}) =>
+          bool required = false,
+          String? helperText}) =>
       TextField(
         controller: ctrls[key],
         keyboardType: keyboardType,
         decoration: InputDecoration(
           labelText: '${voterFieldLabel(key)}${required ? ' *' : ''}',
           prefixIcon: icon == null ? null : Icon(icon),
+          helperText: helperText,
         ),
       );
 
@@ -4693,10 +4733,9 @@ class _VoterFormState extends State<VoterForm> {
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 12),
             decoration: BoxDecoration(
-              color: gender == value ? softBlue : Colors.white,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: gender == value ? blue : border),
-            ),
+                color: gender == value ? softBlue : Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: gender == value ? blue : border)),
             child: Column(children: [
               Icon(icon, color: gender == value ? blue : muted),
               const SizedBox(height: 4),
@@ -4710,17 +4749,79 @@ class _VoterFormState extends State<VoterForm> {
         ),
       );
 
+  Widget typeCard(String value, IconData icon, String title, String subtitle) {
+    final selected = contactType == value;
+    return Expanded(
+      child: InkWell(
+        onTap: canChooseType ? () => setState(() => contactType = value) : null,
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          padding: const EdgeInsets.all(13),
+          decoration: BoxDecoration(
+              color: selected ? softBlue : Colors.white,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: selected ? blue : border)),
+          child: Row(children: [
+            CircleAvatar(
+                backgroundColor: selected ? blue : const Color(0xffeef3ff),
+                child: Icon(icon,
+                    color: selected ? Colors.white : muted, size: 20)),
+            const SizedBox(width: 10),
+            Expanded(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                  Text(title,
+                      style: TextStyle(
+                          color: selected ? blue : navy,
+                          fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 2),
+                  Text(subtitle,
+                      style: const TextStyle(
+                          color: muted,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700)),
+                ])),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Widget contactTypeSelector() =>
+      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('Contact type',
+            style: TextStyle(color: navy, fontWeight: FontWeight.w900)),
+        const SizedBox(height: 8),
+        Row(children: [
+          typeCard('voter', Icons.badge_rounded, 'Matdata', 'EPIC required'),
+          const SizedBox(width: 10),
+          typeCard('personal', Icons.person_pin_circle_outlined, 'Personal',
+              'EPIC optional'),
+        ]),
+        if (isPersonal) ...[
+          const SizedBox(height: 8),
+          const Text(
+              'Personal contact voter count/print me default include nahi hoga.',
+              style: TextStyle(
+                  color: muted, fontSize: 11, fontWeight: FontWeight.w700)),
+        ],
+      ]);
+
   List<Widget> formChildren() => [
         photoPicker(),
         const SizedBox(height: 18),
+        if (api.user?['role'] == 'admin') ...[
+          contactTypeSelector(),
+          const SizedBox(height: 14)
+        ],
         if (formError != null) ...[
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: const Color(0xfffff1f3),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: rose.withValues(alpha: .25)),
-            ),
+                color: const Color(0xfffff1f3),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: rose.withValues(alpha: .25))),
             child: Text(formError!,
                 style: const TextStyle(
                     color: navy, fontSize: 12, fontWeight: FontWeight.w800)),
@@ -4733,21 +4834,21 @@ class _VoterFormState extends State<VoterForm> {
         const SizedBox(height: 12),
         formField('houseNumber', icon: Icons.home_outlined),
         const SizedBox(height: 12),
-        const Text('लिंग',
+        const Text('Gender',
             style: TextStyle(color: navy, fontWeight: FontWeight.w900)),
         const SizedBox(height: 8),
         Row(children: [
-          genderOption('male', 'पुरुष', Icons.male_rounded),
+          genderOption('male', 'Male', Icons.male_rounded),
           const SizedBox(width: 9),
-          genderOption('female', 'महिला', Icons.female_rounded),
+          genderOption('female', 'Female', Icons.female_rounded),
           const SizedBox(width: 9),
-          genderOption('other', 'अन्य', Icons.person_outline_rounded),
+          genderOption('other', 'Other', Icons.person_outline_rounded),
         ]),
         const SizedBox(height: 12),
         formField('age',
             icon: Icons.cake_outlined,
             keyboardType: TextInputType.number,
-            required: true),
+            required: !isPersonal),
         const SizedBox(height: 12),
         formField('dob', icon: Icons.calendar_today_outlined),
         const SizedBox(height: 12),
@@ -4758,26 +4859,29 @@ class _VoterFormState extends State<VoterForm> {
             icon: Icons.phone_android_outlined,
             keyboardType: TextInputType.phone),
         const SizedBox(height: 12),
-        formField('voterId', icon: Icons.badge_outlined, required: true),
+        formField('voterId',
+            icon: isPersonal ? Icons.badge_outlined : Icons.badge_rounded,
+            required: !isPersonal,
+            helperText: isPersonal ? 'Optional for personal contacts' : null),
         const SizedBox(height: 12),
         formField('address', icon: Icons.location_on_outlined),
         const SizedBox(height: 12),
         DropdownButtonFormField<String>(
           initialValue: support,
           decoration: const InputDecoration(
-              labelText: 'समर्थन स्तर', prefixIcon: Icon(Icons.how_to_vote)),
+              labelText: 'Support level', prefixIcon: Icon(Icons.how_to_vote)),
           items: const [
-            DropdownMenuItem(value: 'supporter', child: Text('समर्थक मतदाता')),
-            DropdownMenuItem(value: 'opposite', child: Text('विरोधी मतदाता')),
-            DropdownMenuItem(value: 'neutral', child: Text('तटस्थ')),
-            DropdownMenuItem(value: 'undecided', child: Text('अनिर्णीत')),
+            DropdownMenuItem(value: 'supporter', child: Text('Supporter')),
+            DropdownMenuItem(value: 'opposite', child: Text('Opposite')),
+            DropdownMenuItem(value: 'neutral', child: Text('Neutral')),
+            DropdownMenuItem(value: 'undecided', child: Text('Undecided')),
           ],
           onChanged: (v) => setState(() => support = v ?? 'undecided'),
         ),
         const SizedBox(height: 12),
         ExpansionTile(
           tilePadding: EdgeInsets.zero,
-          title: const Text('अधिक जानकारी',
+          title: const Text('More information',
               style: TextStyle(color: navy, fontWeight: FontWeight.w900)),
           children: [
             formField('occupation', icon: Icons.work_outline),
@@ -4796,15 +4900,14 @@ class _VoterFormState extends State<VoterForm> {
   @override
   Widget build(BuildContext context) {
     final mobile = MediaQuery.sizeOf(context).width < 700;
-    final title =
-        widget.voter == null ? 'नया संपर्क जोड़ें' : 'संपर्क संपादित करें';
-    final subtitle =
-        widget.voter == null ? 'नया मतदाता जोड़ें' : 'मतदाता अपडेट करें';
+    final title = widget.voter == null ? 'Add new contact' : 'Edit contact';
+    final subtitle = isPersonal
+        ? 'Save personal contact without EPIC'
+        : 'Save matdata contact';
     final form = ListView(
-      padding: EdgeInsets.fromLTRB(16, mobile ? 12 : 18, 16, 22),
-      shrinkWrap: !mobile,
-      children: formChildren(),
-    );
+        padding: EdgeInsets.fromLTRB(16, mobile ? 12 : 18, 16, 22),
+        shrinkWrap: !mobile,
+        children: formChildren());
     if (mobile) {
       return Dialog.fullscreen(
         child: Scaffold(
@@ -4814,9 +4917,8 @@ class _VoterFormState extends State<VoterForm> {
             foregroundColor: navy,
             elevation: 0,
             leading: IconButton(
-              onPressed: saving ? null : () => Navigator.pop(context),
-              icon: const Icon(Icons.arrow_back_rounded),
-            ),
+                onPressed: saving ? null : () => Navigator.pop(context),
+                icon: const Icon(Icons.arrow_back_rounded)),
             title:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(title,
@@ -4837,7 +4939,7 @@ class _VoterFormState extends State<VoterForm> {
                           child: CircularProgressIndicator(
                               strokeWidth: 2, color: Colors.white))
                       : const Icon(Icons.save_rounded, size: 18),
-                  label: const Text('सहेजें'),
+                  label: const Text('Save'),
                 ),
               )
             ],
@@ -4852,7 +4954,7 @@ class _VoterFormState extends State<VoterForm> {
       actions: [
         TextButton(
             onPressed: saving ? null : () => Navigator.pop(context),
-            child: const Text('रद्द करें')),
+            child: const Text('Cancel')),
         FilledButton.icon(
             onPressed: saving ? null : save,
             icon: saving
@@ -4862,7 +4964,7 @@ class _VoterFormState extends State<VoterForm> {
                     child: CircularProgressIndicator(
                         strokeWidth: 2, color: Colors.white))
                 : const Icon(Icons.save),
-            label: Text(saving ? 'सहेज रहे हैं...' : 'सहेजें')),
+            label: Text(saving ? 'Saving...' : 'Save')),
       ],
     );
   }

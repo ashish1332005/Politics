@@ -7,7 +7,7 @@ const { applyMemberScope } = require('../utils/boothAccess');
 
 exports.dashboard = async (req, res, next) => {
   try {
-    const scope = applyMemberScope(req.currentUser, {});
+    const scope = applyMemberScope(req.currentUser, { contactType: { $ne: 'personal' } });
     const familyScope = req.currentUser.role === 'admin'
       ? {}
       : { booth: req.currentUser.assignedBooth?._id || req.currentUser.assignedBooth };

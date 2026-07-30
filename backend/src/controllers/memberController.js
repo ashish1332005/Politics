@@ -36,6 +36,17 @@ function compareLabels(a, b) {
   return hindiEnglishCollator.compare(left, right);
 }
 
+const isPersonalContact = (data) => data?.contactType === 'personal';
+
+const assertPersonalContactAllowed = (user, data) => {
+  if (!isPersonalContact(data)) return;
+  if (user.role !== 'admin') {
+    const err = new Error('Only admin can save personal contacts.');
+    err.status = 403;
+    throw err;
+  }
+};
+
 const duplicateWarnings = async (data, excludeId) => {
   const or = [];
   if (data.mobile) or.push({ mobile: data.mobile });
@@ -74,17 +85,35 @@ const attachBoothWard = async (data, user) => {
 exports.create = async (req, res, next) => {
   try {
     const data = { ...req.body };
-    data.voterId = requireValidEpic(data.voterId);
+    data.contactType = data.contactType === 'personal' ? 'personal' : 'voter';
+    assertPersonalContactAllowed(req.currentUser, data);
+
+    if (isPersonalContact(data)) {
+      if (!String(data.mobile || '').trim() && !String(data.address || '').trim()) {
+        const err = new Error('Personal contact ke liye mobile ya address me se ek zaroori hai.');
+        err.status = 400;
+        throw err;
+      }
+      if (!String(data.voterId || '').trim()) delete data.voterId;
+    } else {
+      data.voterId = requireValidEpic(data.voterId);
+    }
+
     if (req.file) data.photo = await persistLocalImage(req.file.path, req.currentUser._id, true);
     await attachBoothWard(data, req.currentUser);
-    assertBoothAccess(req.currentUser, data.booth);
-    assertWardAccess(req.currentUser, data.ward);
+    if (!isPersonalContact(data) && !data.booth) {
+      const err = new Error('Booth is required for voter contacts.');
+      err.status = 400;
+      throw err;
+    }
+    if (data.booth) assertBoothAccess(req.currentUser, data.booth);
+    if (data.ward) assertWardAccess(req.currentUser, data.ward);
     data.createdBy = req.currentUser._id;
     data.updatedBy = req.currentUser._id;
     data.duplicateWarnings = await duplicateWarnings(data);
     if (data.duplicateWarnings.length) data.verificationStatus = 'duplicate';
     const member = await Member.create(data);
-    member.qrCode = await QRCode.toDataURL(`${process.env.APP_PUBLIC_URL || 'political-booth-crm'}:/members/${member._id}`);
+    member.qrCode = await QRCode.toDataURL((process.env.APP_PUBLIC_URL || 'political-booth-crm') + ':/members/' + member._id);
     await member.save();
     await syncMemberFamily(member, req.currentUser._id);
     await writeActivity({ req, action: 'member.created', module: 'members', entityId: member._id, after: member });
@@ -131,7 +160,7 @@ exports.list = async (req, res, next) => {
     if (req.query.missingHouse === 'true') filter.$and = [...(filter.$and || []), { $or: [{ houseNumber: '' }, { houseNumber: null }, { houseNumber: { $exists: false } }] }];
     if (booth && req.currentUser.role === 'admin') filter.booth = booth;
     const listQuery = (query) => Member.find(query)
-      .select('photo name surname mobile altMobile voterId voterSerial guardianName houseNumber address location area tehsil gramPanchayat village municipality caste subCaste organizationPost organizationLevel influenceLevel occupation education extraDetails supportLevel ward booth updatedAt age gender sectionNumber sectionName assemblyNumber assemblyName partNumber')
+      .select('contactType photo name surname mobile altMobile voterId voterSerial guardianName houseNumber address location area tehsil gramPanchayat village municipality caste subCaste organizationPost organizationLevel influenceLevel occupation education extraDetails supportLevel ward booth updatedAt age gender sectionNumber sectionName assemblyNumber assemblyName partNumber')
       .populate(populate)
       .sort(req.query.sort === 'recent' ? { updatedAt: -1 } : { name: 1, surname: 1, houseNumber: 1 })
       .collation({ locale: 'en', numericOrdering: true, strength: 1 });
@@ -494,6 +523,16 @@ exports.update = async (req, res, next) => {
     if (req.body.ward) assertWardAccess(req.currentUser, req.body.ward);
     const before = member.toObject();
     const updates = { ...req.body };
+    if (updates.contactType && updates.contactType !== member.contactType) {
+      return res.status(400).json({ message: 'Contact type cannot be changed after creation.' });
+    }
+    updates.contactType = member.contactType || 'voter';
+    assertPersonalContactAllowed(req.currentUser, updates);
+    if (isPersonalContact(updates) && !String(updates.mobile || member.mobile || '').trim() && !String(updates.address || member.address || '').trim()) {
+      const err = new Error('Personal contact ke liye mobile ya address me se ek zaroori hai.');
+      err.status = 400;
+      throw err;
+    }
     await attachBoothWard(updates, req.currentUser);
     if (updates.booth) assertBoothAccess(req.currentUser, updates.booth);
     if (updates.ward) assertWardAccess(req.currentUser, updates.ward);

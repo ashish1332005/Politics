@@ -36,6 +36,7 @@ const FollowUpSchema = new mongoose.Schema({
   completedAt: Date,
 }, { timestamps: true });
 const MemberSchema = new mongoose.Schema({
+  contactType: { type: String, enum: ['voter', 'personal'], default: 'voter', index: true },
   photo: String,
   qrCode: String,
   name: { type: String, required: true, trim: true },
@@ -69,8 +70,7 @@ const MemberSchema = new mongoose.Schema({
   voterSerial: String,
   voterId: {
     type: String,
-    required: [true, 'EPIC number is required.'],
-    unique: true,
+    required() { return this.contactType !== 'personal'; },
     uppercase: true,
     trim: true,
     immutable: true,
@@ -82,7 +82,11 @@ const MemberSchema = new mongoose.Schema({
     lng: Number,
   },
   ward: { type: mongoose.Schema.Types.ObjectId, ref: 'Ward' },
-  booth: { type: mongoose.Schema.Types.ObjectId, ref: 'Booth', required: true },
+  booth: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Booth',
+    required() { return this.contactType !== 'personal'; },
+  },
   family: [FamilyMemberSchema],
   occupation: String,
   education: String,
@@ -138,12 +142,15 @@ const MemberSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 MemberSchema.pre('validate', function updateSearchData(next) {
+  if (this.contactType === 'personal' && !String(this.voterId || '').trim()) {
+    this.voterId = undefined;
+  }
   Object.assign(this, buildMemberSearchData(this));
   next();
 });
 
 MemberSchema.index({ mobile: 1 });
-MemberSchema.index({ voterId: 1 }, { unique: true });
+MemberSchema.index({ voterId: 1 }, { unique: true, partialFilterExpression: { voterId: { $type: 'string' } } });
 MemberSchema.index({ address: 'text', name: 'text', surname: 'text', location: 'text', sectionName: 'text', assemblyName: 'text', voterId: 'text', guardianName: 'text' });
 MemberSchema.index({ booth: 1, supportLevel: 1 });
 MemberSchema.index({ assemblyNumber: 1, partNumber: 1, sectionName: 1 });

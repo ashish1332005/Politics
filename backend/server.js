@@ -13,6 +13,23 @@ const ImportJob = require('./src/models/ImportJob');
 const Member = require('./src/models/Member');
 const { ensureMemberSearchData } = require('./src/utils/memberSearch');
 
+async function ensureMemberIndexes() {
+  try {
+    const collection = Member.collection;
+    const indexes = await collection.indexes();
+    const voterIdIndex = indexes.find((index) => index.name === 'voterId_1');
+    if (voterIdIndex && !voterIdIndex.partialFilterExpression) {
+      await collection.dropIndex('voterId_1');
+    }
+    await collection.createIndex(
+      { voterId: 1 },
+      { unique: true, partialFilterExpression: { voterId: { $type: 'string' } } },
+    );
+  } catch (error) {
+    console.error('Member index preparation failed:', error.message);
+  }
+}
+
 const app = express();
 const configuredOrigins = (process.env.CORS_ORIGIN || '*')
   .split(',')
@@ -79,6 +96,7 @@ const serverTimeoutMs = Number(process.env.UPLOAD_TIMEOUT_MINUTES || 30) * 60 * 
 
 connectDB()
   .then(async () => {
+    await ensureMemberIndexes();
     const indexedMembers = await ensureMemberSearchData(Member);
     if (indexedMembers) console.log('Prepared ' + indexedMembers + ' voter record(s) for easy search.');
     await ImportJob.updateMany(
