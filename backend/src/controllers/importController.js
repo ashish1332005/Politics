@@ -202,6 +202,46 @@ const cleanHeaderName = (value, rejectPattern) => {
   return text;
 };
 
+const romanVillageAliases = new Map(Object.entries({
+  bheeta: 'भीटा',
+  bhita: 'भीटा',
+  beeta: 'भीटा',
+  beta: 'भीटा',
+}));
+
+const pdfVillageHintFromName = (fileName = '') => {
+  const base = path.basename(String(fileName), path.extname(String(fileName)));
+  const cleaned = base
+    .toLowerCase()
+    .replace(/\b(?:pdf|voter|roll|list|matdata|matdataa|page|part|booth|ward)\b/g, ' ')
+    .replace(/[0-9_\-()[\].]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!cleaned) return '';
+  for (const token of cleaned.split(' ')) {
+    if (romanVillageAliases.has(token)) return romanVillageAliases.get(token);
+  }
+  const hindi = cleaned.match(/[\u0900-\u097F][\u0900-\u097F\s]{1,40}/);
+  if (hindi) return cleanValue(hindi[0]);
+  return '';
+};
+
+const applyPdfVillageHint = (item, villageHint) => {
+  const village = cleanValue(villageHint);
+  if (!village) return;
+  const hasGoodVillage = cleanValue(item.village).match(/[\u0900-\u097F]/);
+  if (!hasGoodVillage) item.village = village;
+  const location = cleanValue(item.location);
+  if (!location || !location.match(/[\u0900-\u097F]/) || /\b(?:hier|ore)\b/i.test(location)) {
+    item.location = village;
+  }
+  const house = cleanValue(item.houseNumber);
+  const address = cleanValue(item.address);
+  if (!address || /\b(?:hier|ore)\b/i.test(address) || !address.match(/[\u0900-\u097F]/)) {
+    item.address = [village, house].filter(Boolean).join(', ');
+  }
+};
+
 const pick = (row, ...keys) => {
   for (const key of keys) {
     const value = row[key];
@@ -1138,6 +1178,10 @@ const runPdfImport = async ({ file, body, currentUser }, uploadId) => {
       });
     };
     let parsed = await parsePdfMembers(file.path, file.filename, onOcrProgress);
+    const pdfVillageHint = pdfVillageHintFromName(file.originalname || file.filename);
+    if (pdfVillageHint) {
+      for (const member of parsed.members) applyPdfVillageHint(member, pdfVillageHint);
+    }
     setProgress(uploadId, { stage: 'PDF records detected', total: parsed.members.length, processed: 0 });
     if (
       currentUser.role === 'admin'
@@ -1151,6 +1195,9 @@ const runPdfImport = async ({ file, body, currentUser }, uploadId) => {
         members: parseHindiVoterRoll(ocr.text),
         ocr,
       };
+      if (pdfVillageHint) {
+        for (const member of parsed.members) applyPdfVillageHint(member, pdfVillageHint);
+      }
     }
     const shouldExtractImages = String(process.env.EXTRACT_PDF_IMAGES || '').toLowerCase() === 'true';
     const extractedImages = parsed.ocr?.images?.length
@@ -1163,6 +1210,7 @@ const runPdfImport = async ({ file, body, currentUser }, uploadId) => {
       ...detectedHeader,
       ...(parsed.members[0] || {}),
     };
+    applyPdfVillageHint(firstMemberWithHeader, pdfVillageHint);
     const { ward, booth } = await getOrCreateImportScope({
       user: currentUser,
       body,

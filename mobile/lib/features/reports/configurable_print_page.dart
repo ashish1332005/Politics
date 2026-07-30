@@ -485,24 +485,38 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
     final count = selectAllFiltered
         ? (filteredTotal - excludedIds.length).clamp(0, filteredTotal)
         : selectedIds.length;
-    await printApiPdf(
-      context,
-      path: '/api/print/members.pdf',
-      jobName: 'Selected voter list',
-      query: {
-        ...filters,
-        if (selectAllFiltered) 'selectAll': 'true',
-        if (!selectAllFiltered) 'ids': selectedIds.join(','),
-        if (selectAllFiltered && excludedIds.isNotEmpty)
-          'excludedIds': excludedIds.join(','),
-        'fields': selectedFields.join(','),
-        'paperSize': paper,
-        'orientation': orientation,
-        'columns': '$columns',
-        'photo': '$photo',
-        'title': 'Selected voter list ($count)',
-      },
-    );
+    try {
+      await printApiPdf(
+        context,
+        path: '/api/print/members.pdf',
+        jobName: 'Selected voter list',
+        query: {
+          ...filters,
+          if (selectAllFiltered) 'selectAll': 'true',
+          if (!selectAllFiltered) 'ids': selectedIds.join(','),
+          if (selectAllFiltered && excludedIds.isNotEmpty)
+            'excludedIds': excludedIds.join(','),
+          'fields': selectedFields.join(','),
+          'paperSize': paper,
+          'orientation': orientation,
+          'columns': '$columns',
+          'photo': '$photo',
+          'title': 'Selected voter list ($count)',
+        },
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+              'PDF नहीं बना: ${error.toString().replaceFirst('Exception: ', '')}'),
+          action: SnackBarAction(
+            label: 'Retry',
+            onPressed: () => printSelected(filteredTotal),
+          ),
+        ),
+      );
+    }
   }
 
   @override
@@ -510,6 +524,10 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
         future: votersFuture,
         builder: (context, snapshot) {
           final data = snapshot.data ?? const <String, dynamic>{};
+          final currentItems = List<Map<String, dynamic>>.from(
+            (data['items'] as List? ?? const [])
+                .map((item) => Map<String, dynamic>.from(item)),
+          );
           final total = _number(data['total']);
           final selectedCount = selectAllFiltered
               ? (total - excludedIds.length).clamp(0, total)
@@ -532,20 +550,35 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
             _ => true,
           };
           final stepContent = switch (currentStep) {
-            0 => _CompactVoterSelectionPanel(
-                search: search,
-                selectedCount: selectedCount,
-                total: total,
-                activeFilterCount: activeFilterCount,
-                selectAllFiltered: selectAllFiltered,
-                onSearch: (_) => filtersChanged(),
-                onAllFiltered: chooseAllFiltered,
-                onMissingMobile: () => smartSelect('missingMobile'),
-                onReview: () => smartSelect('review'),
-                onSupporter: () => smartSelect('supporter'),
-                onOpenFilters: openAdvancedFilters,
-                onOpenVoters: openVoterPicker,
-                onOpenFields: () => setState(() => currentStep = 1),
+            0 => Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _CompactVoterSelectionPanel(
+                    search: search,
+                    selectedCount: selectedCount,
+                    total: total,
+                    activeFilterCount: activeFilterCount,
+                    selectAllFiltered: selectAllFiltered,
+                    onSearch: (_) => filtersChanged(),
+                    onAllFiltered: chooseAllFiltered,
+                    onMissingMobile: () => smartSelect('missingMobile'),
+                    onReview: () => smartSelect('review'),
+                    onSupporter: () => smartSelect('supporter'),
+                    onOpenFilters: openAdvancedFilters,
+                    onOpenVoters: openVoterPicker,
+                    onOpenFields: () => setState(() => currentStep = 1),
+                  ),
+                  const SizedBox(height: 12),
+                  _SelectedVoterPreview(
+                    selectedCount: selectedCount,
+                    selectAllFiltered: selectAllFiltered,
+                    voters: currentItems
+                        .where((voter) => isSelected('${voter['_id']}'))
+                        .take(4)
+                        .toList(),
+                    fallbackVoters: currentItems.take(4).toList(),
+                  ),
+                ],
               ),
             1 => _FieldSelectionStep(
                 onPreset: applyFieldPreset,
@@ -587,55 +620,221 @@ class _ConfigurablePrintPageState extends State<ConfigurablePrintPage> {
               ),
           };
 
-          return AppPage(children: [
-            _SmartPrintHeader(
-              selectedCount: selectedCount,
-              fieldCount: selectedFields.length,
-              activeFilterCount: activeFilterCount,
-              layout:
-                  '$paper · ${orientation == 'portrait' ? 'पोर्ट्रेट' : 'लैंडस्केप'} · $columns कार्ड/पंक्ति',
-              onOpenVoters: openVoterPicker,
-            ),
-            _WizardTabs(
-              titles: stepTitles,
-              currentStep: currentStep,
-              onChanged: (step) => setState(() => currentStep = step),
-            ),
-            _WizardPanel(
-              step: currentStep,
-              title: switch (currentStep) {
-                0 => 'मतदाता चुनें',
-                1 => 'प्रिंट में दिखने वाली जानकारी',
-                2 => 'लेआउट सेट करें',
-                _ => 'PDF तैयार करें',
-              },
-              subtitle: switch (currentStep) {
-                0 => 'Search, filters और quick selection से मतदाता चुनें।',
-                1 => 'Preset चुनें या अपनी जरूरत के fields select करें।',
-                2 => 'Paper, card density और photo preview ठीक करें।',
-                _ => 'एक बार summary check करें और PDF बनाएं।',
-              },
-              icon: switch (currentStep) {
-                0 => Icons.groups_rounded,
-                1 => Icons.fact_check_rounded,
-                2 => Icons.dashboard_customize_rounded,
-                _ => Icons.picture_as_pdf_rounded,
-              },
-              child: stepContent,
-            ),
-            _WizardFooter(
-              currentStep: currentStep,
-              canGoNext: canGoNext,
-              readyToPrint: selectedCount > 0 && selectedFields.isNotEmpty,
-              onBack:
-                  currentStep == 0 ? null : () => setState(() => currentStep--),
-              onNext:
-                  currentStep >= 3 ? null : () => setState(() => currentStep++),
-              onPrint: () => printSelected(total),
+          final pageContent = AppPage(
+            padding: EdgeInsets.fromLTRB(
+                MediaQuery.sizeOf(context).width < 640 ? 14 : 20,
+                18,
+                MediaQuery.sizeOf(context).width < 640 ? 14 : 20,
+                110),
+            children: [
+              _SmartPrintHeader(
+                selectedCount: selectedCount,
+                fieldCount: selectedFields.length,
+                activeFilterCount: activeFilterCount,
+                layout:
+                    '$paper · ${orientation == 'portrait' ? 'पोर्ट्रेट' : 'लैंडस्केप'} · $columns कार्ड/पंक्ति',
+                onOpenVoters: openVoterPicker,
+              ),
+              _WizardTabs(
+                titles: stepTitles,
+                currentStep: currentStep,
+                onChanged: (step) => setState(() => currentStep = step),
+              ),
+              _WizardPanel(
+                step: currentStep,
+                title: switch (currentStep) {
+                  0 => 'मतदाता चुनें',
+                  1 => 'प्रिंट में दिखने वाली जानकारी',
+                  2 => 'लेआउट सेट करें',
+                  _ => 'PDF तैयार करें',
+                },
+                subtitle: switch (currentStep) {
+                  0 => 'Search, filters और quick selection से मतदाता चुनें।',
+                  1 => 'Preset चुनें या अपनी जरूरत के fields select करें।',
+                  2 => 'Paper, card density और photo preview ठीक करें।',
+                  _ => 'एक बार summary check करें और PDF बनाएं।',
+                },
+                icon: switch (currentStep) {
+                  0 => Icons.groups_rounded,
+                  1 => Icons.fact_check_rounded,
+                  2 => Icons.dashboard_customize_rounded,
+                  _ => Icons.picture_as_pdf_rounded,
+                },
+                child: stepContent,
+              ),
+              _WizardFooter(
+                currentStep: currentStep,
+                canGoNext: canGoNext,
+                readyToPrint: selectedCount > 0 && selectedFields.isNotEmpty,
+                onBack: currentStep == 0
+                    ? null
+                    : () => setState(() => currentStep--),
+                onNext: currentStep >= 3
+                    ? null
+                    : () => setState(() => currentStep++),
+                onPrint: () => printSelected(total),
+              ),
+            ],
+          );
+          return Stack(children: [
+            pageContent,
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: _StickyPrintBar(
+                selectedCount: selectedCount,
+                fieldCount: selectedFields.length,
+                ready: selectedCount > 0 && selectedFields.isNotEmpty,
+                onPrint: () => printSelected(total),
+              ),
             ),
           ]);
         },
       );
+}
+
+class _StickyPrintBar extends StatelessWidget {
+  const _StickyPrintBar({
+    required this.selectedCount,
+    required this.fieldCount,
+    required this.ready,
+    required this.onPrint,
+  });
+
+  final int selectedCount;
+  final int fieldCount;
+  final bool ready;
+  final VoidCallback onPrint;
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+        top: false,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            border: Border(top: BorderSide(color: border)),
+            boxShadow: [
+              BoxShadow(
+                  color: Color(0x18071b4b),
+                  blurRadius: 20,
+                  offset: Offset(0, -8)),
+            ],
+          ),
+          child: Row(children: [
+            Expanded(
+              child: Text(
+                '$selectedCount मतदाता • $fieldCount fields',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style:
+                    const TextStyle(color: navy, fontWeight: FontWeight.w900),
+              ),
+            ),
+            const SizedBox(width: 12),
+            FilledButton.icon(
+              onPressed: ready ? onPrint : null,
+              icon: const Icon(Icons.print_rounded),
+              label: const Text('PDF बनाएं'),
+            ),
+          ]),
+        ),
+      );
+}
+
+class _SelectedVoterPreview extends StatelessWidget {
+  const _SelectedVoterPreview({
+    required this.selectedCount,
+    required this.selectAllFiltered,
+    required this.voters,
+    required this.fallbackVoters,
+  });
+
+  final int selectedCount;
+  final bool selectAllFiltered;
+  final List<Map<String, dynamic>> voters;
+  final List<Map<String, dynamic>> fallbackVoters;
+
+  @override
+  Widget build(BuildContext context) {
+    final preview =
+        voters.isEmpty && selectAllFiltered ? fallbackVoters : voters;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xfff8fbff),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: border),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Icon(Icons.preview_rounded, color: blue, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              selectedCount == 0
+                  ? 'Selected voter preview'
+                  : selectAllFiltered
+                      ? 'Filtered voters preview ($selectedCount selected)'
+                      : 'Selected voter preview ($selectedCount selected)',
+              style: const TextStyle(color: navy, fontWeight: FontWeight.w900),
+            ),
+          ),
+        ]),
+        const SizedBox(height: 8),
+        if (selectedCount == 0)
+          const Text('मतदाता चुनने के बाद यहाँ sample cards दिखेंगे।',
+              style: TextStyle(color: muted, fontWeight: FontWeight.w700))
+        else if (preview.isEmpty)
+          const Text('Selection saved है — preview के लिए voter picker खोलें।',
+              style: TextStyle(color: muted, fontWeight: FontWeight.w700))
+        else
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: preview
+                .map((voter) => Container(
+                      width: 220,
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: border),
+                      ),
+                      child: Row(children: [
+                        const CircleAvatar(
+                          radius: 18,
+                          backgroundColor: softBlue,
+                          child: Icon(Icons.person_rounded, color: blue),
+                        ),
+                        const SizedBox(width: 9),
+                        Expanded(
+                          child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('${voter['name'] ?? '-'}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                        color: navy,
+                                        fontWeight: FontWeight.w900)),
+                                Text(
+                                    'EPIC ${voter['voterId'] ?? '-'} · घर ${voter['houseNumber'] ?? '-'}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                        color: muted, fontSize: 11)),
+                              ]),
+                        ),
+                      ]),
+                    ))
+                .toList(),
+          ),
+      ]),
+    );
+  }
 }
 
 class _SmartPrintHeader extends StatelessWidget {
@@ -2520,25 +2719,44 @@ class _PrintPreviewMock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
             color: const Color(0xffe8edf5),
-            borderRadius: BorderRadius.circular(12)),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: border)),
         child: AspectRatio(
           aspectRatio: 1.414,
           child: Container(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.all(11),
             decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(4),
+                borderRadius: BorderRadius.circular(8),
                 boxShadow: const [
                   BoxShadow(color: Colors.black12, blurRadius: 8)
                 ]),
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('Voter list',
-                  style: TextStyle(
-                      color: navy, fontSize: 8, fontWeight: FontWeight.w900)),
+              Row(children: [
+                const Text('Voter list preview',
+                    style: TextStyle(
+                        color: navy, fontSize: 8, fontWeight: FontWeight.w900)),
+                const Spacer(),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: photo
+                        ? const Color(0xffe9f8ef)
+                        : const Color(0xfffff7ed),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(photo ? 'PHOTO ON' : 'PHOTO OFF',
+                      style: TextStyle(
+                          color: photo ? green : orange,
+                          fontSize: 5,
+                          fontWeight: FontWeight.w900)),
+                ),
+              ]),
               const Divider(height: 8),
               Expanded(
                 child: GridView.builder(
@@ -2553,21 +2771,30 @@ class _PrintPreviewMock extends StatelessWidget {
                     padding: const EdgeInsets.all(4),
                     decoration: BoxDecoration(
                         border: Border.all(color: border),
-                        borderRadius: BorderRadius.circular(3)),
+                        borderRadius: BorderRadius.circular(5)),
                     child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           if (photo) ...[
                             Container(
-                                width: 16,
-                                height: 22,
-                                color: const Color(0xffe9eef7)),
+                              width: 17,
+                              height: 23,
+                              decoration: BoxDecoration(
+                                color: const Color(0xffe9eef7),
+                                borderRadius: BorderRadius.circular(3),
+                              ),
+                              child: const Icon(Icons.person_rounded,
+                                  color: muted, size: 10),
+                            ),
                             const SizedBox(width: 3),
                           ],
                           Expanded(
                               child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: fields
+                                  children: (fields.isEmpty
+                                          ? const ['नाम', 'EPIC', 'घर']
+                                          : fields)
+                                      .take(5)
                                       .map((field) => Padding(
                                           padding:
                                               const EdgeInsets.only(bottom: 2),

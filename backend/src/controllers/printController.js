@@ -88,19 +88,39 @@ function applyPrintFilters(req, filter) {
 }
 
 function mediaIdFromPhoto(photo) {
-  const match = String(photo || '').match(/^\/media\/([a-f0-9]{24})$/i);
+  const raw = String(photo || '').trim();
+  let value = raw;
+  try { value = new URL(raw).pathname; } catch (_) {}
+  const match = value.match(/\/media\/([a-f0-9]{24})(?:$|[/?#])/i);
   return match ? match[1] : null;
 }
 
 function photoPath(member) {
-  if (!member.photo || /^https?:/i.test(member.photo) || mediaIdFromPhoto(member.photo)) return null;
-  const relative = String(member.photo).replace(/^[/\\]+/, '');
+  if (!member.photo || mediaIdFromPhoto(member.photo)) return null;
+  const raw = String(member.photo).trim();
+  let value = raw;
+  try { value = new URL(raw).pathname; } catch (_) {}
+  if (/^https?:/i.test(value)) return null;
+  const relative = String(value).replace(/^[/\\]+/, '');
   const candidates = [
-    resolveUploadPublicPath(member.photo),
+    resolveUploadPublicPath(value),
     path.resolve(process.cwd(), relative),
     path.resolve(__dirname, '../../', relative),
   ];
   return candidates.find((candidate) => fs.existsSync(candidate)) || null;
+}
+
+function normalizeImageBuffer(value) {
+  if (!value) return null;
+  const buffer = Buffer.isBuffer(value)
+    ? value
+    : value?.buffer
+      ? Buffer.from(value.buffer)
+      : Buffer.from(value);
+  if (buffer.length < 8) return null;
+  const isJpeg = buffer[0] === 0xff && buffer[1] === 0xd8;
+  const isPng = buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47;
+  return isJpeg || isPng ? buffer : null;
 }
 
 async function loadPhotoSources(members) {
@@ -108,7 +128,11 @@ async function loadPhotoSources(members) {
   const media = new Map();
   if (mediaIds.length) {
     const assets = await MediaAsset.find({ _id: { $in: mediaIds } }).select('+data contentType').lean();
-    for (const asset of assets) media.set(String(asset._id), asset.data);
+    for (const asset of assets) {
+      const buffer = normalizeImageBuffer(asset.data);
+      if (buffer) media.set(String(asset._id), buffer);
+      else console.warn('Printable voter photo is not a supported JPEG/PNG media asset:', String(asset._id));
+    }
   }
   return (member) => {
     const mediaId = mediaIdFromPhoto(member.photo);
@@ -192,15 +216,24 @@ exports.printMembers = async (req, res, next) => {
 
       prepared.forEach((item, column) => {
         const x = margin + column * (cardWidth + gap);
-        doc.roundedRect(x, y, cardWidth, rowHeight, 6).lineWidth(.8).strokeColor('#cbd5e1').stroke();
+        doc.roundedRect(x, y, cardWidth, rowHeight, 8).lineWidth(.8).strokeColor('#cbd5e1').stroke();
+        doc.roundedRect(x, y, cardWidth, Math.min(22, rowHeight), 8).fillOpacity(0.05).fillAndStroke('#2563eb', '#cbd5e1').fillOpacity(1);
         let textX = x + 9;
         if (includePhoto) {
           const image = getPhotoSource(item.member);
           if (image) {
-            try { doc.image(image, x + 9, y + 10, { fit: [48, 62], align: 'center', valign: 'center' }); }
-            catch (_) { doc.rect(x + 9, y + 10, 48, 62).strokeColor('#dbe4f2').stroke(); }
+            try {
+              doc.roundedRect(x + 9, y + 10, 48, 62, 3).strokeColor('#dbe4f2').stroke();
+              doc.image(image, x + 9, y + 10, { fit: [48, 62], align: 'center', valign: 'center' });
+            }
+            catch (error) {
+              console.warn('Failed to draw voter photo in PDF:', item.member.voterId || item.member._id, error.message);
+              doc.roundedRect(x + 9, y + 10, 48, 62, 3).strokeColor('#dbe4f2').stroke();
+              doc.font('Hindi').fontSize(6).fillColor('#94a3b8').text('Photo', x + 9, y + 36, { width: 48, align: 'center' });
+            }
           } else {
-            doc.rect(x + 9, y + 10, 48, 62).strokeColor('#dbe4f2').stroke();
+            doc.roundedRect(x + 9, y + 10, 48, 62, 3).strokeColor('#dbe4f2').stroke();
+            doc.font('Hindi').fontSize(6).fillColor('#94a3b8').text('Photo', x + 9, y + 36, { width: 48, align: 'center' });
           }
           textX += photoWidth;
         }

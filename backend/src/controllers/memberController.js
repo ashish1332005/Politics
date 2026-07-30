@@ -241,6 +241,7 @@ const locationFields = [
 ];
 
 const cleanText = (value) => String(value ?? '').trim();
+const escapeRegExp = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const exactLocationFilter = (source = {}) => {
   const filter = {};
@@ -260,6 +261,30 @@ const cleanLocationUpdates = (updates = {}) => {
     }
   }
   return cleaned;
+};
+
+const addSmartLocationSearch = (filter, query) => {
+  const tokens = cleanText(query).split(/\s+/).filter((token) => token.length >= 2).slice(0, 6);
+  if (!tokens.length) return;
+  const fields = ['assemblyNumber', 'assemblyName', 'gramPanchayat', 'village', 'partNumber', 'tehsil', 'municipality', 'sectionNumber', 'sectionName', 'location', 'address'];
+  const variantsFor = (token) => {
+    const lower = token.toLowerCase();
+    const variants = new Set([token]);
+    if (['bheeta', 'bhita', 'beeta'].includes(lower) || /भीट/.test(token)) {
+      ['bheeta', 'bhita', 'beeta', 'भीटा', 'hier'].forEach((value) => variants.add(value));
+    }
+    if (['shara', 'sahara'].includes(lower) || /सहा/.test(token)) {
+      ['shara', 'sahara', 'सहाड़ा', 'सहारा'].forEach((value) => variants.add(value));
+    }
+    if (lower === 'hier') ['hier', 'हीर', 'हियर'].forEach((value) => variants.add(value));
+    return [...variants];
+  };
+  const regexes = [...new Set(tokens.flatMap(variantsFor))]
+    .map((variant) => new RegExp(escapeRegExp(variant), 'i'));
+  filter.$and = [
+    ...(filter.$and || []),
+    { $or: fields.flatMap((field) => regexes.map((regex) => ({ [field]: regex }))) },
+  ];
 };
 
 exports.locationGroups = async (req, res, next) => {
@@ -310,34 +335,58 @@ exports.locationGroups = async (req, res, next) => {
 
 exports.bulkLocationCorrection = async (req, res, next) => {
   try {
-    const source = exactLocationFilter(req.body?.source || {});
+    const rawSource = req.body?.source || {};
+    const source = exactLocationFilter(rawSource);
+    const smartQuery = cleanText(rawSource.smartQuery || rawSource.q);
     const updates = cleanLocationUpdates(req.body?.updates || {});
     const dryRun = req.body?.dryRun !== false;
     const sourceKeyCount = Object.values(source).filter((value) => value !== '').length;
-    if (!source.village || sourceKeyCount < 2) {
+    if (!smartQuery && (!source.village || sourceKeyCount < 2)) {
       return res.status(400).json({
         message: 'गाँव अकेला unique नहीं माना जाएगा। Source में कम से कम गाँव + विधानसभा/पंचायत/भाग में से एक value दें।',
       });
     }
-    if (!Object.keys(updates).length) {
+    if (!dryRun && !Object.keys(updates).length) {
       return res.status(400).json({ message: 'Correct location values required.' });
     }
-    const filter = applyMemberScope(req.currentUser, source);
+    const looksLikeOcrGarbage = source.village && !/[\u0900-\u097F]/.test(source.village);
+    const baseSource = looksLikeOcrGarbage
+      ? Object.fromEntries(Object.entries(source).filter(([key]) => key !== 'village'))
+      : source;
+    const filter = applyMemberScope(req.currentUser, baseSource);
+    addSmartLocationSearch(filter, smartQuery);
+    if (looksLikeOcrGarbage) {
+      const escaped = source.village.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      filter.$or = [
+        { village: new RegExp(escaped, 'i') },
+        { location: new RegExp(escaped, 'i') },
+        { address: new RegExp(escaped, 'i') },
+        { sectionName: new RegExp(escaped, 'i') },
+      ];
+    }
     const count = await Member.countDocuments(filter);
     const sample = await Member.find(filter)
-      .select('name voterId guardianName houseNumber assemblyNumber assemblyName gramPanchayat village partNumber')
+      .select('name voterId guardianName houseNumber assemblyNumber assemblyName gramPanchayat village partNumber location address')
       .limit(20)
       .lean();
     if (dryRun) {
-      return res.json({ dryRun: true, matched: count, source, updates, sample });
+      return res.json({ dryRun: true, matched: count, source: smartQuery ? { ...source, smartQuery } : source, updates, sample });
     }
     if (count > 5000) {
       return res.status(400).json({ message: 'एक बार में 5000 से ज्यादा voters update नहीं होंगे। Filter छोटा करें।', matched: count });
     }
     const members = await Member.find(filter);
     let updated = 0;
+    let changedFields = 0;
     for (const member of members) {
-      Object.assign(member, updates);
+      let changed = false;
+      for (const [field, value] of Object.entries(updates)) {
+        if (cleanText(member[field]) === cleanText(value)) continue;
+        member[field] = value;
+        changed = true;
+        changedFields += 1;
+      }
+      if (!changed) continue;
       member.updatedBy = req.currentUser._id;
       await member.save();
       updated += 1;
@@ -346,9 +395,17 @@ exports.bulkLocationCorrection = async (req, res, next) => {
       req,
       action: 'members.location_corrected',
       module: 'members',
-      after: { matched: count, updated, source, updates },
+      after: { matched: count, updated, changedFields, source: smartQuery ? { ...source, smartQuery } : source, updates },
     });
-    res.json({ dryRun: false, matched: count, updated, source, updates });
+    res.json({
+      dryRun: false,
+      matched: count,
+      updated,
+      changedFields,
+      noChange: count > 0 && updated === 0,
+      source: smartQuery ? { ...source, smartQuery } : source,
+      updates,
+    });
   } catch (error) {
     next(error);
   }

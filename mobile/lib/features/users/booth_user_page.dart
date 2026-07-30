@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/api_client.dart';
+import '../../core/contact_actions.dart';
 import '../../core/theme.dart';
 import '../../layout/app_layout.dart';
 import '../../widgets/common.dart';
@@ -454,30 +455,41 @@ class _HeadGrid extends StatelessWidget {
     if (heads.isEmpty) {
       return Container(
         width: double.infinity,
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
-          color: const Color(0xfff7f9fd),
+          color: const Color(0xfff7f9ff),
           border: Border.all(color: border),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(18),
         ),
-        child:
-            const Text('No manager assigned. Pick a voter below or add one.'),
+        child: const Column(children: [
+          CircleAvatar(
+            radius: 26,
+            backgroundColor: softBlue,
+            child: Icon(Icons.supervisor_account_outlined, color: blue),
+          ),
+          SizedBox(height: 10),
+          Text('अभी कोई manager assigned नहीं है',
+              style: TextStyle(color: navy, fontWeight: FontWeight.w900)),
+          SizedBox(height: 4),
+          Text('नीचे voter list से “Make manager” करें या Add manager दबाएँ।',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: muted, fontSize: 12)),
+        ]),
       );
     }
-    return Wrap(
-      spacing: 10,
-      runSpacing: 10,
-      children: heads
-          .map((user) => SizedBox(
-                width: 320,
-                child: _ManagerCard(
-                  user: user,
-                  booths: booths,
-                  boothId: boothId,
-                  onChanged: onChanged,
-                ),
-              ))
-          .toList(),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('${heads.length} manager इस booth में',
+            style: const TextStyle(color: muted, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 8),
+        ...heads.map((user) => _ManagerCard(
+              user: user,
+              booths: booths,
+              boothId: boothId,
+              onChanged: onChanged,
+            )),
+      ],
     );
   }
 }
@@ -498,22 +510,38 @@ class _ManagerCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final active = user['active'] != false;
+    final phone = '${user['phone'] ?? ''}'.trim();
+    final permissions = user['permissions'] as Map?;
+    final enabledPermissions = [
+      if (permissions?['canViewFullMobile'] == true) 'Mobile',
+      if (permissions?['canPrintProfiles'] == true) 'Print',
+      if (permissions?['canExportData'] == true) 'Export',
+    ];
     return Container(
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(13),
       decoration: BoxDecoration(
         color: Colors.white,
-        border: Border.all(color: active ? const Color(0xffcdebd8) : border),
-        borderRadius: BorderRadius.circular(8),
+        border:
+            Border.all(color: active ? green.withValues(alpha: .28) : border),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: const [
+          BoxShadow(
+              color: Color(0x0c071b4b), blurRadius: 16, offset: Offset(0, 8)),
+        ],
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           CircleAvatar(
-            radius: 18,
+            radius: 26,
             backgroundColor: active ? const Color(0xffe9f8ef) : Colors.red[50],
             foregroundColor: active ? green : Colors.red,
-            child: Icon(active ? Icons.person_rounded : Icons.person_off),
+            child: Text(_initials('${user['name'] ?? ''}'),
+                style: TextStyle(
+                    color: active ? green : Colors.red,
+                    fontWeight: FontWeight.w900)),
           ),
-          const SizedBox(width: 9),
+          const SizedBox(width: 11),
           Expanded(
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -526,20 +554,32 @@ class _ManagerCard extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(color: muted, fontSize: 12)),
+              const SizedBox(height: 3),
+              Text(phone.isEmpty ? 'मोबाइल नंबर नहीं है' : phone,
+                  style: const TextStyle(
+                      color: navy, fontSize: 12, fontWeight: FontWeight.w700)),
             ]),
           ),
-          Switch(
-            value: active,
-            onChanged: (value) async {
-              await api
-                  .put('/api/auth/users/${user['_id']}', {'active': value});
-              onChanged();
-            },
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+            decoration: BoxDecoration(
+              color: active ? const Color(0xffe9f8ef) : Colors.red[50],
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(active ? 'Active' : 'Inactive',
+                style: TextStyle(
+                    color: active ? green : Colors.red,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900)),
           ),
         ]),
         const SizedBox(height: 10),
         Wrap(spacing: 6, runSpacing: 6, children: [
-          _Pill(Icons.call_outlined, '${user['phone'] ?? '-'}'),
+          _Pill(
+              Icons.admin_panel_settings_rounded,
+              enabledPermissions.isEmpty
+                  ? 'Basic access'
+                  : enabledPermissions.join(', ')),
           _Pill(Icons.person_add_alt_rounded,
               'Created ${_stat(user, 'votersCreated')}'),
           _Pill(Icons.edit_note_rounded,
@@ -548,40 +588,118 @@ class _ManagerCard extends StatelessWidget {
               'Voters ${_stat(user, 'boothVoterCount')}'),
         ]),
         const Divider(height: 18),
-        Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-          IconButton(
-            tooltip: 'Work detail',
-            onPressed: () => showDialog(
-              context: context,
-              builder: (_) => BoothHeadWorkDialog(user: user),
-            ),
-            icon: const Icon(Icons.analytics_outlined),
-          ),
-          IconButton(
-            tooltip: 'Edit access',
-            onPressed: () => showDialog(
-              context: context,
-              builder: (_) => BoothUserForm(
-                user: user,
-                booths: booths,
-                initialBoothId: boothId,
-                onSaved: onChanged,
+        Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              _ManagerActionButton(
+                icon: Icons.call_rounded,
+                label: 'Call',
+                onTap: () => callNumber(context, phone),
+                color: green,
               ),
-            ),
-            icon: const Icon(Icons.tune_rounded),
-          ),
-          IconButton(
-            tooltip: 'Reset password',
-            onPressed: () => showDialog(
-              context: context,
-              builder: (_) => ResetPasswordDialog(userId: '${user['_id']}'),
-            ),
-            icon: const Icon(Icons.password_rounded),
-          ),
-        ]),
+              _ManagerActionButton(
+                icon: Icons.tune_rounded,
+                label: 'Permission',
+                onTap: () => showDialog(
+                  context: context,
+                  builder: (_) => BoothUserForm(
+                    user: user,
+                    booths: booths,
+                    initialBoothId: boothId,
+                    onSaved: onChanged,
+                  ),
+                ),
+                color: blue,
+              ),
+              _ManagerActionButton(
+                icon: Icons.analytics_outlined,
+                label: 'Work',
+                onTap: () => showDialog(
+                  context: context,
+                  builder: (_) => BoothHeadWorkDialog(user: user),
+                ),
+                color: purple,
+              ),
+              _ManagerActionButton(
+                icon: Icons.password_rounded,
+                label: 'Password',
+                onTap: () => showDialog(
+                  context: context,
+                  builder: (_) => ResetPasswordDialog(userId: '${user['_id']}'),
+                ),
+                color: orange,
+              ),
+              Container(
+                height: 40,
+                padding: const EdgeInsets.only(left: 10),
+                decoration: BoxDecoration(
+                  color: active
+                      ? const Color(0xffe9f8ef)
+                      : const Color(0xfffff1f3),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                      color: active
+                          ? green.withValues(alpha: .25)
+                          : rose.withValues(alpha: .25)),
+                ),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Text(active ? 'Active' : 'Inactive',
+                      style: TextStyle(
+                          color: active ? green : rose,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w900)),
+                  Switch(
+                    value: active,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    onChanged: (value) async {
+                      await api.put(
+                          '/api/auth/users/${user['_id']}', {'active': value});
+                      onChanged();
+                    },
+                  ),
+                ]),
+              ),
+            ]),
       ]),
     );
   }
+}
+
+class _ManagerActionButton extends StatelessWidget {
+  const _ManagerActionButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 8),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: .09),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: color.withValues(alpha: .18)),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(icon, color: color, size: 18),
+            const SizedBox(width: 5),
+            Text(label,
+                style: const TextStyle(
+                    color: navy, fontSize: 11, fontWeight: FontWeight.w900)),
+          ]),
+        ),
+      );
 }
 
 class _BoothVoterList extends StatelessWidget {
@@ -852,10 +970,12 @@ class _BoothUserFormState extends State<BoothUserForm> {
   final password = TextEditingController();
   late String? boothId =
       widget.initialBoothId ?? _idOf(widget.user?['assignedBooth']);
+  final boothFilter = TextEditingController();
   bool active = true;
   bool canPrint = false;
   bool canExport = false;
   bool canViewMobile = false;
+  bool showPassword = false;
   bool saving = false;
   String error = '';
 
@@ -867,6 +987,23 @@ class _BoothUserFormState extends State<BoothUserForm> {
     canPrint = permissions?['canPrintProfiles'] == true;
     canExport = permissions?['canExportData'] == true;
     canViewMobile = permissions?['canViewFullMobile'] == true;
+  }
+
+  @override
+  void dispose() {
+    name.dispose();
+    email.dispose();
+    phone.dispose();
+    password.dispose();
+    boothFilter.dispose();
+    super.dispose();
+  }
+
+  Map<String, dynamic>? get selectedBooth {
+    for (final booth in widget.booths) {
+      if ('${booth['_id']}' == boothId) return booth;
+    }
+    return null;
   }
 
   Future<void> save() async {
@@ -924,17 +1061,11 @@ class _BoothUserFormState extends State<BoothUserForm> {
       padding: const EdgeInsets.fromLTRB(18, 14, 18, 24),
       shrinkWrap: !mobile,
       children: [
-        const CircleAvatar(
-          radius: 38,
-          backgroundColor: softBlue,
-          child:
-              Icon(Icons.admin_panel_settings_rounded, color: blue, size: 34),
-        ),
-        const SizedBox(height: 10),
-        Text(title,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-                color: navy, fontSize: 20, fontWeight: FontWeight.w900)),
+        _managerHero(title),
+        if (widget.candidate != null) ...[
+          const SizedBox(height: 12),
+          _candidatePreview(),
+        ],
         const SizedBox(height: 18),
         _managerField(name, 'नाम *', Icons.person_outline_rounded),
         const SizedBox(height: 12),
@@ -948,55 +1079,18 @@ class _BoothUserFormState extends State<BoothUserForm> {
             password,
             widget.user == null ? 'पासवर्ड *' : 'नया पासवर्ड',
             Icons.lock_outline_rounded,
-            obscure: true),
+            obscure: !showPassword,
+            suffix: IconButton(
+              tooltip: showPassword ? 'Password छुपाएँ' : 'Password दिखाएँ',
+              onPressed: () => setState(() => showPassword = !showPassword),
+              icon: Icon(showPassword
+                  ? Icons.visibility_off_rounded
+                  : Icons.visibility_rounded),
+            )),
         const SizedBox(height: 12),
-        DropdownButtonFormField<String>(
-          initialValue: boothId,
-          isExpanded: true,
-          decoration: const InputDecoration(
-              labelText: 'बूथ चुनें *',
-              prefixIcon: Icon(Icons.how_to_vote_outlined)),
-          items: widget.booths
-              .map((b) => DropdownMenuItem<String>(
-                    value: '${b['_id']}',
-                    child: Text(
-                        'भाग ${b['number'] ?? '-'} · ${b['name'] ?? '-'}',
-                        overflow: TextOverflow.ellipsis),
-                  ))
-              .toList(),
-          onChanged: (value) => setState(() => boothId = value),
-        ),
+        _boothPickerCard(),
         const SizedBox(height: 16),
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            border: Border.all(color: border),
-            borderRadius: BorderRadius.circular(18),
-          ),
-          child: Column(children: [
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              value: active,
-              onChanged: (value) => setState(() => active = value),
-              title: const Text('Active login',
-                  style: TextStyle(fontWeight: FontWeight.w800)),
-              subtitle: const Text('मैनेजर app में login कर सकता है'),
-            ),
-            _permissionTile(
-                Icons.phone_android_rounded,
-                'पूरे मोबाइल नंबर देखें',
-                canViewMobile,
-                (value) => setState(() => canViewMobile = value)),
-            _permissionTile(Icons.print_rounded, 'मतदाता प्रोफाइल print करें',
-                canPrint, (value) => setState(() => canPrint = value)),
-            _permissionTile(
-                Icons.file_download_rounded,
-                'मतदाता data export करें',
-                canExport,
-                (value) => setState(() => canExport = value)),
-          ]),
-        ),
+        _permissionPanel(),
         if (error.isNotEmpty) ...[
           const SizedBox(height: 10),
           Text(error,
@@ -1044,24 +1138,268 @@ class _BoothUserFormState extends State<BoothUserForm> {
     );
   }
 
+  Widget _managerHero(String title) {
+    final initial = name.text.trim().isEmpty ? 'M' : name.text.trim()[0];
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: border),
+      ),
+      child: Row(children: [
+        CircleAvatar(
+          radius: 34,
+          backgroundColor: softBlue,
+          child: Text(initial.toUpperCase(),
+              style: const TextStyle(
+                  color: blue, fontSize: 24, fontWeight: FontWeight.w900)),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(title,
+                style: const TextStyle(
+                    color: navy, fontSize: 19, fontWeight: FontWeight.w900)),
+            const SizedBox(height: 3),
+            const Text('नाम, login, बूथ और permissions साफ-साफ सेट करें',
+                style: TextStyle(color: muted, fontSize: 12)),
+          ]),
+        ),
+        Switch(
+          value: active,
+          onChanged: (value) => setState(() => active = value),
+        ),
+      ]),
+    );
+  }
+
+  Widget _candidatePreview() {
+    final candidate = widget.candidate!;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xfff7fbff),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: blue.withValues(alpha: .18)),
+      ),
+      child: Row(children: [
+        const CircleAvatar(
+          backgroundColor: softBlue,
+          child: Icon(Icons.person_search_rounded, color: blue),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('Create from voter',
+                style: TextStyle(color: blue, fontWeight: FontWeight.w900)),
+            Text(
+              '${candidate['name'] ?? '-'} · EPIC ${candidate['voterId'] ?? '-'} · ${candidate['mobile'] ?? 'मोबाइल नहीं'}',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: navy, fontWeight: FontWeight.w800),
+            ),
+          ]),
+        ),
+      ]),
+    );
+  }
+
+  Widget _boothPickerCard() {
+    final booth = selectedBooth;
+    final label = booth == null
+        ? 'बूथ चुनें *'
+        : 'भाग ${booth['number'] ?? '-'} · ${booth['name'] ?? '-'}';
+    final sub = booth == null
+        ? 'Search करके booth assign करें'
+        : [
+            if ('${booth['ward']?['number'] ?? ''}'.isNotEmpty)
+              'वार्ड ${booth['ward']?['number']}',
+            '${booth['area'] ?? ''}',
+          ].where((v) => v.trim().isNotEmpty).join(' · ');
+    return InkWell(
+      onTap: _pickBooth,
+      borderRadius: BorderRadius.circular(18),
+      child: Container(
+        padding: const EdgeInsets.all(13),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: booth == null ? orange : border),
+        ),
+        child: Row(children: [
+          const CircleAvatar(
+            backgroundColor: softBlue,
+            child: Icon(Icons.how_to_vote_rounded, color: blue),
+          ),
+          const SizedBox(width: 11),
+          Expanded(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      color: navy, fontWeight: FontWeight.w900)),
+              const SizedBox(height: 3),
+              Text(sub,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: muted, fontSize: 12)),
+            ]),
+          ),
+          const Icon(Icons.search_rounded, color: blue),
+        ]),
+      ),
+    );
+  }
+
+  Future<void> _pickBooth() async {
+    boothFilter.clear();
+    final picked = await showDialog<String>(
+      context: context,
+      builder: (_) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final query = boothFilter.text.toLowerCase().trim();
+          final filtered = widget.booths.where((booth) {
+            final haystack =
+                '${booth['number'] ?? ''} ${booth['name'] ?? ''} ${booth['area'] ?? ''} ${booth['ward']?['number'] ?? ''}'
+                    .toLowerCase();
+            return query.isEmpty || haystack.contains(query);
+          }).toList();
+          return AlertDialog(
+            title: const Text('बूथ खोजें और चुनें'),
+            content: SizedBox(
+              width: 520,
+              height: 520,
+              child: Column(children: [
+                TextField(
+                  controller: boothFilter,
+                  onChanged: (_) => setDialogState(() {}),
+                  decoration: const InputDecoration(
+                    prefixIcon: Icon(Icons.search_rounded),
+                    hintText: 'बूथ नंबर, नाम, वार्ड या क्षेत्र लिखें...',
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Expanded(
+                  child: ListView.separated(
+                    itemCount: filtered.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 8),
+                    itemBuilder: (_, index) {
+                      final booth = filtered[index];
+                      return ListTile(
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            side: const BorderSide(color: border)),
+                        leading: const CircleAvatar(
+                          backgroundColor: softBlue,
+                          child: Icon(Icons.how_to_vote_rounded, color: blue),
+                        ),
+                        title: Text(
+                            'भाग ${booth['number'] ?? '-'} · ${booth['name'] ?? '-'}'),
+                        subtitle: Text(
+                            'वार्ड ${booth['ward']?['number'] ?? '-'} · ${booth['area'] ?? '-'}'),
+                        trailing: const Icon(Icons.chevron_right_rounded),
+                        onTap: () => Navigator.pop(context, '${booth['_id']}'),
+                      );
+                    },
+                  ),
+                ),
+              ]),
+            ),
+          );
+        },
+      ),
+    );
+    if (picked == null) return;
+    setState(() => boothId = picked);
+  }
+
+  Widget _permissionPanel() => Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border.all(color: border),
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('अनुमतियाँ',
+              style: TextStyle(color: navy, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 10),
+          _permissionCard(
+              Icons.login_rounded,
+              'Active login',
+              'मैनेजर app में login कर सकता है',
+              active,
+              (value) => setState(() => active = value)),
+          _permissionCard(
+              Icons.phone_android_rounded,
+              'पूरे मोबाइल नंबर देखें',
+              'Masked नंबर की जगह full mobile दिखेगा',
+              canViewMobile,
+              (value) => setState(() => canViewMobile = value)),
+          _permissionCard(
+              Icons.print_rounded,
+              'मतदाता profile print करें',
+              'PDF profile print/download की अनुमति',
+              canPrint,
+              (value) => setState(() => canPrint = value)),
+          _permissionCard(
+              Icons.file_download_rounded,
+              'मतदाता data export करें',
+              'Excel/CSV export की अनुमति',
+              canExport,
+              (value) => setState(() => canExport = value)),
+        ]),
+      );
+
+  Widget _permissionCard(IconData icon, String title, String subtitle,
+          bool value, ValueChanged<bool> onChanged) =>
+      Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: InkWell(
+          onTap: () => onChanged(!value),
+          borderRadius: BorderRadius.circular(15),
+          child: Container(
+            padding: const EdgeInsets.all(11),
+            decoration: BoxDecoration(
+              color: value ? softBlue : const Color(0xfff8fafc),
+              borderRadius: BorderRadius.circular(15),
+              border: Border.all(
+                  color: value ? blue.withValues(alpha: .35) : border),
+            ),
+            child: Row(children: [
+              Icon(icon, color: value ? blue : muted),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title,
+                          style: const TextStyle(
+                              color: navy, fontWeight: FontWeight.w900)),
+                      Text(subtitle,
+                          style: const TextStyle(color: muted, fontSize: 11)),
+                    ]),
+              ),
+              Switch(value: value, onChanged: onChanged),
+            ]),
+          ),
+        ),
+      );
+
   Widget _managerField(
           TextEditingController controller, String label, IconData icon,
-          {TextInputType? keyboard, bool obscure = false}) =>
+          {TextInputType? keyboard, bool obscure = false, Widget? suffix}) =>
       TextField(
         controller: controller,
         keyboardType: keyboard,
         obscureText: obscure,
-        decoration: InputDecoration(labelText: label, prefixIcon: Icon(icon)),
-      );
-
-  Widget _permissionTile(IconData icon, String title, bool value,
-          ValueChanged<bool> onChanged) =>
-      CheckboxListTile(
-        contentPadding: EdgeInsets.zero,
-        secondary: Icon(icon, color: blue),
-        value: value,
-        onChanged: (next) => onChanged(next == true),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+        decoration: InputDecoration(
+            labelText: label, prefixIcon: Icon(icon), suffixIcon: suffix),
       );
 }
 
