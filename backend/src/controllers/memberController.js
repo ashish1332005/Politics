@@ -267,12 +267,23 @@ const addSmartLocationSearch = (filter, query) => {
   const tokens = cleanText(query).split(/\s+/).filter((token) => token.length >= 2).slice(0, 6);
   if (!tokens.length) return;
   const fields = ['assemblyNumber', 'assemblyName', 'gramPanchayat', 'village', 'partNumber', 'tehsil', 'municipality', 'sectionNumber', 'sectionName', 'location', 'address'];
+  const variantsFor = (token) => {
+    const lower = token.toLowerCase();
+    const variants = new Set([token]);
+    if (['bheeta', 'bhita', 'beeta'].includes(lower) || /भीट/.test(token)) {
+      ['bheeta', 'bhita', 'beeta', 'भीटा', 'hier'].forEach((value) => variants.add(value));
+    }
+    if (['shara', 'sahara'].includes(lower) || /सहा/.test(token)) {
+      ['shara', 'sahara', 'सहाड़ा', 'सहारा'].forEach((value) => variants.add(value));
+    }
+    if (lower === 'hier') ['hier', 'हीर', 'हियर'].forEach((value) => variants.add(value));
+    return [...variants];
+  };
+  const regexes = [...new Set(tokens.flatMap(variantsFor))]
+    .map((variant) => new RegExp(escapeRegExp(variant), 'i'));
   filter.$and = [
     ...(filter.$and || []),
-    ...tokens.map((token) => {
-      const regex = new RegExp(escapeRegExp(token), 'i');
-      return { $or: fields.map((field) => ({ [field]: regex })) };
-    }),
+    { $or: fields.flatMap((field) => regexes.map((regex) => ({ [field]: regex }))) },
   ];
 };
 

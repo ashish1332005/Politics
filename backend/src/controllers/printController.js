@@ -110,12 +110,29 @@ function photoPath(member) {
   return candidates.find((candidate) => fs.existsSync(candidate)) || null;
 }
 
+function normalizeImageBuffer(value) {
+  if (!value) return null;
+  const buffer = Buffer.isBuffer(value)
+    ? value
+    : value?.buffer
+      ? Buffer.from(value.buffer)
+      : Buffer.from(value);
+  if (buffer.length < 8) return null;
+  const isJpeg = buffer[0] === 0xff && buffer[1] === 0xd8;
+  const isPng = buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47;
+  return isJpeg || isPng ? buffer : null;
+}
+
 async function loadPhotoSources(members) {
   const mediaIds = [...new Set(members.map((member) => mediaIdFromPhoto(member.photo)).filter(Boolean))];
   const media = new Map();
   if (mediaIds.length) {
     const assets = await MediaAsset.find({ _id: { $in: mediaIds } }).select('+data contentType').lean();
-    for (const asset of assets) media.set(String(asset._id), asset.data);
+    for (const asset of assets) {
+      const buffer = normalizeImageBuffer(asset.data);
+      if (buffer) media.set(String(asset._id), buffer);
+      else console.warn('Printable voter photo is not a supported JPEG/PNG media asset:', String(asset._id));
+    }
   }
   return (member) => {
     const mediaId = mediaIdFromPhoto(member.photo);
@@ -209,7 +226,8 @@ exports.printMembers = async (req, res, next) => {
               doc.roundedRect(x + 9, y + 10, 48, 62, 3).strokeColor('#dbe4f2').stroke();
               doc.image(image, x + 9, y + 10, { fit: [48, 62], align: 'center', valign: 'center' });
             }
-            catch (_) {
+            catch (error) {
+              console.warn('Failed to draw voter photo in PDF:', item.member.voterId || item.member._id, error.message);
               doc.roundedRect(x + 9, y + 10, 48, 62, 3).strokeColor('#dbe4f2').stroke();
               doc.font('Hindi').fontSize(6).fillColor('#94a3b8').text('Photo', x + 9, y + 36, { width: 48, align: 'center' });
             }

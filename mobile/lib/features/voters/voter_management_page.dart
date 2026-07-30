@@ -2924,12 +2924,70 @@ class _LocationCorrectionDialogState extends State<_LocationCorrectionDialog> {
 
   Widget field(TextEditingController controller, String label, IconData icon) =>
       SizedBox(
-        width: 240,
+        width: 250,
         child: TextField(
           controller: controller,
-          onChanged: (_) => setState(() => matched = null),
+          onChanged: (_) => setState(() {
+            matched = null;
+            if (!advancedMode) schedulePreview();
+          }),
           decoration: InputDecoration(labelText: label, prefixIcon: Icon(icon)),
         ),
+      );
+
+  Widget sectionCard({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Widget child,
+    Color color = blue,
+  }) =>
+      Container(
+        width: double.infinity,
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: border),
+          boxShadow: const [
+            BoxShadow(
+                color: Color(0x0c071b4b), blurRadius: 16, offset: Offset(0, 8)),
+          ],
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: .10),
+                borderRadius: BorderRadius.circular(15),
+              ),
+              child: Icon(icon, color: color),
+            ),
+            const SizedBox(width: 11),
+            Expanded(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title,
+                        style: const TextStyle(
+                            color: navy,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w900)),
+                    const SizedBox(height: 2),
+                    Text(subtitle,
+                        style: const TextStyle(
+                            color: muted,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700)),
+                  ]),
+            ),
+          ]),
+          const SizedBox(height: 13),
+          child,
+        ]),
       );
 
   int get correctionStep {
@@ -3101,8 +3159,10 @@ class _LocationCorrectionDialogState extends State<_LocationCorrectionDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-        titlePadding: const EdgeInsets.fromLTRB(22, 20, 12, 0),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        contentPadding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
+        actionsPadding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+        titlePadding: const EdgeInsets.fromLTRB(18, 16, 8, 0),
         title: Row(children: [
           const CircleAvatar(
             backgroundColor: softBlue,
@@ -3112,11 +3172,10 @@ class _LocationCorrectionDialogState extends State<_LocationCorrectionDialog> {
           const Expanded(
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Location Master + Bulk Correction',
+              Text('Bulk Location Fix',
                   style: TextStyle(color: navy, fontWeight: FontWeight.w900)),
               SizedBox(height: 2),
-              Text(
-                  'पुरानी location चुनें → सही location भरें → preview → apply',
+              Text('गलत/अधूरी location को safely सुधारें',
                   style: TextStyle(color: muted, fontSize: 12)),
             ]),
           ),
@@ -3126,129 +3185,144 @@ class _LocationCorrectionDialogState extends State<_LocationCorrectionDialog> {
           ),
         ]),
         content: SizedBox(
-          width: 860,
+          width: 760,
           child: SingleChildScrollView(
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Wrap(spacing: 8, runSpacing: 8, children: [
-                stepBadge(1, 'Old location'),
-                stepBadge(2, 'New location'),
-                stepBadge(3, 'Preview voters'),
-                stepBadge(4, 'Apply'),
+              Row(children: [
+                Expanded(child: stepBadge(1, 'Search')),
+                const SizedBox(width: 6),
+                Expanded(child: stepBadge(2, 'Correct')),
+                const SizedBox(width: 6),
+                Expanded(child: stepBadge(3, 'Preview')),
               ]),
-              const SizedBox(height: 14),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: softBlue,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: blue.withValues(alpha: .18)),
-                ),
-                child: const Text(
-                  'Safe rule: गाँव कभी अकेला unique नहीं माना जाएगा। Source key = विधानसभा + ग्राम पंचायत + गाँव + भाग/बूथ.',
-                  style: TextStyle(color: navy, fontWeight: FontWeight.w800),
-                ),
-              ),
               const SizedBox(height: 12),
-              SegmentedButton<bool>(
-                segments: const [
-                  ButtonSegment(
-                      value: false,
-                      icon: Icon(Icons.auto_fix_high_rounded),
-                      label: Text('Smart Fix')),
-                  ButtonSegment(
-                      value: true,
-                      icon: Icon(Icons.vpn_key_rounded),
-                      label: Text('Safe Key')),
-                ],
-                selected: {advancedMode},
-                onSelectionChanged: (value) => setState(() {
-                  advancedMode = value.first;
-                  matched = null;
-                  sample = const [];
-                  error = null;
-                }),
-              ),
-              duplicateWarning(),
-              stepHeader(
-                  1,
-                  advancedMode
-                      ? 'पुरानी location चुनें'
-                      : 'पुरानी गलत/अधूरी जानकारी search करें',
-                  advancedMode
-                      ? 'गलत records वाली पूरी key चुनें — गाँव + पंचायत + भाग सबसे safe है।'
-                      : 'जैसे: sahara bheeta, Hier, भीटा 47 — system live affected voters दिखाएगा।',
-                  Icons.my_location_rounded),
-              if (!advancedMode) ...[
-                TextField(
-                  controller: smartQuery,
-                  onChanged: (_) => setState(() {
-                    matched = null;
-                    sample = const [];
-                    schedulePreview();
-                  }),
-                  decoration: InputDecoration(
-                    prefixIcon: const Icon(Icons.search_rounded),
-                    labelText: 'Old info search करें',
-                    hintText: 'sahara bheeta / Hier / भीटा 47',
-                    suffixIcon: smartQuery.text.isEmpty
-                        ? null
-                        : IconButton(
-                            onPressed: () => setState(() {
-                              smartQuery.clear();
-                              matched = null;
-                              sample = const [];
-                            }),
-                            icon: const Icon(Icons.close_rounded),
+              sectionCard(
+                icon: Icons.search_rounded,
+                title: advancedMode
+                    ? 'Safe Key से पुरानी location'
+                    : 'Smart Fix: पुरानी info खोजें',
+                subtitle: advancedMode
+                    ? 'जब exact विधानसभा + पंचायत + गाँव + भाग पता हो।'
+                    : 'जैसे sahara bheeta / Hier / भीटा 47 लिखें।',
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SegmentedButton<bool>(
+                        segments: const [
+                          ButtonSegment(
+                              value: false,
+                              icon: Icon(Icons.auto_fix_high_rounded),
+                              label: Text('Smart')),
+                          ButtonSegment(
+                              value: true,
+                              icon: Icon(Icons.vpn_key_rounded),
+                              label: Text('Advanced')),
+                        ],
+                        selected: {advancedMode},
+                        onSelectionChanged: (value) => setState(() {
+                          advancedMode = value.first;
+                          matched = null;
+                          sample = const [];
+                          error = null;
+                        }),
+                      ),
+                      const SizedBox(height: 12),
+                      if (!advancedMode) ...[
+                        TextField(
+                          controller: smartQuery,
+                          onChanged: (_) => setState(() {
+                            matched = null;
+                            sample = const [];
+                            schedulePreview();
+                          }),
+                          decoration: InputDecoration(
+                            prefixIcon: const Icon(Icons.search_rounded),
+                            labelText: 'Old/wrong info',
+                            hintText: 'sahara bheeta / Hier / भीटा 47',
+                            helperText:
+                                '2 अक्षर लिखते ही affected voters preview होगा',
+                            suffixIcon: smartQuery.text.isEmpty
+                                ? null
+                                : IconButton(
+                                    onPressed: () => setState(() {
+                                      smartQuery.clear();
+                                      matched = null;
+                                      sample = const [];
+                                    }),
+                                    icon: const Icon(Icons.close_rounded),
+                                  ),
                           ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Warning: गाँव अकेला unique नहीं हो सकता। अगर result ज्यादा आए तो पंचायत/भाग भी search में लिखें।',
-                  style: TextStyle(color: muted, fontSize: 12),
-                ),
-              ] else ...[
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: FilledButton.icon(
-                    onPressed: loading ? null : chooseSourceFromDatabase,
-                    icon: const Icon(Icons.dataset_rounded),
-                    label: const Text('Database से पुरानी location चुनें'),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Wrap(spacing: 10, runSpacing: 10, children: [
-                  field(sourceAssemblyNumber, 'विधानसभा संख्या',
-                      Icons.account_balance_outlined),
-                  field(sourceAssemblyName, 'विधानसभा नाम',
-                      Icons.account_balance_rounded),
-                  field(sourceGramPanchayat, 'ग्राम पंचायत',
+                        ),
+                        const SizedBox(height: 10),
+                        Container(
+                          padding: const EdgeInsets.all(11),
+                          decoration: BoxDecoration(
+                            color: const Color(0xfffff7ed),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                                color: orange.withValues(alpha: .25)),
+                          ),
+                          child: const Row(children: [
+                            Icon(Icons.info_outline_rounded, color: orange),
+                            SizedBox(width: 9),
+                            Expanded(
+                              child: Text(
+                                'गाँव अकेला unique नहीं होता। ज्यादा result आए तो पंचायत/भाग भी search में लिखें।',
+                                style: TextStyle(
+                                    color: navy,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 12),
+                              ),
+                            ),
+                          ]),
+                        ),
+                      ] else ...[
+                        SizedBox(
+                          width: double.infinity,
+                          height: 48,
+                          child: FilledButton.icon(
+                            onPressed:
+                                loading ? null : chooseSourceFromDatabase,
+                            icon: const Icon(Icons.dataset_rounded),
+                            label: const Text('Database से location चुनें'),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Wrap(spacing: 10, runSpacing: 10, children: [
+                          field(sourceAssemblyNumber, 'विधानसभा संख्या',
+                              Icons.account_balance_outlined),
+                          field(sourceAssemblyName, 'विधानसभा नाम',
+                              Icons.account_balance_rounded),
+                          field(sourceGramPanchayat, 'ग्राम पंचायत',
+                              Icons.holiday_village_outlined),
+                          field(sourceVillage, 'गाँव / गलत OCR text *',
+                              Icons.location_city_rounded),
+                          field(sourcePartNumber, 'भाग / बूथ',
+                              Icons.how_to_vote_rounded),
+                        ]),
+                      ],
+                    ]),
+              ),
+              sectionCard(
+                icon: Icons.edit_location_alt_rounded,
+                title: 'सही जानकारी भरें',
+                subtitle:
+                    'सिर्फ वही field भरें जो बदलनी/जोड़नी है; बाकी खाली छोड़ें।',
+                color: green,
+                child: Wrap(spacing: 10, runSpacing: 10, children: [
+                  field(newGramPanchayat, 'नई ग्राम पंचायत',
                       Icons.holiday_village_outlined),
-                  field(sourceVillage, 'गाँव / गलत OCR text *',
-                      Icons.location_city_rounded),
-                  field(
-                      sourcePartNumber, 'भाग / बूथ', Icons.how_to_vote_rounded),
+                  field(newVillage, 'नया गाँव', Icons.location_city_rounded),
+                  field(newPartNumber, 'नया भाग / बूथ',
+                      Icons.how_to_vote_rounded),
+                  field(newTehsil, 'नई तहसील / ब्लॉक', Icons.apartment_rounded),
+                  field(newAssemblyNumber, 'नई विधानसभा संख्या',
+                      Icons.account_balance_outlined),
+                  field(newAssemblyName, 'नई विधानसभा नाम',
+                      Icons.account_balance_rounded),
                 ]),
-              ],
-              stepHeader(
-                  2,
-                  'सही location चुनें / लिखें',
-                  'जो field बदलनी है वही भरें; खाली field पुरानी value रखेगी।',
-                  Icons.task_alt_rounded),
-              Wrap(spacing: 10, runSpacing: 10, children: [
-                field(newAssemblyNumber, 'नई विधानसभा संख्या',
-                    Icons.account_balance_outlined),
-                field(newAssemblyName, 'नई विधानसभा नाम',
-                    Icons.account_balance_rounded),
-                field(newGramPanchayat, 'नई ग्राम पंचायत',
-                    Icons.holiday_village_outlined),
-                field(newVillage, 'नया गाँव', Icons.location_city_rounded),
-                field(
-                    newPartNumber, 'नया भाग / बूथ', Icons.how_to_vote_rounded),
-                field(newTehsil, 'नई तहसील / ब्लॉक', Icons.apartment_rounded),
-              ]),
+              ),
               comparisonTable(),
               const SizedBox(height: 14),
               if (error != null)
@@ -3265,51 +3339,56 @@ class _LocationCorrectionDialogState extends State<_LocationCorrectionDialog> {
                       style: const TextStyle(
                           color: Colors.red, fontWeight: FontWeight.w800)),
                 ),
-              stepHeader(
-                  3,
-                  'Preview affected voters',
-                  'Apply से पहले affected voter count और sample confirm करें।',
-                  Icons.visibility_rounded),
-              if (matched != null) ...[
-                Container(
-                  margin: const EdgeInsets.only(top: 8),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xfff7f9ff),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: border),
-                  ),
-                  child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('$matched voters match हुए',
-                            style: const TextStyle(
-                                color: navy,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w900)),
-                        const SizedBox(height: 6),
-                        ...sample.take(5).map((voter) => Text(
-                            '• ${voter['name'] ?? '-'} · EPIC ${voter['voterId'] ?? '-'} · घर ${voter['houseNumber'] ?? '-'}',
-                            style:
-                                const TextStyle(color: muted, fontSize: 12))),
-                        ...currentLocationSummary(),
-                      ]),
-                ),
-              ] else ...[
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xfff7f9ff),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: border),
-                  ),
-                  child: const Text(
-                    'Preview दबाने पर affected voter count और sample यहाँ दिखेंगे।',
-                    style: TextStyle(color: muted, fontWeight: FontWeight.w700),
-                  ),
-                ),
-              ],
+              sectionCard(
+                icon: Icons.visibility_rounded,
+                title: 'Preview affected voters',
+                subtitle: 'Apply से पहले count और sample जरूर confirm करें।',
+                color: purple,
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (matched != null) ...[
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xfff7f9ff),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: border),
+                          ),
+                          child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('$matched voters match हुए',
+                                    style: const TextStyle(
+                                        color: navy,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w900)),
+                                const SizedBox(height: 6),
+                                ...sample.take(5).map((voter) => Text(
+                                    '• ${voter['name'] ?? '-'} · EPIC ${voter['voterId'] ?? '-'} · घर ${voter['houseNumber'] ?? '-'}',
+                                    style: const TextStyle(
+                                        color: muted, fontSize: 12))),
+                                ...currentLocationSummary(),
+                              ]),
+                        ),
+                      ] else ...[
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xfff7f9ff),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: border),
+                          ),
+                          child: const Text(
+                            'Preview दबाने पर affected voter count और sample यहाँ दिखेंगे।',
+                            style: TextStyle(
+                                color: muted, fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                      ],
+                    ]),
+              ),
             ]),
           ),
         ),
