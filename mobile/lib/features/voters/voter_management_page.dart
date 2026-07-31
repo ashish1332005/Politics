@@ -539,9 +539,11 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
       for (final id in ids) {
         await api.delete('/api/members/$id');
       }
+      await OfflineVoterCache.removeByIds(ids);
       if (!mounted) return;
       setState(() {
         selectedIds.clear();
+        currentPage = 1;
         refreshVoters();
       });
       ScaffoldMessenger.of(context).showSnackBar(
@@ -4190,8 +4192,9 @@ class VoterTable extends StatelessWidget {
                               IconButton(
                                   tooltip: 'हटाएं',
                                   onPressed: () async {
-                                    await api
-                                        .delete('/api/members/${m['_id']}');
+                                    final id = '${m['_id']}';
+                                    await api.delete('/api/members/$id');
+                                    await OfflineVoterCache.removeByIds([id]);
                                     refresh();
                                   },
                                   icon: const Icon(Icons.delete_outline,
@@ -4428,7 +4431,9 @@ class _VoterRow extends StatelessWidget {
                               builder: (_) => VoterEditPage(
                                   voter: member, onSaved: refresh)));
                     } else if (action == 'delete') {
-                      await api.delete('/api/members/${member['_id']}');
+                      final id = '${member['_id']}';
+                      await api.delete('/api/members/$id');
+                      await OfflineVoterCache.removeByIds([id]);
                       refresh();
                     }
                   },

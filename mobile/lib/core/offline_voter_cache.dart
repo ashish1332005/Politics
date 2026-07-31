@@ -106,6 +106,16 @@ class OfflineVoterCache {
     await save(byId.values.toList());
   }
 
+  static Future<void> removeByIds(Iterable<String> ids) async {
+    final remove =
+        ids.map((id) => id.trim()).where((id) => id.isNotEmpty).toSet();
+    if (remove.isEmpty) return;
+    final kept = (await read())
+        .where((item) => !remove.contains('${item['_id'] ?? ''}'))
+        .toList();
+    await save(kept);
+  }
+
   static Future<List<dynamic>> read() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_key);
