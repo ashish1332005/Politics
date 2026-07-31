@@ -510,6 +510,10 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
     );
   }
 
+  bool _isMemberAlreadyMissing(Object error) {
+    return error.toString().toLowerCase().contains('member not found');
+  }
+
   Future<void> deleteSelectedContacts() async {
     if (selectedIds.isEmpty) return;
     final ids = selectedIds.toList();
@@ -535,24 +539,53 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
       ),
     );
     if (confirmed != true) return;
-    try {
-      for (final id in ids) {
+
+    final locallyRemovedIds = <String>[];
+    final failedMessages = <String>[];
+    var alreadyMissingCount = 0;
+
+    for (final id in ids) {
+      try {
         await api.delete('/api/members/$id');
+        locallyRemovedIds.add(id);
+      } catch (error) {
+        if (_isMemberAlreadyMissing(error)) {
+          alreadyMissingCount += 1;
+          locallyRemovedIds.add(id);
+        } else {
+          failedMessages.add('$id: $error');
+        }
       }
-      await OfflineVoterCache.removeByIds(ids);
-      if (!mounted) return;
-      setState(() {
-        selectedIds.clear();
-        currentPage = 1;
-        refreshVoters();
-      });
+    }
+
+    if (locallyRemovedIds.isNotEmpty) {
+      await OfflineVoterCache.removeByIds(locallyRemovedIds);
+    }
+
+    if (!mounted) return;
+    setState(() {
+      selectedIds.removeAll(locallyRemovedIds);
+      currentPage = 1;
+      refreshVoters();
+    });
+
+    final deletedCount = locallyRemovedIds.length - alreadyMissingCount;
+    if (failedMessages.isEmpty) {
+      selectedIds.clear();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${ids.length} contacts deleted')),
+        SnackBar(
+          content: Text(alreadyMissingCount > 0
+              ? '$deletedCount contacts deleted, $alreadyMissingCount already removed'
+              : '$deletedCount contacts deleted'),
+        ),
       );
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('$error')));
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+              '${locallyRemovedIds.length} removed, ${failedMessages.length} delete failed. Please try again.'),
+        ),
+      );
     }
   }
 
