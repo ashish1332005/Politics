@@ -47,6 +47,14 @@ const assertPersonalContactAllowed = (user, data) => {
   }
 };
 
+const removeBlankObjectRefs = (data) => {
+  for (const field of ['ward', 'booth', 'area', 'party']) {
+    if (Object.prototype.hasOwnProperty.call(data, field) && !String(data[field] || '').trim()) {
+      delete data[field];
+    }
+  }
+};
+
 const duplicateWarnings = async (data, excludeId) => {
   const or = [];
   if (data.mobile) or.push({ mobile: data.mobile });
@@ -86,6 +94,7 @@ exports.create = async (req, res, next) => {
   try {
     const data = { ...req.body };
     data.contactType = data.contactType === 'personal' ? 'personal' : 'voter';
+    removeBlankObjectRefs(data);
     assertPersonalContactAllowed(req.currentUser, data);
 
     if (isPersonalContact(data)) {
@@ -527,6 +536,7 @@ exports.update = async (req, res, next) => {
       return res.status(400).json({ message: 'Contact type cannot be changed after creation.' });
     }
     updates.contactType = member.contactType || 'voter';
+    removeBlankObjectRefs(updates);
     assertPersonalContactAllowed(req.currentUser, updates);
     if (isPersonalContact(updates) && !String(updates.mobile || member.mobile || '').trim() && !String(updates.address || member.address || '').trim()) {
       const err = new Error('Personal contact ke liye mobile ya address me se ek zaroori hai.');
