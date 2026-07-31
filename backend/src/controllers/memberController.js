@@ -134,7 +134,7 @@ exports.create = async (req, res, next) => {
 
 exports.list = async (req, res, next) => {
   try {
-    const { q, party, supportLevel, gender, booth, ward, area, verificationStatus, location, village, gramPanchayat, tehsil, municipality, caste, organizationPost, sectionNumber, sectionName, assemblyNumber, assemblyName, partNumber, letter } = req.query;
+    const { q, party, supportLevel, gender, booth, ward, area, verificationStatus, location, village, gramPanchayat, tehsil, municipality, caste, organizationPost, occupation, contactType, sectionNumber, sectionName, assemblyNumber, assemblyName, partNumber, letter } = req.query;
     const limit = Math.min(Number(req.query.limit) || 100, 500);
     const page = Math.max(Number(req.query.page) || 1, 1);
     const paged = String(req.query.paged || '').toLowerCase() === 'true' || req.query.page !== undefined;
@@ -155,6 +155,9 @@ exports.list = async (req, res, next) => {
     if (municipality) filter.municipality = searchRegex(municipality);
     if (caste) filter.caste = searchRegex(caste);
     if (organizationPost) filter.organizationPost = searchRegex(organizationPost);
+    if (occupation) filter.occupation = searchRegex(occupation);
+    if (contactType === 'personal') filter.contactType = 'personal';
+    if (contactType === 'voter') filter.contactType = { $ne: 'personal' };
     if (sectionNumber) filter.sectionNumber = new RegExp(`^${String(sectionNumber).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
     if (sectionName) filter.sectionName = searchRegex(sectionName);
     if (assemblyNumber) filter.assemblyNumber = assemblyNumber;
@@ -253,6 +256,7 @@ const optionDefinitions = {
   municipality: { field: 'municipality' },
   partNumber: { field: 'partNumber' },
   caste: { field: 'caste' },
+  occupation: { field: 'occupation' },
   organizationPost: { field: 'organizationPost' },
 };
 
@@ -260,7 +264,7 @@ function addOptionFilter(filter, key, value) {
   if (!value) return;
   if (['assemblyNumber', 'partNumber', 'sectionNumber', 'supportLevel', 'verificationStatus', 'gender'].includes(key)) {
     filter[key] = value;
-  } else if (['assemblyName', 'sectionName', 'village', 'gramPanchayat', 'tehsil', 'municipality', 'caste', 'organizationPost'].includes(key)) {
+  } else if (['assemblyName', 'sectionName', 'village', 'gramPanchayat', 'tehsil', 'municipality', 'caste', 'occupation', 'organizationPost'].includes(key)) {
     filter[key] = new RegExp(String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
   }
 }
@@ -460,7 +464,7 @@ exports.filterOptions = async (req, res, next) => {
     for (const key of [
       'assemblyNumber', 'assemblyName', 'partNumber', 'sectionNumber', 'sectionName',
       'village', 'gramPanchayat', 'tehsil', 'municipality', 'caste',
-      'organizationPost', 'supportLevel', 'verificationStatus', 'gender',
+      'occupation', 'organizationPost', 'supportLevel', 'verificationStatus', 'gender',
     ]) addOptionFilter(filter, key, req.query[key]);
     if (req.query.missingMobile === 'true') filter.$and = [...(filter.$and || []), { $or: [{ mobile: '' }, { mobile: null }, { mobile: { $exists: false } }] }];
     if (req.query.missingHouse === 'true') filter.$and = [...(filter.$and || []), { $or: [{ houseNumber: '' }, { houseNumber: null }, { houseNumber: { $exists: false } }] }];

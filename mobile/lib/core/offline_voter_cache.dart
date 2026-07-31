@@ -151,6 +151,8 @@ class OfflineVoterCache {
           item['caste'],
           item['subCaste'],
           item['organizationPost'],
+          item['occupation'],
+          item['contactType'],
           item['sectionNumber'],
           item['sectionName'],
           item['assemblyNumber'],
@@ -175,6 +177,8 @@ class OfflineVoterCache {
         'municipality',
         'caste',
         'organizationPost',
+        'occupation',
+        'contactType',
         'area'
       ]) {
         final expected = query[key];

@@ -39,6 +39,7 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
   final tehsil = TextEditingController();
   final municipality = TextEditingController();
   final caste = TextEditingController();
+  final occupation = TextEditingController();
   final organizationPost = TextEditingController();
   final sectionName = TextEditingController();
   final assemblyNumber = TextEditingController();
@@ -53,6 +54,7 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
   String gender = '';
   String verificationStatus = '';
   String support = '';
+  String contactTypeFilter = '';
   String nameLetter = '';
   int currentPage = 1;
   late Future<Map<String, dynamic>> dashboardFuture;
@@ -100,6 +102,7 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
     tehsil.dispose();
     municipality.dispose();
     caste.dispose();
+    occupation.dispose();
     organizationPost.dispose();
     sectionName.dispose();
     assemblyNumber.dispose();
@@ -121,7 +124,9 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
       'tehsil': tehsil.text.trim(),
       'municipality': municipality.text.trim(),
       'caste': caste.text.trim(),
+      'occupation': occupation.text.trim(),
       'organizationPost': organizationPost.text.trim(),
+      'contactType': contactTypeFilter,
       'supportLevel': support,
       'gender': gender,
       'verificationStatus': verificationStatus,
@@ -188,6 +193,7 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
       tehsil,
       municipality,
       caste,
+      occupation,
       organizationPost,
     ]) {
       controller.clear();
@@ -196,6 +202,7 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
       support = '';
       gender = '';
       verificationStatus = '';
+      contactTypeFilter = '';
       nameLetter = '';
       currentPage = 1;
       selectedIds.clear();
@@ -280,6 +287,15 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
 
     add('Search', search.text, () => _clearFilterText(search));
     add(
+        'Type',
+        _contactTypeFilterLabel(contactTypeFilter),
+        () => setState(() {
+              contactTypeFilter = '';
+              currentPage = 1;
+              selectedIds.clear();
+              refreshVoters();
+            }));
+    add(
         'अक्षर',
         nameLetter,
         () => setState(() {
@@ -336,8 +352,23 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
         () => _clearSmartOrText('caste', caste));
     add('पद', _filterValue('organizationPost', organizationPost),
         () => _clearSmartOrText('organizationPost', organizationPost));
+    add('Vyavsay', _filterValue('occupation', occupation),
+        () => _clearSmartOrText('occupation', occupation));
     return chips;
   }
+
+  String _contactTypeFilterLabel(String value) => switch (value) {
+        'voter' => 'Matdata',
+        'personal' => 'Personal',
+        _ => '',
+      };
+
+  void _setContactTypeFilter(String value) => setState(() {
+        contactTypeFilter = value;
+        currentPage = 1;
+        selectedIds.clear();
+        refreshVoters();
+      });
 
   String _supportLabel(String value) => switch (value) {
         'supporter' => 'समर्थक',
@@ -405,6 +436,7 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
     'partNumber': ['partNumber'],
     'section': ['sectionNumber', 'sectionName'],
     'caste': ['caste'],
+    'occupation': ['occupation'],
     'organizationPost': ['organizationPost'],
   };
 
@@ -734,6 +766,11 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
                 refreshVoters();
               }),
             ),
+            const SizedBox(height: 14),
+            _ContactTypeFilterChips(
+              selected: contactTypeFilter,
+              onChanged: _setContactTypeFilter,
+            ),
             const SizedBox(height: 18),
             Row(children: [
               const Expanded(
@@ -954,6 +991,11 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
         ),
       const SizedBox(height: 8),
       _SearchHelpStrip(onPick: useQuickSearch),
+      _ContactTypeFilterChips(
+        selected: contactTypeFilter,
+        onChanged: _setContactTypeFilter,
+      ),
+      const SizedBox(height: 8),
       _SmartSearchPanel(
         selectedLabels: selectedOptionLabels,
         onPick: openSmartFilter,
@@ -1070,6 +1112,12 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
                   onChanged: (_) => filtersChanged(),
                   onPick: () =>
                       openSmartFilter('organizationPost', 'संगठन पद')),
+              _SearchFilter(
+                  controller: occupation,
+                  label: 'Vyavsay',
+                  icon: Icons.work_outline,
+                  onChanged: (_) => filtersChanged(),
+                  onPick: () => openSmartFilter('occupation', 'Vyavsay')),
               _FilterDropdown(
                 label: 'समर्थन स्तर',
                 value: support,
@@ -1305,6 +1353,61 @@ class _RecentFilter {
   final String title;
   final String label;
   final Map<String, String> filters;
+}
+
+class _ContactTypeFilterChips extends StatelessWidget {
+  const _ContactTypeFilterChips({
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final String selected;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget chip({
+      required String value,
+      required String label,
+      required IconData icon,
+    }) {
+      final isSelected = selected == value;
+      return ChoiceChip(
+        selected: isSelected,
+        onSelected: (_) => onChanged(value),
+        avatar: Icon(
+          icon,
+          size: 18,
+          color: isSelected ? Colors.white : blue,
+        ),
+        label: Text(label),
+        labelStyle: TextStyle(
+          color: isSelected ? Colors.white : navy,
+          fontWeight: FontWeight.w800,
+        ),
+        selectedColor: blue,
+        backgroundColor: Colors.white,
+        side: BorderSide(color: isSelected ? blue : border),
+        showCheckmark: false,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      );
+    }
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(children: [
+        chip(value: '', label: 'All', icon: Icons.people_alt_rounded),
+        const SizedBox(width: 8),
+        chip(value: 'voter', label: 'Matdata', icon: Icons.badge_rounded),
+        const SizedBox(width: 8),
+        chip(
+          value: 'personal',
+          label: 'Personal',
+          icon: Icons.person_pin_circle_rounded,
+        ),
+      ]),
+    );
+  }
 }
 
 class _ActiveFilterChips extends StatelessWidget {
@@ -1642,6 +1745,7 @@ class _SmartSearchPanel extends StatelessWidget {
     _SmartFilterDef('partNumber', 'भाग / बूथ', Icons.how_to_vote_rounded),
     _SmartFilterDef('section', 'अनुभाग', Icons.format_list_numbered_rounded),
     _SmartFilterDef('caste', 'जाति', Icons.groups_2_rounded),
+    _SmartFilterDef('occupation', 'Vyavsay', Icons.work_rounded),
     _SmartFilterDef('organizationPost', 'संगठन पद', Icons.badge_rounded),
   ];
 
