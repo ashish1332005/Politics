@@ -995,9 +995,27 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
                     const SizedBox(height: 10),
                     _PhoneContactList(
                       result: result,
+                      selectedIds: selectedIds,
+                      onSelectionChanged: (id, selected) => setState(() {
+                        if (selected) {
+                          selectedIds.add(id);
+                        } else {
+                          selectedIds.remove(id);
+                        }
+                      }),
+                      onSelectPage: (ids, selected) => setState(() {
+                        if (selected) {
+                          selectedIds.addAll(ids);
+                        } else {
+                          selectedIds.removeAll(ids);
+                        }
+                      }),
+                      onDeleteSelected: deleteSelectedContacts,
+                      onClearSelection: () => setState(selectedIds.clear),
                       onChanged: () => setState(refreshVoters),
                       onPageChanged: (page) => setState(() {
                         currentPage = page;
+                        selectedIds.clear();
                         refreshVoters();
                       }),
                     ),
@@ -2307,11 +2325,21 @@ class _PhoneCategory extends StatelessWidget {
 class _PhoneContactList extends StatelessWidget {
   const _PhoneContactList({
     required this.result,
+    required this.selectedIds,
+    required this.onSelectionChanged,
+    required this.onSelectPage,
+    required this.onDeleteSelected,
+    required this.onClearSelection,
     required this.onChanged,
     required this.onPageChanged,
   });
 
   final VoterPageResult result;
+  final Set<String> selectedIds;
+  final void Function(String id, bool selected) onSelectionChanged;
+  final void Function(Iterable<String> ids, bool selected) onSelectPage;
+  final VoidCallback onDeleteSelected;
+  final VoidCallback onClearSelection;
   final VoidCallback onChanged;
   final ValueChanged<int> onPageChanged;
 
@@ -2320,14 +2348,55 @@ class _PhoneContactList extends StatelessWidget {
     final contacts = result.items
         .map((item) => Map<String, dynamic>.from(item as Map))
         .toList();
+    final pageIds = contacts.map((voter) => '${voter['_id']}').toList();
+    final allSelected =
+        pageIds.isNotEmpty && pageIds.every(selectedIds.contains);
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Padding(
         padding: const EdgeInsets.only(bottom: 4),
         child: Text('${result.total} मतदाता मिले',
             style: const TextStyle(color: muted, fontSize: 12)),
       ),
+      if (selectedIds.isNotEmpty)
+        Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: const Color(0xfffff5f5),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.red.withValues(alpha: .18)),
+          ),
+          child: Row(children: [
+            Expanded(
+              child: Text('${selectedIds.length} selected',
+                  style: const TextStyle(
+                      color: navy, fontWeight: FontWeight.w900)),
+            ),
+            TextButton(
+              onPressed: pageIds.isEmpty
+                  ? null
+                  : () => onSelectPage(pageIds, !allSelected),
+              child: Text(allSelected ? 'Unselect all' : 'Select all'),
+            ),
+            IconButton(
+              tooltip: 'Clear',
+              onPressed: onClearSelection,
+              icon: const Icon(Icons.close_rounded),
+            ),
+            IconButton.filled(
+              tooltip: 'Delete selected',
+              style: IconButton.styleFrom(backgroundColor: Colors.red),
+              onPressed: onDeleteSelected,
+              icon: const Icon(Icons.delete_outline_rounded),
+            ),
+          ]),
+        ),
       ...contacts.map((voter) => _PhoneContactTile(
             voter: voter,
+            selected: selectedIds.contains('${voter['_id']}'),
+            selectionMode: selectedIds.isNotEmpty,
+            onSelected: (selected) =>
+                onSelectionChanged('${voter['_id']}', selected),
             onChanged: onChanged,
           )),
       if (result.pages > 1)
@@ -2358,9 +2427,18 @@ class _PhoneContactList extends StatelessWidget {
 }
 
 class _PhoneContactTile extends StatelessWidget {
-  const _PhoneContactTile({required this.voter, required this.onChanged});
+  const _PhoneContactTile({
+    required this.voter,
+    required this.selected,
+    required this.selectionMode,
+    required this.onSelected,
+    required this.onChanged,
+  });
 
   final Map<String, dynamic> voter;
+  final bool selected;
+  final bool selectionMode;
+  final ValueChanged<bool> onSelected;
   final VoidCallback onChanged;
 
   @override
@@ -2373,20 +2451,35 @@ class _PhoneContactTile extends StatelessWidget {
       if (village.isNotEmpty) village,
     ].join(' · ');
     return Material(
-      color: Colors.white,
+      color: selected ? const Color(0xffeef5ff) : Colors.white,
       child: InkWell(
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => VoterDetailPage(voter: voter, onChanged: onChanged),
-          ),
-        ),
+        onTap: () {
+          if (selectionMode) {
+            onSelected(!selected);
+            return;
+          }
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) =>
+                  VoterDetailPage(voter: voter, onChanged: onChanged),
+            ),
+          );
+        },
+        onLongPress: () => onSelected(!selected),
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 12),
           decoration: const BoxDecoration(
             border: Border(bottom: BorderSide(color: Color(0xffedf0f5))),
           ),
           child: Row(children: [
+            if (selectionMode || selected) ...[
+              Checkbox(
+                value: selected,
+                onChanged: (value) => onSelected(value ?? false),
+                visualDensity: VisualDensity.compact,
+              ),
+            ],
             _VoterPhoto(photo: voter['photo'], radius: 25),
             const SizedBox(width: 12),
             Expanded(
