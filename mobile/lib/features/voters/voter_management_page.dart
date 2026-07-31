@@ -560,6 +560,8 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
     var nextVerification = verificationStatus;
     final nextVillage = TextEditingController(text: village.text);
     final nextBooth = TextEditingController(text: boothNumber.text);
+    final nextPosition = TextEditingController(text: organizationPost.text);
+    final nextOccupation = TextEditingController(text: occupation.text);
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -683,6 +685,64 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
                 ),
               ),
               const SizedBox(height: 12),
+              TextField(
+                controller: nextPosition,
+                decoration: InputDecoration(
+                  labelText: 'Pad / Position',
+                  prefixIcon: const Icon(Icons.badge_outlined),
+                  suffixIcon: IconButton(
+                    tooltip: 'Database se position chunein',
+                    icon: const Icon(Icons.list_alt_rounded),
+                    onPressed: () async {
+                      final option = await pickFilterOption(
+                          'organizationPost', 'Pad / Position', {
+                        if (nextSupport.isNotEmpty) 'supportLevel': nextSupport,
+                        if (nextGender.isNotEmpty) 'gender': nextGender,
+                        if (nextVerification.isNotEmpty)
+                          'verificationStatus': nextVerification,
+                        if (nextVillage.text.trim().isNotEmpty)
+                          'village': nextVillage.text.trim(),
+                        if (nextBooth.text.trim().isNotEmpty)
+                          'partNumber': nextBooth.text.trim(),
+                      });
+                      if (option == null) return;
+                      setSheetState(() => nextPosition.text =
+                          option.filters['organizationPost'] ?? option.label);
+                    },
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: nextOccupation,
+                decoration: InputDecoration(
+                  labelText: 'Vyavsay',
+                  prefixIcon: const Icon(Icons.work_outline),
+                  suffixIcon: IconButton(
+                    tooltip: 'Database se vyavsay chunein',
+                    icon: const Icon(Icons.list_alt_rounded),
+                    onPressed: () async {
+                      final option =
+                          await pickFilterOption('occupation', 'Vyavsay', {
+                        if (nextSupport.isNotEmpty) 'supportLevel': nextSupport,
+                        if (nextGender.isNotEmpty) 'gender': nextGender,
+                        if (nextVerification.isNotEmpty)
+                          'verificationStatus': nextVerification,
+                        if (nextVillage.text.trim().isNotEmpty)
+                          'village': nextVillage.text.trim(),
+                        if (nextBooth.text.trim().isNotEmpty)
+                          'partNumber': nextBooth.text.trim(),
+                        if (nextPosition.text.trim().isNotEmpty)
+                          'organizationPost': nextPosition.text.trim(),
+                      });
+                      if (option == null) return;
+                      setSheetState(() => nextOccupation.text =
+                          option.filters['occupation'] ?? option.label);
+                    },
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 initialValue: nextVerification,
                 decoration: const InputDecoration(
@@ -710,6 +770,8 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
                       verificationStatus = nextVerification;
                       village.text = nextVillage.text.trim();
                       boothNumber.text = nextBooth.text.trim();
+                      organizationPost.text = nextPosition.text.trim();
+                      occupation.text = nextOccupation.text.trim();
                       currentPage = 1;
                       refreshVoters();
                     });
@@ -726,6 +788,8 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
     );
     nextVillage.dispose();
     nextBooth.dispose();
+    nextPosition.dispose();
+    nextOccupation.dispose();
   }
 
   Widget buildPhoneBookMobile(BuildContext context) => RefreshIndicator(
