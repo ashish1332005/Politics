@@ -22,6 +22,20 @@ module.exports = multer({
   },
   fileFilter: (req, file, cb) => {
     const originalName = String(file?.originalname || file?.filename || '');
+    const fieldName = String(file?.fieldname || '');
+    const mimeType = String(file?.mimetype || '');
+
+    if (fieldName === 'photo') {
+      const imageByName = /\.(jpg|jpeg|png|webp|heic|heif)$/i.test(originalName);
+      const imageByMime = /^image\//i.test(mimeType);
+      if (!imageByName && !imageByMime) {
+        const error = new Error('Only image files are allowed for contact photo.');
+        error.status = 400;
+        return cb(error);
+      }
+      return cb(null, true);
+    }
+
     const allowed = /\.(pdf|xlsx|xls|csv)$/i.test(originalName);
     if (!allowed) {
       const error = new Error('Only PDF, Excel and CSV files are allowed.');
