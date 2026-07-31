@@ -510,6 +510,50 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
     );
   }
 
+  Future<void> deleteSelectedContacts() async {
+    if (selectedIds.isEmpty) return;
+    final ids = selectedIds.toList();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: const Icon(Icons.delete_outline_rounded,
+            color: Colors.red, size: 42),
+        title: const Text('Delete selected contacts?'),
+        content: Text(
+            '${ids.length} selected contact permanently delete ho jayenge.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(context, true),
+            icon: const Icon(Icons.delete_outline_rounded),
+            label: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      for (final id in ids) {
+        await api.delete('/api/members/$id');
+      }
+      if (!mounted) return;
+      setState(() {
+        selectedIds.clear();
+        refreshVoters();
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${ids.length} contacts deleted')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('$error')));
+    }
+  }
+
   Future<void> deleteAll() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -1329,6 +1373,7 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
                     .toList(),
                 refresh: () => setState(refreshVoters),
                 onDeleteAll: deleteAll,
+                onDeleteSelected: deleteSelectedContacts,
                 total: result.total,
                 page: result.page,
                 pages: result.pages,
@@ -3895,6 +3940,7 @@ class VoterTable extends StatelessWidget {
     required this.items,
     required this.refresh,
     required this.onDeleteAll,
+    required this.onDeleteSelected,
     required this.total,
     required this.page,
     required this.pages,
@@ -3908,6 +3954,7 @@ class VoterTable extends StatelessWidget {
   final List<Map<String, dynamic>> items;
   final VoidCallback refresh;
   final VoidCallback onDeleteAll;
+  final VoidCallback onDeleteSelected;
   final int total;
   final int page;
   final int pages;
@@ -3932,6 +3979,19 @@ class VoterTable extends StatelessWidget {
           : '${selectedIds.length} मतदाता चयनित',
       icon: Icons.groups_rounded,
       action: Wrap(spacing: 8, runSpacing: 8, children: [
+        if (selectedIds.isNotEmpty) ...[
+          FilledButton.icon(
+            onPressed: onDeleteSelected,
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            icon: const Icon(Icons.delete_outline_rounded),
+            label: const Text('Delete selected'),
+          ),
+          OutlinedButton.icon(
+            onPressed: () => onSelectPage(selectedIds.toList(), false),
+            icon: const Icon(Icons.close_rounded),
+            label: const Text('Clear'),
+          ),
+        ],
         OutlinedButton.icon(
           onPressed: pageIds.isEmpty
               ? null
@@ -3970,6 +4030,7 @@ class VoterTable extends StatelessWidget {
                                 selectedIds.contains('${entry.value['_id']}'),
                             onSelected: (selected) => onSelectionChanged(
                                 '${entry.value['_id']}', selected),
+                            selectionMode: selectedIds.isNotEmpty,
                             refresh: refresh,
                           ))
                       .toList())
@@ -4126,12 +4187,14 @@ class _VoterRow extends StatelessWidget {
     required this.member,
     required this.selected,
     required this.onSelected,
+    required this.selectionMode,
     required this.refresh,
   });
   final int index;
   final Map<String, dynamic> member;
   final bool selected;
   final ValueChanged<bool> onSelected;
+  final bool selectionMode;
   final VoidCallback refresh;
 
   @override
@@ -4163,13 +4226,20 @@ class _VoterRow extends StatelessWidget {
         ),
         child: InkWell(
           borderRadius: BorderRadius.circular(18),
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) =>
-                  VoterDetailPage(voter: member, onChanged: refresh),
-            ),
-          ),
+          onTap: () {
+            if (selectionMode) {
+              onSelected(!selected);
+              return;
+            }
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) =>
+                    VoterDetailPage(voter: member, onChanged: refresh),
+              ),
+            );
+          },
+          onLongPress: () => onSelected(!selected),
           child: Padding(
             padding: const EdgeInsets.all(12),
             child:

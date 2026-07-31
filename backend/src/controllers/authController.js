@@ -217,3 +217,17 @@ exports.userWorkSummary = async (req, res, next) => {
     next(error);
   }
 };
+
+exports.removeUser = async (req, res, next) => {
+  try {
+    if (String(req.currentUser?._id || req.currentUser?.id || '') === String(req.params.id)) {
+      return res.status(400).json({ message: 'You cannot delete your own user.' });
+    }
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    await user.deleteOne();
+    res.json({ message: 'Deleted' });
+  } catch (error) {
+    next(error);
+  }
+};

@@ -517,6 +517,38 @@ class _ManagerCard extends StatelessWidget {
       if (permissions?['canPrintProfiles'] == true) 'Print',
       if (permissions?['canExportData'] == true) 'Export',
     ];
+    Future<void> deleteManager() async {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (_) => AlertDialog(
+          icon: const Icon(Icons.delete_outline_rounded,
+              color: Colors.red, size: 42),
+          title: const Text('Delete booth manager?'),
+          content: Text(
+              '${user['name'] ?? 'Manager'} ka login access permanently delete ho jayega.'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel')),
+            FilledButton.icon(
+              style: FilledButton.styleFrom(backgroundColor: Colors.red),
+              onPressed: () => Navigator.pop(context, true),
+              icon: const Icon(Icons.delete_outline_rounded),
+              label: const Text('Delete'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+      await api.delete('/api/auth/users/${user['_id']}');
+      onChanged();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Manager deleted')),
+        );
+      }
+    }
+
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(13),
@@ -630,6 +662,12 @@ class _ManagerCard extends StatelessWidget {
                   builder: (_) => ResetPasswordDialog(userId: '${user['_id']}'),
                 ),
                 color: orange,
+              ),
+              _ManagerActionButton(
+                icon: Icons.delete_outline_rounded,
+                label: 'Delete',
+                onTap: deleteManager,
+                color: rose,
               ),
               Container(
                 height: 40,
