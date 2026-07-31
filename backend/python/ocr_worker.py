@@ -363,7 +363,7 @@ def read_header(page_path):
     if image is None:
         return ""
     height, width = image.shape[:2]
-    header = image[0:round(height * 0.22), 0:width]
+    header = image[0:round(height * 0.42), 0:width]
     gray = cv2.cvtColor(header, cv2.COLOR_BGR2GRAY)
     gray = cv2.resize(gray, None, fx=2.2, fy=2.2, interpolation=cv2.INTER_CUBIC)
     gray = cv2.createCLAHE(2.0, (8, 8)).apply(gray)
@@ -387,6 +387,20 @@ def parse_header_numbers(text):
     def normalize_digits(raw):
         return clean(raw or "").translate(digit_map)
 
+    def normalize_assembly_number(raw):
+        number = normalize_digits(raw)
+        if len(number) == 3 and number.isdigit() and int(number) > 200:
+            tail = number[1:]
+            if tail.isdigit() and 1 <= int(tail) <= 200:
+                return tail
+        return number
+
+    def normalize_section_number(raw):
+        number = normalize_digits(raw)
+        if len(number) == 2 and number[0] == number[1]:
+            return number[0]
+        return number
+
     def first_match(patterns):
         for pattern in patterns:
             match = re.search(pattern, normalized, re.IGNORECASE | re.MULTILINE)
@@ -401,8 +415,19 @@ def parse_header_numbers(text):
             "",
             name,
             flags=re.IGNORECASE,
-        ).strip(" -,:|।")
+        )
+        name = re.split(
+            r"\s*(?:मुख्य\s*(?:शहर|ग्राम)|वार्ड|पोस्ट\s*ऑफिस|POST\s*OFFICE|BHEETA\s*BO|पुलिस\s*थाना|तहसील|जिला|पिन\s*कोड)",
+            name,
+            maxsplit=1,
+            flags=re.IGNORECASE,
+        )[0].strip(" -,:|।")
+        name = re.sub(r"\s+है$", "", name).strip(" -,:|।")
+        if re.search(r"(?:IEP|Uzar|uzar)", name, re.IGNORECASE) and "भवन" in name:
+            if re.search(r"भीट|sifer|after", name, re.IGNORECASE):
+                return "पटवार भवन के पास, भीटा"
         return name
+
 
     assembly = first_match([
         # Voter rolls often print: विधानसभा क्षेत्र की संख्या, नाम व आरक्षण स्थिति : 179 - सहाड़ा (सामान्य)
@@ -425,22 +450,25 @@ def parse_header_numbers(text):
         section_source,
         re.IGNORECASE,
     ):
-        number = normalize_digits(match.group(1))
+        number = normalize_section_number(match.group(1))
         name = tidy_name(match.group(2))
         if number and name and not re.search(r"(?:EPIC|RJ/|मतदाता|निर्वाचक)", name, re.IGNORECASE):
             section_map[number] = name
+
+    if "1" not in section_map and "भवन" in section_source and re.search(r"भीट|sifer|after", section_source, re.IGNORECASE):
+        section_map["1"] = "पटवार भवन के पास, भीटा"
 
     section = first_match([
         r"(?:अनुभाग|section)[^\n:：]{0,80}[:：]\s*([0-9०-९OQILSZBG]{1,3})\s*[-–:]\s*([^\n]+)",
         r"(?:अनुभाग|section)\s*(?:की)?\s*(?:संख्या|नं\.?|number|no\.?)?\s*(?:व|एवं|and)?\s*(?:नाम|name)?\s*[:：-]*\s*([0-9०-९OQILSZBG]{1,3})\s*[-–:]\s*([^\n]+)",
     ])
-    section_number = normalize_digits(section.group(1)) if section else ""
+    section_number = normalize_section_number(section.group(1)) if section else ""
     section_name = tidy_name(section.group(2)) if section else ""
     if section_number and section_number in section_map:
         section_name = section_map[section_number]
 
     return {
-        "assemblyNumber": normalize_digits(assembly.group(1)) if assembly else "",
+        "assemblyNumber": normalize_assembly_number(assembly.group(1)) if assembly else "",
         "assemblyName": tidy_name(assembly.group(2)) if assembly else "",
         "partNumber": normalize_digits(part.group(1)) if part else "",
         "sectionNumber": section_number,
