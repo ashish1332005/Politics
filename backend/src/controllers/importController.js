@@ -580,7 +580,7 @@ const parseHeader = (text) => {
     .replace(/\s+/g, ' ')
     .trim();
   const assembly = normalized.match(
-    /(?:विधान\s*सभा\s*(?:क्षेत्र)?|assembly\s*(?:constituency)?|AC)\s*(?:की)?\s*(?:संख्या|नं\.?|number|no\.?)?\s*(?:व\s*नाम|and\s*name)?\s*[:：-]?\s*([0-9O]{1,3})\s*(?:[-–:]\s*)?(.+?)(?=\s*(?:अनुभाग|भाग\s*(?:संख्या|नं)|section|part\s*(?:number|no)|निर्वाचक)|$)/i,
+    /(?:विधान\s*सभा\s*(?:क्षेत्र)?|assembly\s*(?:constituency)?|AC)[^:：\n]{0,110}[:：-]?\s*([0-9O०-९]{1,3})\s*(?:[-–:]\s*)?(.+?)(?=\s*(?:अनुभाग|भाग\s*(?:संख्या|नं)|section|part\s*(?:number|no)|निर्वाचक)|$)/i,
   );
   const part = normalized.match(
     /(?:भाग|part)\s*(?:संख्या|नं\.?|number|no\.?)?\s*[:：-]*\s*([0-9O]{1,4})/i,
@@ -588,7 +588,7 @@ const parseHeader = (text) => {
   const section = normalized.match(
     /(?:अनुभाग|section)\s*(?:की)?\s*(?:संख्या|नं\.?|number|no\.?)?\s*(?:व|एवं|and)?\s*(?:नाम|name)?\s*[:：-]*\s*([0-9O]{1,3})?\s*(?:[-–:]\s*)?(.+?)(?=\s*(?:भाग\s*(?:संख्या|नं)|निर्वाचक|मतदाता|part\s*(?:number|no))|$)/i,
   );
-  const digits = (value) => value?.replace(/O/gi, '0');
+  const digits = (value) => value?.replace(/O/gi, '0').replace(/[०-९]/g, (digit) => '०१२३४५६७८९'.indexOf(digit));
   return {
     assemblyNumber: digits(assembly?.[1]),
     assemblyName: cleanValue(assembly?.[2]),
@@ -838,10 +838,13 @@ const parsePdfMembers = async (filePath, importFileName, onOcrProgress) => {
         sectionNames.set(String(member.sectionNumber), member.sectionName);
       }
     }
+    const headerSectionMap = header.sectionMap && typeof header.sectionMap === 'object' ? header.sectionMap : {};
+    const useHeaderSectionFallback = Object.keys(headerSectionMap).length <= 1;
     const ocrMembers = (ocr.voterRecords || []).map((record) => {
-      const sectionNumber = record.sectionNumber || header.sectionNumber;
+      const sectionNumber = record.sectionNumber || (useHeaderSectionFallback ? header.sectionNumber : '');
       const sectionKey = String(sectionNumber || '');
-      const sectionName = sectionNames.get(sectionKey) || record.sectionName || header.sectionName;
+      const mappedSectionName = sectionKey ? headerSectionMap[sectionKey] : '';
+      const sectionName = sectionNames.get(sectionKey) || mappedSectionName || record.sectionName || (useHeaderSectionFallback ? header.sectionName : '');
       if (sectionKey && sectionName && !sectionNames.has(sectionKey)) sectionNames.set(sectionKey, sectionName);
       return {
         ...header,

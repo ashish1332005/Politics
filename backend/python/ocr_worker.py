@@ -363,7 +363,7 @@ def read_header(page_path):
     if image is None:
         return ""
     height, width = image.shape[:2]
-    header = image[0:round(height * 0.12), 0:width]
+    header = image[0:round(height * 0.22), 0:width]
     gray = cv2.cvtColor(header, cv2.COLOR_BGR2GRAY)
     gray = cv2.resize(gray, None, fx=2.2, fy=2.2, interpolation=cv2.INTER_CUBIC)
     gray = cv2.createCLAHE(2.0, (8, 8)).apply(gray)
@@ -381,18 +381,71 @@ def read_header(page_path):
 
 def parse_header_numbers(text):
     value = text or ""
-    digit_map = str.maketrans("\u0966\u0967\u0968\u0969\u096a\u096b\u096c\u096d\u096e\u096f", "0123456789")
-    assembly = re.search(
-        r"\u0935\u093f\u0927\u093e\u0928\s*\u0938\u092d\u093e\s*\u0915\u094d\u0937\u0947\u0924\u094d\u0930\s*\u0915\u0940\s*\u0938\u0902\u0916\u094d\u092f\u093e\s*\u0935\s*\u0928\u093e\u092e\s*[:\uff1a]?\s*([0-9\u0966-\u096f]{2,3})\s*[-\u2013:]?\s*(.+?)(?=\s+\u092d\u093e\u0917\s*\u0938\u0902\u0916\u094d\u092f\u093e|\n|$)", value)
-    part = re.search(r"\u092d\u093e\u0917\s*\u0938\u0902\u0916\u094d\u092f\u093e\s*[:\uff1a]*\s*([0-9\u0966-\u096f]+)", value)
-    section = re.search(r"\u0905\u0928\u0941\u092d\u093e\u0917\s*\u0915\u0940\s*\u0938\u0902\u0916\u094d\u092f\u093e\s*\u0935\s*\u0928\u093e\u092e\s*[:\uff1a]?\s*([0-9\u0966-\u096f]+)\s*[-\u2013:]\s*([^\n]+)", value)
-    number = lambda match, index: clean(match.group(index)).translate(digit_map) if match else ""
+    normalized = re.sub(r"[ \t]+", " ", value.replace("\r", "\n"))
+    digit_map = str.maketrans("०१२३४५६७८९OQILSZBG", "012345678900112586")
+
+    def normalize_digits(raw):
+        return clean(raw or "").translate(digit_map)
+
+    def first_match(patterns):
+        for pattern in patterns:
+            match = re.search(pattern, normalized, re.IGNORECASE | re.MULTILINE)
+            if match:
+                return match
+        return None
+
+    def tidy_name(raw):
+        name = clean(raw or "").strip(" -,:|।")
+        name = re.sub(
+            r"\s*(?:भाग\s*(?:संख्या|नं)|अनुभाग|मतदान\s*केन्द्र|निर्वाचक|नामावली).*$",
+            "",
+            name,
+            flags=re.IGNORECASE,
+        ).strip(" -,:|।")
+        return name
+
+    assembly = first_match([
+        # Voter rolls often print: विधानसभा क्षेत्र की संख्या, नाम व आरक्षण स्थिति : 179 - सहाड़ा (सामान्य)
+        r"विधान\s*सभा\s*(?:क्षेत्र)?[^\n:：]{0,100}[:：]\s*([0-9०-९OQILSZBG]{1,3})\s*[-–:]\s*([^\n]+)",
+        r"(?:assembly\s*(?:constituency)?|AC)[^\n:：]{0,80}[:：]?\s*([0-9OQILSZBG]{1,3})\s*[-–:]\s*([^\n]+)",
+    ])
+    part = first_match([
+        r"(?:भाग|part)\s*(?:संख्या|नं\.?|number|no\.?)?\s*[:：-]*\s*([0-9०-९OQILSZBG]{1,4})",
+    ])
+
+    section_map = {}
+    section_block = re.search(
+        r"(?:अनुभागों?|sections?)[^\n:：]{0,100}[:：]\s*(.+?)(?=\n\s*(?:मतदान\s*केन्द्र|मतदान\s*केंद्र|भाग\s*संख्या|पिन\s*कोड|\d+\s*[).]\s*नामावली|$))",
+        normalized,
+        re.IGNORECASE | re.DOTALL,
+    )
+    section_source = section_block.group(1) if section_block else normalized
+    for match in re.finditer(
+        r"(?:^|\n)\s*([0-9०-९OQILSZBG]{1,3})\s*[-–.)]\s*([^\n]+)",
+        section_source,
+        re.IGNORECASE,
+    ):
+        number = normalize_digits(match.group(1))
+        name = tidy_name(match.group(2))
+        if number and name and not re.search(r"(?:EPIC|RJ/|मतदाता|निर्वाचक)", name, re.IGNORECASE):
+            section_map[number] = name
+
+    section = first_match([
+        r"(?:अनुभाग|section)[^\n:：]{0,80}[:：]\s*([0-9०-९OQILSZBG]{1,3})\s*[-–:]\s*([^\n]+)",
+        r"(?:अनुभाग|section)\s*(?:की)?\s*(?:संख्या|नं\.?|number|no\.?)?\s*(?:व|एवं|and)?\s*(?:नाम|name)?\s*[:：-]*\s*([0-9०-९OQILSZBG]{1,3})\s*[-–:]\s*([^\n]+)",
+    ])
+    section_number = normalize_digits(section.group(1)) if section else ""
+    section_name = tidy_name(section.group(2)) if section else ""
+    if section_number and section_number in section_map:
+        section_name = section_map[section_number]
+
     return {
-        "assemblyNumber": number(assembly, 1),
-        "assemblyName": clean(assembly.group(2)) if assembly else "",
-        "partNumber": number(part, 1),
-        "sectionNumber": number(section, 1),
-        "sectionName": clean(section.group(2)).strip(" -,:|") if section else "",
+        "assemblyNumber": normalize_digits(assembly.group(1)) if assembly else "",
+        "assemblyName": tidy_name(assembly.group(2)) if assembly else "",
+        "partNumber": normalize_digits(part.group(1)) if part else "",
+        "sectionNumber": section_number,
+        "sectionName": section_name,
+        "sectionMap": section_map,
     }
 
 def main():
@@ -426,11 +479,19 @@ def main():
     for index, result in enumerate(page_records):
         if summary_marker in clean(headers[index]):
             continue
-        page_header = {key: value for key, value in page_headers[index].items() if value}
+        raw_header = page_headers[index]
+        section_map = raw_header.get("sectionMap") or {}
+        page_header = {key: value for key, value in raw_header.items() if value and key != "sectionMap"}
+        if len(section_map) > 1:
+            page_header.pop("sectionNumber", None)
+            page_header.pop("sectionName", None)
         for record in result:
             merged = {**record, **page_header}
-            if record.get("sectionNumber") and not page_header.get("sectionNumber"):
+            if record.get("sectionNumber"):
                 merged["sectionNumber"] = record["sectionNumber"]
+            section_key = str(merged.get("sectionNumber") or "").strip()
+            if section_key and section_map.get(section_key):
+                merged["sectionName"] = section_map[section_key]
             records.append(merged)
     header_text = "\n".join(headers[:3])
     print(json.dumps({
