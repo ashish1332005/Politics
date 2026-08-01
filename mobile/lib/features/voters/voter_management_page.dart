@@ -540,6 +540,24 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
     );
     if (confirmed != true) return;
 
+    try {
+      final result = await api.deleteWithBody('/api/members/bulk', {'ids': ids});
+      final deletedCount = (result['deletedCount'] as num?)?.toInt() ?? ids.length;
+      await OfflineVoterCache.removeByIds(ids);
+      if (!mounted) return;
+      setState(() {
+        selectedIds.clear();
+        currentPage = 1;
+        refreshVoters();
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$deletedCount मतदाता हटा दिए गए')),
+      );
+      return;
+    } catch (_) {
+      // Fallback to sequential deletion if endpoint is unavailable
+    }
+
     final locallyRemovedIds = <String>[];
     final failedMessages = <String>[];
     var alreadyMissingCount = 0;

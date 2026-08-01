@@ -608,6 +608,45 @@ exports.removeAll = async (req, res, next) => {
   }
 };
 
+exports.bulkDelete = async (req, res, next) => {
+  try {
+    const rawIds = req.body?.ids || req.query?.ids;
+    const ids = Array.isArray(rawIds)
+      ? rawIds.map((id) => String(id).trim()).filter(Boolean)
+      : String(rawIds || '').split(',').map((id) => id.trim()).filter(Boolean);
+    if (!ids.length) {
+      return res.status(400).json({ message: 'No member IDs provided for deletion.' });
+    }
+    const filter = applyMemberScope(req.currentUser, { _id: { $in: ids } });
+    const membersToDelete = await Member.find(filter).select('_id booth ward');
+    const deleteIds = membersToDelete.map((m) => m._id);
+    if (!deleteIds.length) {
+      return res.json({ message: 'No matching members found to delete.', deletedCount: 0, deletedIds: [] });
+    }
+    const [deletedResult] = await Promise.all([
+      Member.deleteMany({ _id: { $in: deleteIds } }),
+      Family.updateMany(
+        { members: { $in: deleteIds } },
+        { $pull: { members: { $in: deleteIds } }, $set: { updatedBy: req.currentUser._id } },
+      ),
+    ]);
+    await Family.deleteMany({ members: { $size: 0 } });
+    await writeActivity({
+      req,
+      action: 'members.bulk_deleted',
+      module: 'members',
+      after: { ids: deleteIds, count: deletedResult.deletedCount },
+    });
+    res.json({
+      message: `${deletedResult.deletedCount} members deleted successfully.`,
+      deletedCount: deletedResult.deletedCount,
+      deletedIds: deleteIds,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 exports.birthdays = async (req, res, next) => {
   try {
     const now = new Date();

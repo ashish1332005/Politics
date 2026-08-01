@@ -1,4 +1,4 @@
-﻿const router = require('express').Router();
+const router = require('express').Router();
 const auth = require('../middleware/auth');
 const upload = require('../middleware/upload');
 const controller = require('../controllers/memberController');
@@ -12,6 +12,8 @@ router.get('/suggestions', controller.suggestions);
 router.get('/filter-options', controller.filterOptions);
 router.get('/location-groups', controller.locationGroups);
 router.post('/bulk-location-correction', allowRoles('admin'), controller.bulkLocationCorrection);
+router.delete('/bulk', controller.bulkDelete);
+router.post('/bulk-delete', controller.bulkDelete);
 router.delete('/', allowRoles('admin'), controller.removeAll);
 router.get('/:id', controller.get);
 router.post('/', upload.single('photo'), controller.create);
