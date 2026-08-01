@@ -106,12 +106,24 @@ class OfflineVoterCache {
     await save(byId.values.toList());
   }
 
+  static String _itemId(dynamic item) {
+    if (item is! Map) return '';
+    final raw = item['_id'] ?? item['id'];
+    if (raw == null) return '';
+    if (raw is String) return raw.trim();
+    if (raw is Map) {
+      final oid = raw['$oid'] ?? raw['oid'] ?? raw['_id'] ?? raw['id'];
+      if (oid != null) return oid.toString().trim();
+    }
+    return raw.toString().trim();
+  }
+
   static Future<void> removeByIds(Iterable<String> ids) async {
     final remove =
         ids.map((id) => id.trim()).where((id) => id.isNotEmpty).toSet();
     if (remove.isEmpty) return;
     final kept = (await read())
-        .where((item) => !remove.contains('${item['_id'] ?? ''}'))
+        .where((item) => !remove.contains(_itemId(item)))
         .toList();
     await save(kept);
   }

@@ -540,71 +540,47 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
     );
     if (confirmed != true) return;
 
+    var deletedCount = 0;
+    final locallyRemoved = <String>[];
+
     try {
-      final result = await api.deleteWithBody('/api/members/bulk', {'ids': ids});
-      final deletedCount = (result['deletedCount'] as num?)?.toInt() ?? ids.length;
-      await OfflineVoterCache.removeByIds(ids);
-      if (!mounted) return;
-      setState(() {
-        selectedIds.clear();
-        currentPage = 1;
-        refreshVoters();
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$deletedCount मतदाता हटा दिए गए')),
-      );
-      return;
+      final result = await api.post('/api/members/bulk-delete', {'ids': ids});
+      deletedCount = (result['deletedCount'] as num?)?.toInt() ?? ids.length;
+      locallyRemoved.addAll(ids);
     } catch (_) {
-      // Fallback to sequential deletion if endpoint is unavailable
-    }
-
-    final locallyRemovedIds = <String>[];
-    final failedMessages = <String>[];
-    var alreadyMissingCount = 0;
-
-    for (final id in ids) {
       try {
-        await api.delete('/api/members/$id');
-        locallyRemovedIds.add(id);
-      } catch (error) {
-        if (_isMemberAlreadyMissing(error)) {
-          alreadyMissingCount += 1;
-          locallyRemovedIds.add(id);
-        } else {
-          failedMessages.add('$id: $error');
+        final result = await api.deleteWithBody('/api/members/bulk', {'ids': ids});
+        deletedCount = (result['deletedCount'] as num?)?.toInt() ?? ids.length;
+        locallyRemoved.addAll(ids);
+      } catch (_) {
+        for (final id in ids) {
+          try {
+            await api.delete('/api/members/$id');
+            locallyRemoved.add(id);
+            deletedCount += 1;
+          } catch (error) {
+            if (_isMemberAlreadyMissing(error)) {
+              locallyRemoved.add(id);
+            }
+          }
         }
       }
     }
 
-    if (locallyRemovedIds.isNotEmpty) {
-      await OfflineVoterCache.removeByIds(locallyRemovedIds);
+    if (locallyRemoved.isNotEmpty) {
+      await OfflineVoterCache.removeByIds(locallyRemoved);
     }
 
     if (!mounted) return;
     setState(() {
-      selectedIds.removeAll(locallyRemovedIds);
+      selectedIds.clear();
       currentPage = 1;
       refreshVoters();
     });
 
-    final deletedCount = locallyRemovedIds.length - alreadyMissingCount;
-    if (failedMessages.isEmpty) {
-      selectedIds.clear();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(alreadyMissingCount > 0
-              ? '$deletedCount contacts deleted, $alreadyMissingCount already removed'
-              : '$deletedCount contacts deleted'),
-        ),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-              '${locallyRemovedIds.length} removed, ${failedMessages.length} delete failed. Please try again.'),
-        ),
-      );
-    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('$deletedCount मतदाता हटा दिए गए')),
+    );
   }
 
   Future<void> deleteAll() async {
