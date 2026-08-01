@@ -1,4 +1,4 @@
-﻿import json
+import json
 import gc
 import os
 import re
@@ -29,6 +29,7 @@ def report_card_progress(page_no, cell_no):
 
 def clean(text):
     return re.sub(r"\s+", " ", text or "").strip()
+
 
 def clean_person_name(value):
     value = re.sub(r"[^\u0900-\u097F\s.-]", " ", value or "")
@@ -63,6 +64,7 @@ def ocr_house(card):
         r"(?:गृह|मकान)\s*संख्या\s*[:：;\-]?\s*([^\n]+)",
     ))
 
+
 def field(text, pattern):
     match = re.search(pattern, text, re.MULTILINE | re.IGNORECASE)
     return clean(match.group(1)) if match else ""
@@ -96,7 +98,6 @@ def ocr_epic(card):
         card[0:round(height * 0.25), round(width * 0.18):width],
         card[0:round(height * 0.32), round(width * 0.10):width],
     ]
-    readings = []
     for region in regions:
         if region.size == 0:
             continue
@@ -301,83 +302,85 @@ def process_page(page_path, output_dir, page_no):
     fallback_limit = max(0, int(os.getenv("OCR_CARD_FALLBACKS_PER_PAGE", "3")))
     fallbacks_used = 0
     for cell_no, (x, y, card_w, card_h) in enumerate(boxes, start=1):
-            card = image[y:y + card_h, x:x + card_w]
-            if card.size == 0:
-                report_card_progress(page_no, cell_no)
-                continue
-            px, py, pw, ph = detect_photo_box(card)
-            pad_x = max(2, round(pw * 0.04))
-            pad_y = max(2, round(ph * 0.04))
-            px = max(0, px - pad_x)
-            py = max(0, py - pad_y)
-            pw = min(card_w - px, pw + pad_x * 2)
-            ph = min(card_h - py, ph + pad_y * 2)
-            photo = card[py:py + ph, px:px + pw]
-            photo_name = f"page-{page_no}-voter-{cell_no}.jpg"
-            photo_file = output_dir / photo_name
-            if photo.size:
-                cv2.imwrite(str(photo_file), photo, [cv2.IMWRITE_JPEG_QUALITY, 92])
-
-            card_words = [word for word in words if (
-                x <= word["left"] + word["width"] / 2 <= x + card_w
-                and y <= word["top"] + word["height"] / 2 <= y + card_h
-            )]
-            grouped = {}
-            for word in card_words:
-                grouped.setdefault(word["line"], []).append(word)
-            text = "\n".join(
-                " ".join(word["text"] for word in sorted(line, key=lambda item: item["left"]))
-                for line in sorted(grouped.values(), key=lambda line: (line[0]["top"], line[0]["left"]))
-            )
-            if not text and fallbacks_used < fallback_limit:
-                gray = cv2.cvtColor(card, cv2.COLOR_BGR2GRAY)
-                gray = cv2.resize(gray, None, fx=1.6, fy=1.6, interpolation=cv2.INTER_CUBIC)
-                text = pytesseract.image_to_string(gray, lang=language, config="--psm 6")
-                fallbacks_used += 1
-
-            epic_text = " ".join(word["text"] for word in epic_words if (
-                x <= word["left"] + word["width"] / 2 <= x + card_w
-                and y <= word["top"] + word["height"] / 2 <= y + round(card_h * 0.38)
-            ))
-            if not epic_from(epic_text):
-                epic_text = ocr_epic(card)
-            record = parse_card(text, epic_text, str(photo_file), page_no, cell_no)
-            if os.getenv("OCR_DEEP_RETRY", "false").lower() == "true" and (not record["name"] or not record["voterId"]):
-                gray = cv2.cvtColor(card, cv2.COLOR_BGR2GRAY)
-                gray = cv2.resize(gray, None, fx=1.8, fy=1.8, interpolation=cv2.INTER_CUBIC)
-                threshold = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
-                alternate_text = pytesseract.image_to_string(threshold, lang=language, config="--psm 11")
-                alternate = parse_card(alternate_text, "", str(photo_file), page_no, cell_no, record["houseNumber"])
-                if alternate["confidence"] > record["confidence"]:
-                    record = alternate
-            if record["name"] or record["voterId"] or record["guardianName"] or record["houseNumber"] or record["age"]:
-                record["needsReview"] = record["confidence"] < int(os.getenv("OCR_MIN_CONFIDENCE", "45")) or not record["name"] or not record["voterId"]
-                records.append(record)
+        card = image[y:y + card_h, x:x + card_w]
+        if card.size == 0:
             report_card_progress(page_no, cell_no)
+            continue
+        px, py, pw, ph = detect_photo_box(card)
+        pad_x = max(2, round(pw * 0.04))
+        pad_y = max(2, round(ph * 0.04))
+        px = max(0, px - pad_x)
+        py = max(0, py - pad_y)
+        pw = min(card_w - px, pw + pad_x * 2)
+        ph = min(card_h - py, ph + pad_y * 2)
+        photo = card[py:py + ph, px:px + pw]
+        photo_name = f"page-{page_no}-voter-{cell_no}.jpg"
+        photo_file = output_dir / photo_name
+        if photo.size:
+            cv2.imwrite(str(photo_file), photo, [cv2.IMWRITE_JPEG_QUALITY, 92])
+
+        card_words = [word for word in words if (
+            x <= word["left"] + word["width"] / 2 <= x + card_w
+            and y <= word["top"] + word["height"] / 2 <= y + card_h
+        )]
+        grouped = {}
+        for word in card_words:
+            grouped.setdefault(word["line"], []).append(word)
+        text = "\n".join(
+            " ".join(word["text"] for word in sorted(line, key=lambda item: item["left"]))
+            for line in sorted(grouped.values(), key=lambda line: (line[0]["top"], line[0]["left"]))
+        )
+        if not text and fallbacks_used < fallback_limit:
+            gray = cv2.cvtColor(card, cv2.COLOR_BGR2GRAY)
+            gray = cv2.resize(gray, None, fx=1.6, fy=1.6, interpolation=cv2.INTER_CUBIC)
+            text = pytesseract.image_to_string(gray, lang=language, config="--psm 6")
+            fallbacks_used += 1
+
+        epic_text = " ".join(word["text"] for word in epic_words if (
+            x <= word["left"] + word["width"] / 2 <= x + card_w
+            and y <= word["top"] + word["height"] / 2 <= y + round(card_h * 0.38)
+        ))
+        if not epic_from(epic_text):
+            epic_text = ocr_epic(card)
+        record = parse_card(text, epic_text, str(photo_file), page_no, cell_no)
+        if os.getenv("OCR_DEEP_RETRY", "false").lower() == "true" and (not record["name"] or not record["voterId"]):
+            gray = cv2.cvtColor(card, cv2.COLOR_BGR2GRAY)
+            gray = cv2.resize(gray, None, fx=1.8, fy=1.8, interpolation=cv2.INTER_CUBIC)
+            threshold = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+            alternate_text = pytesseract.image_to_string(threshold, lang=language, config="--psm 11")
+            alternate = parse_card(alternate_text, "", str(photo_file), page_no, cell_no, record["houseNumber"])
+            if alternate["confidence"] > record["confidence"]:
+                record = alternate
+        if record["name"] or record["voterId"] or record["guardianName"] or record["houseNumber"] or record["age"]:
+            record["needsReview"] = record["confidence"] < int(os.getenv("OCR_MIN_CONFIDENCE", "45")) or not record["name"] or not record["voterId"]
+            records.append(record)
+        report_card_progress(page_no, cell_no)
     print(json.dumps({"type": "progress", "page": page_no}), file=sys.stderr, flush=True)
     return records
 
 
-def read_header(page_path):
+def read_header(page_path, is_voter_page=True):
     image = cv2.imread(str(page_path))
     if image is None:
         return ""
     height, width = image.shape[:2]
-    header = image[0:round(height * 0.42), 0:width]
+    crop_ratio = 0.12 if is_voter_page else 0.45
+    header = image[0:round(height * crop_ratio), 0:width]
     gray = cv2.cvtColor(header, cv2.COLOR_BGR2GRAY)
     gray = cv2.resize(gray, None, fx=2.2, fy=2.2, interpolation=cv2.INTER_CUBIC)
     gray = cv2.createCLAHE(2.0, (8, 8)).apply(gray)
-    english = pytesseract.image_to_string(
-        gray,
-        lang="eng",
-        config="--psm 6",
-    )
     hindi = pytesseract.image_to_string(
         gray,
         lang=os.getenv("OCR_LANGUAGES", "hin+eng"),
         config="--psm 6",
     )
-    return english + "\n" + hindi
+    english = pytesseract.image_to_string(
+        gray,
+        lang="eng",
+        config="--psm 6",
+    )
+    return hindi + "\n" + english
+
 
 def parse_header_numbers(text):
     value = text or ""
@@ -408,39 +411,42 @@ def parse_header_numbers(text):
                 return match
         return None
 
+    def has_devanagari(val):
+        return len(re.findall(r"[\u0900-\u097F]", val or ""))
+
     def tidy_name(raw):
-        name = clean(raw or "").strip(" -,:|।")
+        name = clean(raw or "").strip(" -,:;|\t")
         name = re.sub(
-            r"\s*(?:भाग\s*(?:संख्या|नं)|अनुभाग|मतदान\s*केन्द्र|निर्वाचक|नामावली).*$",
+            r"\s*(?:भाग\s*(?:संख्या|नं)|अनुभाग|मतदान\s*केन्द्र|निर्वाचक|मतदाता|नामावली|मुख्य|ग्राम|शहर|वार्ड).*$",
             "",
             name,
             flags=re.IGNORECASE,
         )
         name = re.split(
-            r"\s*(?:मुख्य\s*(?:शहर|ग्राम)|वार्ड|पोस्ट\s*ऑफिस|POST\s*OFFICE|BHEETA\s*BO|पुलिस\s*थाना|तहसील|जिला|पिन\s*कोड)",
+            r"\s*(?:मुख्य\s*(?:शहर|ग्राम)|वार्ड|पोस्ट\s*ऑफिस|POST\s*OFFICE|पुलिस\s*थाना|तहसील|जिला|पिन\s*कोड)",
             name,
             maxsplit=1,
             flags=re.IGNORECASE,
-        )[0].strip(" -,:|।")
-        name = re.sub(r"\s+है$", "", name).strip(" -,:|।")
-        if re.search(r"(?:IEP|Uzar|uzar)", name, re.IGNORECASE) and "भवन" in name:
-            if re.search(r"भीट|sifer|after", name, re.IGNORECASE):
-                return "पटवार भवन के पास, भीटा"
+        )[0].strip(" -,:;|\t")
+        name = re.sub(
+            r"\b(?:ore|hier|sifer|after|aftet|uzar|zadt|merit|oiler|freran|sffzr|IEP)\b.*",
+            "",
+            name,
+            flags=re.IGNORECASE,
+        ).strip(" -,:;|\t")
         return name
 
-
     assembly = first_match([
-        # Voter rolls often print: विधानसभा क्षेत्र की संख्या, नाम व आरक्षण स्थिति : 179 - सहाड़ा (सामान्य)
-        r"विधान\s*सभा\s*(?:क्षेत्र)?[^\n:：]{0,100}[:：]\s*([0-9०-९OQILSZBG]{1,3})\s*[-–:]\s*([^\n]+)",
-        r"(?:assembly\s*(?:constituency)?|AC)[^\n:：]{0,80}[:：]?\s*([0-9OQILSZBG]{1,3})\s*[-–:]\s*([^\n]+)",
+        r"(?:विधान\s*सभा|assembly|constituency|AC|furs|Seat)[^\n:：;]{0,100}[:：;]\s*([0-9०-९OQILSZBG]{1,3})\s*[-–:]\s*([^\n]+)",
     ])
     part = first_match([
-        r"(?:भाग|part)\s*(?:संख्या|नं\.?|number|no\.?)?\s*[:：-]*\s*([0-9०-९OQILSZBG]{1,4})",
+        r"(?:भाग|part)\s*(?:संख्या|नं\.?|number|no\.?)?\s*[:：;\-]*\s*([0-9०-९OQILSZBG]{1,4})",
+        r"(?:AMT|sear|den|deat|our)[^\n:：;]{0,50}[:：;]\s*[:：;]?\s*([0-9०-९OQILSZBG]{1,4})",
     ])
 
     section_map = {}
     section_block = re.search(
-        r"(?:अनुभागों?|sections?)[^\n:：]{0,100}[:：]\s*(.+?)(?=\n\s*(?:मतदान\s*केन्द्र|मतदान\s*केंद्र|भाग\s*संख्या|पिन\s*कोड|\d+\s*[).]\s*नामावली|$))",
+        r"(?:अनुभागों?|sections?)[^\n:：;]{0,100}[:：;]\s*(.+?)(?=\n\s*(?:मतदान\s*केन्द्र|मतदान\s*केंद्र|भाग\s*संख्या|पिन\s*कोड|\d+\s*[).]\s*नामावली|$))",
         normalized,
         re.IGNORECASE | re.DOTALL,
     )
@@ -452,20 +458,44 @@ def parse_header_numbers(text):
     ):
         number = normalize_section_number(match.group(1))
         name = tidy_name(match.group(2))
-        if number and name and not re.search(r"(?:EPIC|RJ/|मतदाता|निर्वाचक)", name, re.IGNORECASE):
+        if number and name and not re.search(r"(?:EPIC|RJ/|मतदाता|निर्वाचक)", name, re.IGNORECASE) and has_devanagari(name) >= 2:
             section_map[number] = name
 
-    if "1" not in section_map and "भवन" in section_source and re.search(r"भीट|sifer|after", section_source, re.IGNORECASE):
-        section_map["1"] = "पटवार भवन के पास, भीटा"
+    section_matches = list(re.finditer(
+        r"(?:अनुभाग|section|SUT|UM|UT|SU|अिुभाग|अनुमाग|(?:^|\n)\s*अनुभाग\s*की\s*संख्या\s*व\s*नाम)[^\n:：;]{0,100}[:：;]\s*([0-9०-९OQILSZBG]{1,3})\s*[-–:]\s*([^\n]+)",
+        normalized,
+        re.IGNORECASE,
+    ))
+    if not section_matches:
+        raw_candidates = list(re.finditer(
+            r"(?:^|\n)[^\n]*?[:：;]\s*([0-9०-९OQILSZBG]{1,3})\s*[-–:]\s*([^\n]+)",
+            normalized,
+            re.IGNORECASE,
+        ))
+        section_matches = [
+            m for m in raw_candidates
+            if not re.search(r"(?:विधान\s*सभा|assembly|constituency|AC|furs|Seat)", m.group(0), re.IGNORECASE)
+        ]
 
-    section = first_match([
-        r"(?:अनुभाग|section)[^\n:：]{0,80}[:：]\s*([0-9०-९OQILSZBG]{1,3})\s*[-–:]\s*([^\n]+)",
-        r"(?:अनुभाग|section)\s*(?:की)?\s*(?:संख्या|नं\.?|number|no\.?)?\s*(?:व|एवं|and)?\s*(?:नाम|name)?\s*[:：-]*\s*([0-9०-९OQILSZBG]{1,3})\s*[-–:]\s*([^\n]+)",
-    ])
-    section_number = normalize_section_number(section.group(1)) if section else ""
-    section_name = tidy_name(section.group(2)) if section else ""
+    section_number = ""
+    section_name = ""
+    for m in section_matches:
+        cand_num = normalize_section_number(m.group(1))
+        cand_name = tidy_name(m.group(2))
+        if cand_num and cand_name:
+            if not section_number:
+                section_number = cand_num
+            if has_devanagari(cand_name) >= 2:
+                section_number = cand_num
+                section_name = cand_name
+                break
+            elif not section_name:
+                section_name = cand_name
+
     if section_number and section_number in section_map:
         section_name = section_map[section_number]
+    elif section_number and section_name and section_number not in section_map:
+        section_map[section_number] = section_name
 
     return {
         "assemblyNumber": normalize_assembly_number(assembly.group(1)) if assembly else "",
@@ -475,6 +505,7 @@ def parse_header_numbers(text):
         "sectionName": section_name,
         "sectionMap": section_map,
     }
+
 
 def main():
     payload = json.loads(sys.stdin.read())
@@ -486,60 +517,57 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
     if os.getenv("TESSERACT_PATH"):
         pytesseract.pytesseract.tesseract_cmd = os.getenv("TESSERACT_PATH")
+
     def process_page_bundle(item):
         page_no, page = item
-        # Header OCR used to run sequentially for every page before any voter
-        # card work began. Keep the header associated with its page, but run it
-        # inside the same bounded worker pool so useful card progress starts
-        # early and low-CPU deployments do not spend minutes at 0/26.
-        header = read_header(page)
+        header = read_header(page, is_voter_page=True)
         return header, process_page(page, output_dir, page_no)
 
     page_bundles = []
     for item in zip(page_numbers, pages):
         page_bundles.append(process_page_bundle(item))
         gc.collect()
+
     headers = [bundle[0] for bundle in page_bundles]
     page_records = [bundle[1] for bundle in page_bundles]
     page_headers = [parse_header_numbers(header) for header in headers]
+
+    doc_section_map = {}
+    for ph in page_headers:
+        if ph.get("sectionMap"):
+            doc_section_map.update(ph["sectionMap"])
+
     records = []
-    summary_marker = "\u0928\u093e\u092e\u093e\u0935\u0932\u0940 \u0915\u093e \u092a\u094d\u0930\u0915\u093e\u0930"
+    summary_marker = "नामावली का प्रकार"
     for index, result in enumerate(page_records):
         if summary_marker in clean(headers[index]):
             continue
         raw_header = page_headers[index]
-        section_map = raw_header.get("sectionMap") or {}
+        page_sec_map = {**doc_section_map, **(raw_header.get("sectionMap") or {})}
         page_header = {key: value for key, value in raw_header.items() if value and key != "sectionMap"}
-        if len(section_map) > 1:
-            page_header.pop("sectionNumber", None)
-            page_header.pop("sectionName", None)
+
         for record in result:
             merged = {**record, **page_header}
-            if record.get("sectionNumber"):
-                merged["sectionNumber"] = record["sectionNumber"]
-            section_key = str(merged.get("sectionNumber") or "").strip()
-            if section_key and section_map.get(section_key):
-                merged["sectionName"] = section_map[section_key]
+            sec_num = str(record.get("sectionNumber") or merged.get("sectionNumber") or "").strip()
+            if sec_num:
+                merged["sectionNumber"] = sec_num
+                if page_sec_map.get(sec_num):
+                    merged["sectionName"] = page_sec_map[sec_num]
+            elif not merged.get("sectionName") and len(page_sec_map) == 1:
+                merged["sectionNumber"] = list(page_sec_map.keys())[0]
+                merged["sectionName"] = list(page_sec_map.values())[0]
             records.append(merged)
+
     header_text = "\n".join(headers[:3])
+    doc_header = parse_header_numbers(header_text)
+    doc_header["sectionMap"] = doc_section_map
+
     print(json.dumps({
         "records": records,
         "headerText": header_text,
-        "header": parse_header_numbers(header_text),
+        "header": doc_header,
     }, ensure_ascii=False))
 
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
-
-
-
-
-
-

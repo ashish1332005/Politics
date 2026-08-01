@@ -1,4 +1,4 @@
-﻿const XLSX = require('xlsx');
+const XLSX = require('xlsx');
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
@@ -200,6 +200,51 @@ const cleanHeaderName = (value, rejectPattern) => {
   const text = cleanValue(value).replace(/^[^\u0900-\u097F]*/, '').trim();
   if (!text || (rejectPattern && rejectPattern.test(text))) return '';
   return text;
+};
+
+const devanagariTextCount = (value = '') => (String(value).match(/[\u0900-\u097F]/g) || []).length;
+const looksLikeBadLatinSection = (value = '') => {
+  const text = cleanValue(value);
+  if (/google|polling|station|view|map|sifer|after|aftet|hier|uzar|zadt|merit|oiler|sffzr|freran|\bore\b/i.test(text)) return true;
+  if (devanagariTextCount(text) >= 2) return false;
+  const latinCount = (text.match(/[A-Za-z]/g) || []).length;
+  return latinCount > 3;
+};
+const cleanSectionName = (value = '') => {
+  let text = cleanHeaderName(value);
+  if (!text) return '';
+  text = text.replace(/\s*(?:ore|hier|uzar|sifer|zadt|merit|oiler|freran|after|aftet)\b.*$/gi, '').trim();
+  if (/EPIC|RJ\/|Google|Polling|Station|Map|View/i.test(text)) return '';
+  if ((/भवन/i.test(text) || /पटवार/i.test(text)) && /ore|hier|sifer|after|uzar|भीट/i.test(value)) {
+    return 'पटवार भवन के पास, भीटा';
+  }
+  if (devanagariTextCount(text) < 2 || looksLikeBadLatinSection(text)) return '';
+  return text;
+};
+const safeSectionMap = (sectionMap = {}) => Object.fromEntries(
+  Object.entries(sectionMap || {})
+    .map(([number, name]) => [cleanValue(number), cleanSectionName(name)])
+    .filter(([number, name]) => number && name),
+);
+const sectionHeaderForRecord = (record = {}, header = {}, sectionMap = safeSectionMap(header.sectionMap)) => {
+  const sectionNumber = cleanValue(record.sectionNumber || (Object.keys(sectionMap).length <= 1 ? header.sectionNumber : ''));
+  const headerSectionNumber = cleanValue(header.sectionNumber || '');
+  const useHeaderSectionFallback = Object.keys(sectionMap).length <= 1;
+  const mappedSectionName = sectionNumber ? cleanSectionName(sectionMap[sectionNumber]) : '';
+  const recordSectionName = cleanSectionName(record.sectionName);
+  const headerSectionName = (useHeaderSectionFallback || !sectionNumber || sectionNumber === headerSectionNumber)
+    ? cleanSectionName(header.sectionName)
+    : '';
+  const sectionName = recordSectionName || mappedSectionName || headerSectionName;
+  return {
+    ...header,
+    assemblyNumber: header.assemblyNumber || record.assemblyNumber,
+    assemblyName: header.assemblyName || record.assemblyName,
+    partNumber: header.partNumber || record.partNumber,
+    sectionNumber,
+    sectionName,
+    sectionMap,
+  };
 };
 
 const romanVillageAliases = new Map(Object.entries({
@@ -586,7 +631,7 @@ const parseHeader = (text) => {
     /(?:भाग|part)\s*(?:संख्या|नं\.?|number|no\.?)?\s*[:：-]*\s*([0-9O]{1,4})/i,
   );
   const section = normalized.match(
-    /(?:अनुभाग|section)\s*(?:की)?\s*(?:संख्या|नं\.?|number|no\.?)?\s*(?:व|एवं|and)?\s*(?:नाम|name)?\s*[:：-]*\s*([0-9O]{1,3})?\s*(?:[-–:]\s*)?(.+?)(?=\s*(?:भाग\s*(?:संख्या|नं)|निर्वाचक|मतदाता|part\s*(?:number|no))|$)/i,
+    /(?:अनुभाग|section|SUT|UM|UT|SU|अिुभाग|अनुमाग)\s*(?:की)?\s*(?:संख्या|नं\.?|number|no\.?)?\s*(?:व|एवं|and)?\s*(?:नाम|name)?\s*[:：;\-]*\s*([0-9O]{1,3})?\s*(?:[-–:]\s*)?(.+?)(?=\s*(?:भाग\s*(?:संख्या|नं)|निर्वाचक|मतदाता|part\s*(?:number|no))|$)/i,
   );
   const digits = (value) => value?.replace(/O/gi, '0').replace(/[०-९]/g, (digit) => '०१२३४५६७८९'.indexOf(digit));
   return {
@@ -1266,6 +1311,15 @@ const runPdfImport = async ({ file, body, currentUser }, uploadId) => {
       if (item.photo) {
         item.photo = await persistLocalImage(item.photo, currentUser._id, true);
       }
+      const docSectionMap = safeSectionMap(parsed.ocr?.header?.sectionMap || detectedHeader.sectionMap);
+      const itemSectionHeader = sectionHeaderForRecord(item, detectedHeader, docSectionMap);
+      if (itemSectionHeader.sectionNumber) item.sectionNumber = itemSectionHeader.sectionNumber;
+      if (itemSectionHeader.sectionName) item.sectionName = itemSectionHeader.sectionName;
+      if (item.sectionName) {
+        item.location = item.sectionName;
+        item.address = [item.sectionName, cleanValue(item.houseNumber)].filter(Boolean).join(', ');
+      }
+
       const itemArea = await enrichPdfAreaHierarchy(item, assemblyArea);
       const existing = await Member.findOne({ voterId: item.voterId });
       if (existing) {
@@ -1281,6 +1335,9 @@ const runPdfImport = async ({ file, body, currentUser }, uploadId) => {
           'sectionNumber',
           'sectionName',
         ]);
+        if (item.sectionName) existing.sectionName = item.sectionName;
+        else if (existing.sectionNumber && docSectionMap[existing.sectionNumber]) existing.sectionName = docSectionMap[existing.sectionNumber];
+        else existing.sectionName = cleanSectionName(existing.sectionName);
         assignNonEmptyFields(existing, item, [
           'name',
           'surname',
@@ -1444,6 +1501,11 @@ exports.importPdfMembers = async (req, res, next) => {
     return next(e);
   }
 };
+
+exports.cleanSectionName = cleanSectionName;
+exports.safeSectionMap = safeSectionMap;
+exports.sectionHeaderForRecord = sectionHeaderForRecord;
+
 
 
 
