@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/api_client.dart';
 import '../../core/contact_actions.dart';
+import '../../core/offline_voter_cache.dart';
 import '../../core/picked_file_source.dart';
 import '../../core/print_helper.dart';
 import '../../core/theme.dart';
@@ -93,8 +94,9 @@ class _VoterEditPageState extends State<VoterEditPage> {
         'verificationStatus': verificationStatus,
       };
       if (body['age'] == '') body['age'] = null;
+      late final dynamic updated;
       if (selectedPhoto != null) {
-        await api.uploadFile(
+        updated = await api.uploadFile(
           '/api/members/${widget.voter['_id']}',
           method: 'PUT',
           filename: selectedPhoto!.name,
@@ -105,8 +107,12 @@ class _VoterEditPageState extends State<VoterEditPage> {
               (key, value) => MapEntry(key, value == null ? '' : '$value')),
         );
       } else {
-        await api.put('/api/members/${widget.voter['_id']}', body);
+        updated = await api.put('/api/members/${widget.voter['_id']}', body);
       }
+      if (updated is Map<String, dynamic>) {
+        await OfflineVoterCache.merge([updated]);
+      }
+      api.notifyDataChanged();
       widget.onSaved();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -138,7 +144,10 @@ class _VoterEditPageState extends State<VoterEditPage> {
       ),
     );
     if (yes != true) return;
-    await api.delete('/api/members/${widget.voter['_id']}');
+    final voterId = '${widget.voter['_id']}';
+    await api.delete('/api/members/$voterId');
+    await OfflineVoterCache.removeByIds([voterId]);
+    api.notifyDataChanged();
     widget.onSaved();
     if (mounted) Navigator.pop(context);
   }

@@ -545,13 +545,29 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
 
     try {
       final result = await api.post('/api/members/bulk-delete', {'ids': ids});
-      deletedCount = (result['deletedCount'] as num?)?.toInt() ?? ids.length;
-      locallyRemoved.addAll(ids);
+      deletedCount = (result['deletedCount'] as num?)?.toInt() ?? 0;
+      final serverDeletedIds =
+          (result['deletedIds'] as List?)?.map((e) => e.toString()).toList() ??
+              [];
+      if (serverDeletedIds.isNotEmpty) {
+        locallyRemoved.addAll(serverDeletedIds);
+      } else if (deletedCount > 0) {
+        locallyRemoved.addAll(ids);
+      }
     } catch (_) {
       try {
-        final result = await api.deleteWithBody('/api/members/bulk', {'ids': ids});
-        deletedCount = (result['deletedCount'] as num?)?.toInt() ?? ids.length;
-        locallyRemoved.addAll(ids);
+        final result =
+            await api.deleteWithBody('/api/members/bulk', {'ids': ids});
+        deletedCount = (result['deletedCount'] as num?)?.toInt() ?? 0;
+        final serverDeletedIds = (result['deletedIds'] as List?)
+                ?.map((e) => e.toString())
+                .toList() ??
+            [];
+        if (serverDeletedIds.isNotEmpty) {
+          locallyRemoved.addAll(serverDeletedIds);
+        } else if (deletedCount > 0) {
+          locallyRemoved.addAll(ids);
+        }
       } catch (_) {
         for (final id in ids) {
           try {
@@ -570,6 +586,8 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
     if (locallyRemoved.isNotEmpty) {
       await OfflineVoterCache.removeByIds(locallyRemoved);
     }
+
+    api.notifyDataChanged();
 
     if (!mounted) return;
     setState(() {
@@ -614,8 +632,14 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
         '/api/members',
         {'confirmation': 'DELETE ALL VOTERS'},
       );
+      await OfflineVoterCache.clear();
+      api.notifyDataChanged();
       if (!mounted) return;
-      setState(refreshVoters);
+      setState(() {
+        selectedIds.clear();
+        currentPage = 1;
+        refreshVoters();
+      });
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(
             '${result['deletedMembers'] ?? 0} मतदाता और ${result['deletedFamilies'] ?? 0} परिवार हटा दिए गए'),

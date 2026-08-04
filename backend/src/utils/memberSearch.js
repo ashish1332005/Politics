@@ -146,15 +146,50 @@ const searchTokens = (query) => {
   });
 };
 
+const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const SEARCH_FALLBACK_FIELDS = [
+  'name',
+  'surname',
+  'guardianName',
+  'mobile',
+  'altMobile',
+  'voterId',
+  'voterSerial',
+  'houseNumber',
+  'address',
+  'location',
+  'village',
+  'gramPanchayat',
+  'sectionName',
+  'assemblyName',
+  'partNumber',
+];
+
+const fallbackRegexConditions = (token) => {
+  const escaped = escapeRegex(token);
+  const conditions = SEARCH_FALLBACK_FIELDS.map((field) => ({ [field]: new RegExp(escaped, 'i') }));
+  const digits = compactDigits(token);
+  if (digits) {
+    conditions.push(
+      { mobile: new RegExp(escapeRegex(digits), 'i') },
+      { altMobile: new RegExp(escapeRegex(digits), 'i') },
+      { houseNumber: new RegExp(escapeRegex(digits), 'i') },
+      { voterSerial: new RegExp(escapeRegex(digits), 'i') },
+    );
+  }
+  const epic = canonicalEpic(token);
+  if (epic) conditions.push({ voterId: new RegExp(escapeRegex(epic), 'i') });
+  return conditions;
+};
+
 const buildSearchConditions = (query) => searchTokens(query)
   .map((token) => {
     const loose = looseHindiToken(token);
-    if (loose && loose !== token && /[\u0900-\u097f]/.test(token)) {
-      return { $or: [{ searchKeys: token }, { searchKeys: '~' + loose }] };
-    }
-    return { searchKeys: token };
+    const searchKeyConditions = loose && loose !== token && /[\u0900-\u097f]/.test(token)
+      ? [{ searchKeys: token }, { searchKeys: '~' + loose }]
+      : [{ searchKeys: token }];
+    return { $or: [...searchKeyConditions, ...fallbackRegexConditions(token)] };
   });
-
 const searchExactCandidates = (query) => {
   const values = new Set();
   const normalized = normalizeSearchValue(query);
