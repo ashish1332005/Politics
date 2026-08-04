@@ -1,4 +1,4 @@
-﻿const mongoose = require('mongoose');
+const mongoose = require('mongoose');
 
 const MessageSenderSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
@@ -6,16 +6,16 @@ const MessageSenderSchema = new mongoose.Schema({
   phoneNumberId: {
     type: String,
     trim: true,
-    default: '',
+    default: undefined,
     required() { return this.provider === 'whatsapp_cloud'; },
   },
-  businessAccountId: { type: String, trim: true, default: '' },
+  businessAccountId: { type: String, trim: true, default: undefined },
   provider: {
     type: String,
     enum: ['whatsapp_web', 'whatsapp_cloud'],
     default: 'whatsapp_web',
   },
-  sessionId: { type: String, trim: true, default: '' },
+  sessionId: { type: String, trim: true, default: undefined },
   connectionStatus: {
     type: String,
     enum: ['disconnected', 'starting', 'qr_ready', 'authenticated', 'connected', 'failed'],
@@ -31,7 +31,20 @@ const MessageSenderSchema = new mongoose.Schema({
   updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 }, { timestamps: true });
 
-MessageSenderSchema.index({ phoneNumberId: 1 }, { unique: true, sparse: true });
-MessageSenderSchema.index({ sessionId: 1 }, { unique: true, sparse: true });
+MessageSenderSchema.pre('validate', function normalizeBlankUniqueFields(next) {
+  for (const key of ['phoneNumberId', 'businessAccountId', 'sessionId']) {
+    if (typeof this[key] === 'string' && this[key].trim() === '') this[key] = undefined;
+  }
+  next();
+});
+
+MessageSenderSchema.index(
+  { phoneNumberId: 1 },
+  { unique: true, partialFilterExpression: { phoneNumberId: { $type: 'string', $ne: '' } } },
+);
+MessageSenderSchema.index(
+  { sessionId: 1 },
+  { unique: true, partialFilterExpression: { sessionId: { $type: 'string', $ne: '' } } },
+);
 
 module.exports = mongoose.model('MessageSender', MessageSenderSchema);

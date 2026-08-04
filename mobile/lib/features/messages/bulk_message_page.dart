@@ -196,10 +196,22 @@ class _BulkMessagePageState extends State<BulkMessagePage> {
               child: const Text('रद्द करें')),
           FilledButton.icon(
             onPressed: () async {
+              final cleanName = name.text.trim();
+              final cleanNumber = number.text.trim();
+              if (cleanName.isEmpty || cleanNumber.isEmpty) {
+                if (mounted) {
+                  ScaffoldMessenger.of(this.context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Sender name aur WhatsApp number required hain.'),
+                    ),
+                  );
+                }
+                return;
+              }
               try {
                 final result = await api.post('/api/messages/senders', {
-                  'name': name.text.trim(),
-                  'displayNumber': number.text.trim(),
+                  'name': cleanName,
+                  'displayNumber': cleanNumber,
                   'provider': 'whatsapp_web',
                   'isDefault': true,
                 });

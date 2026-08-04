@@ -4,6 +4,7 @@ WORKDIR /app
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
+    chromium \
     imagemagick \
     poppler-utils \
     python3 \
@@ -39,6 +40,7 @@ ENV PDFINFO_PATH=pdfinfo
 ENV PDFIMAGES_PATH=pdfimages
 ENV TESSERACT_PATH=tesseract
 ENV IMAGEMAGICK_PATH=magick
+ENV CHROME_PATH=/usr/bin/chromium
 ENV OCR_LANGUAGES=hin+eng
 ENV OCR_DPI=180
 ENV OCR_PAGE_CONCURRENCY=1

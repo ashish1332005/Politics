@@ -95,28 +95,53 @@ exports.senders = async (req, res, next) => {
 exports.saveSender = async (req, res, next) => {
   try {
     const provider = req.body.provider === 'whatsapp_cloud' ? 'whatsapp_cloud' : 'whatsapp_web';
+    const phoneNumberId = String(req.body.phoneNumberId || '').trim();
+    const businessAccountId = String(req.body.businessAccountId || '').trim();
     const data = {
       name: String(req.body.name || '').trim(),
       displayNumber: String(req.body.displayNumber || '').trim(),
-      phoneNumberId: String(req.body.phoneNumberId || '').trim(),
-      businessAccountId: String(req.body.businessAccountId || '').trim(),
       provider,
       isDefault: req.body.isDefault === true,
       active: true,
       updatedBy: req.currentUser._id,
     };
+    if (provider === 'whatsapp_cloud') {
+      data.phoneNumberId = phoneNumberId;
+      if (businessAccountId) data.businessAccountId = businessAccountId;
+    }
     if (!data.name || !data.displayNumber || (provider === 'whatsapp_cloud' && !data.phoneNumberId)) {
       return res.status(400).json({ message: provider === 'whatsapp_web'
-        ? 'Sender name और WhatsApp number required हैं।'
-        : 'Sender name, WhatsApp number और Phone Number ID required हैं।' });
+        ? 'Sender name aur WhatsApp number required hain.'
+        : 'Sender name, WhatsApp number aur Phone Number ID required hain.' });
     }
     if (data.isDefault) await MessageSender.updateMany({}, { $set: { isDefault: false } });
+
+    const unset = provider === 'whatsapp_web'
+      ? { phoneNumberId: '', businessAccountId: '' }
+      : (!businessAccountId ? { businessAccountId: '' } : {});
+    const update = Object.keys(unset).length ? { $set: data, $unset: unset } : { $set: data };
     const sender = req.body.id
-      ? await MessageSender.findByIdAndUpdate(req.body.id, data, { new: true, runValidators: true })
+      ? await MessageSender.findByIdAndUpdate(req.body.id, update, { new: true, runValidators: true })
       : await MessageSender.create({ ...data, createdBy: req.currentUser._id });
-    if (provider === 'whatsapp_web') connectSender(sender).catch(() => {});
+    if (!sender) return res.status(404).json({ message: 'WhatsApp sender nahi mila.' });
+    if (provider === 'whatsapp_web') {
+      connectSender(sender).catch((error) => {
+        MessageSender.findByIdAndUpdate(sender._id, {
+          $set: {
+            connectionStatus: 'failed',
+            qrCode: '',
+            lastError: error.message || 'QR start nahi ho paya.',
+          },
+        }).catch(() => {});
+      });
+    }
     res.status(req.body.id ? 200 : 201).json(sender);
-  } catch (error) { next(error); }
+  } catch (error) {
+    if (error && error.code === 11000) {
+      return res.status(409).json({ message: 'Ye WhatsApp sender pehle se saved hai. Purana sender delete karke dobara QR banayein.' });
+    }
+    next(error);
+  }
 };
 
 exports.connectSender = async (req, res, next) => {
