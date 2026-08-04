@@ -96,11 +96,11 @@ class OfflineVoterCache {
   static Future<void> merge(List<dynamic> voters) async {
     final byId = <String, dynamic>{};
     for (final item in await read()) {
-      final id = '${item['_id'] ?? ''}';
+      final id = _itemId(item);
       if (id.isNotEmpty) byId[id] = item;
     }
     for (final item in voters) {
-      final id = '${item['_id'] ?? ''}';
+      final id = _itemId(item);
       if (id.isNotEmpty) byId[id] = item;
     }
     await save(byId.values.toList());
@@ -112,7 +112,7 @@ class OfflineVoterCache {
     if (raw == null) return '';
     if (raw is String) return raw.trim();
     if (raw is Map) {
-      final oid = raw['$oid'] ?? raw['oid'] ?? raw['_id'] ?? raw['id'];
+      final oid = raw[r'$oid'] ?? raw['oid'] ?? raw['_id'] ?? raw['id'];
       if (oid != null) return oid.toString().trim();
     }
     return raw.toString().trim();
