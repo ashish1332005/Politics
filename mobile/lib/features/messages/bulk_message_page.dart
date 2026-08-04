@@ -230,11 +230,57 @@ class _BulkMessagePageState extends State<BulkMessagePage> {
     }
   }
 
+  Future<void> deleteSender(String id) async {
+    if (id.isEmpty) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Sender delete karein?'),
+        content: const Text(
+            'Is WhatsApp sender number ko list se hata diya jayega. Connected session bhi logout/disconnect hoga.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(backgroundColor: rose),
+            onPressed: () => Navigator.pop(context, true),
+            icon: const Icon(Icons.delete_outline_rounded),
+            label: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await api.delete('/api/messages/senders/$id');
+      if (!mounted) return;
+      setState(() {
+        if (senderId == id) senderId = '';
+        refreshKey++;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('WhatsApp sender deleted')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(error.toString().replaceFirst('Exception: ', '')),
+      ));
+    }
+  }
+
   Future<void> openQrConnect(String id) async {
     if (id.isEmpty) return;
     try {
       await api.post('/api/messages/senders/$id/connect', {});
-    } catch (_) {}
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(error.toString().replaceFirst('Exception: ', '')),
+        ));
+      }
+    }
     if (!mounted) return;
     await showDialog<void>(
       context: context,
@@ -357,6 +403,13 @@ class _BulkMessagePageState extends State<BulkMessagePage> {
                           ? 'Connected'
                           : 'QR Connect',
                     ),
+                  ),
+                if (senderId.isNotEmpty)
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(foregroundColor: rose),
+                    onPressed: () => deleteSender(senderId),
+                    icon: const Icon(Icons.delete_outline_rounded),
+                    label: const Text('Delete sender'),
                   ),
                 SizedBox(
                   width: 210,
@@ -694,8 +747,21 @@ class _QrConnectDialogState extends State<_QrConnectDialog> {
             FilledButton.tonalIcon(
               onPressed: () async {
                 setState(() => loading = true);
-                await api.post(
-                    '/api/messages/senders/${widget.senderId}/connect', {});
+                try {
+                  await api.post(
+                      '/api/messages/senders/${widget.senderId}/connect', {});
+                } catch (error) {
+                  if (mounted) {
+                    setState(() {
+                      status = {
+                        ...status,
+                        'lastError':
+                            error.toString().replaceFirst('Exception: ', ''),
+                        'connectionStatus': 'failed'
+                      };
+                    });
+                  }
+                }
                 await load();
               },
               icon: const Icon(Icons.refresh_rounded),

@@ -1,4 +1,4 @@
-﻿const MessageTemplate = require('../models/MessageTemplate');
+const MessageTemplate = require('../models/MessageTemplate');
 const MessageSender = require('../models/MessageSender');
 const Member = require('../models/Member');
 const MessageCampaign = require('../models/MessageCampaign');
@@ -143,6 +143,24 @@ exports.logoutSender = async (req, res, next) => {
   try {
     await disconnectSender(req.params.id, true);
     res.json({ id: req.params.id, status: 'disconnected' });
+  } catch (error) { next(error); }
+};
+
+exports.removeSender = async (req, res, next) => {
+  try {
+    const sender = await MessageSender.findById(req.params.id);
+    if (!sender) return res.status(404).json({ message: 'Sender नहीं मिला।' });
+    if (sender.provider === 'whatsapp_web') {
+      await disconnectSender(sender._id, true).catch(() => disconnectSender(sender._id, false));
+    }
+    sender.active = false;
+    sender.isDefault = false;
+    sender.qrCode = '';
+    sender.connectionStatus = 'disconnected';
+    sender.lastError = '';
+    sender.updatedBy = req.currentUser._id;
+    await sender.save();
+    res.json({ id: sender._id, deleted: true });
   } catch (error) { next(error); }
 };
 exports.preview = async (req, res, next) => {
