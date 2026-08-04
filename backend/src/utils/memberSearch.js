@@ -269,6 +269,7 @@ module.exports = {
   canonicalEpic,
   buildMemberSearchData,
   buildSearchConditions,
+  buildFieldSearchConditions,
   searchExactCandidates,
   ensureMemberSearchData,
 };
