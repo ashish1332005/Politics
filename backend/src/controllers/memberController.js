@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const QRCode = require('qrcode');
 const Member = require('../models/Member');
 const Family = require('../models/Family');
@@ -7,7 +8,7 @@ const { writeActivity } = require('../middleware/activityLogger');
 const { requireValidEpic } = require('../utils/epic');
 const { syncMemberFamily, removeMemberFromFamilies } = require('../utils/familySync');
 const { persistLocalImage } = require('../utils/persistentMedia');
-const { buildSearchConditions, searchExactCandidates } = require('../utils/memberSearch');
+const { buildSearchConditions, buildFieldSearchConditions, searchExactCandidates } = require('../utils/memberSearch');
 
 const populate = 'party ward booth area createdBy updatedBy';
 const maskMobile = (value) => {
@@ -24,6 +25,29 @@ const maskMemberMobile = (member, user) => {
 
 const searchRegex = (value) => new RegExp(String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
 const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const normalizeMonthDayDate = (value) => {
+  const raw = String(value ?? '').trim();
+  if (!raw) return undefined;
+  const normalized = raw.replace(/\//g, '-');
+  let match = normalized.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (!match) match = normalized.match(/^(\d{1,2})-(\d{1,2})$/);
+  if (!match) return value;
+  const month = Number(match.length === 4 ? match[2] : match[1]);
+  const day = Number(match.length === 4 ? match[3] : match[2]);
+  if (!month || !day || month < 1 || month > 12 || day < 1 || day > 31) return undefined;
+  return new Date(Date.UTC(2000, month - 1, day));
+};
+
+const normalizeMemberDates = (data) => {
+  for (const key of ['dob', 'anniversary']) {
+    if (!Object.prototype.hasOwnProperty.call(data, key)) continue;
+    if (String(data[key] ?? '').trim() === '') {
+      data[key] = undefined;
+      continue;
+    }
+    data[key] = normalizeMonthDayDate(data[key]);
+  }
+};
 const hindiEnglishCollator = new Intl.Collator(['en', 'hi'], {
   numeric: true,
   sensitivity: 'base',
@@ -172,7 +196,7 @@ exports.list = async (req, res, next) => {
     if (req.query.missingHouse === 'true') filter.$and = [...(filter.$and || []), { $or: [{ houseNumber: '' }, { houseNumber: null }, { houseNumber: { $exists: false } }] }];
     if (booth && req.currentUser.role === 'admin') filter.booth = booth;
     const listQuery = (query) => Member.find(query)
-      .select('contactType photo name surname mobile altMobile voterId voterSerial guardianName houseNumber address location area tehsil gramPanchayat village municipality caste subCaste organizationPost organizationLevel influenceLevel occupation education extraDetails supportLevel ward booth updatedAt age gender sectionNumber sectionName assemblyNumber assemblyName partNumber')
+      .select('contactType photo name surname mobile altMobile dob estimatedDob anniversary voterId voterSerial guardianName houseNumber address location area tehsil gramPanchayat village municipality caste subCaste organizationPost organizationLevel influenceLevel occupation education extraDetails supportLevel ward booth updatedAt age gender sectionNumber sectionName assemblyNumber assemblyName partNumber')
       .populate(populate)
       .sort(req.query.sort === 'recent' ? { updatedAt: -1 } : { name: 1, surname: 1, houseNumber: 1 })
       .collation({ locale: 'en', numericOrdering: true, strength: 1 });
@@ -572,8 +596,11 @@ exports.remove = async (req, res, next) => {
   try {
     const member = await Member.findById(req.params.id);
     if (!member) return res.status(404).json({ message: 'Member not found' });
-    assertBoothAccess(req.currentUser, member.booth);
-    assertWardAccess(req.currentUser, member.ward);
+    const isOwner = String(member.createdBy) === String(req.currentUser._id);
+    if (!isOwner) {
+      assertBoothAccess(req.currentUser, member.booth);
+      assertWardAccess(req.currentUser, member.ward);
+    }
     await removeMemberFromFamilies(member._id, req.currentUser._id);
     await member.deleteOne();
     await writeActivity({ req, action: 'member.deleted', module: 'members', entityId: member._id, before: member });
@@ -617,9 +644,28 @@ exports.bulkDelete = async (req, res, next) => {
     if (!ids.length) {
       return res.status(400).json({ message: 'No member IDs provided for deletion.' });
     }
-    const filter = applyMemberScope(req.currentUser, { _id: { $in: ids } });
-    const membersToDelete = await Member.find(filter).select('_id booth ward');
+    const validObjectIds = ids.filter((id) => mongoose.Types.ObjectId.isValid(id));
+    if (!validObjectIds.length) {
+      return res.json({ message: 'No valid member IDs provided for deletion.', deletedCount: 0, deletedIds: [] });
+    }
+    let scopeFilter = { _id: { $in: validObjectIds } };
+    if (req.currentUser?.role === 'booth') {
+      const boothId = req.currentUser.assignedBooth?._id || req.currentUser.assignedBooth;
+      scopeFilter = {
+        _id: { $in: validObjectIds },
+        $or: [{ booth: boothId }, { createdBy: req.currentUser._id }],
+      };
+    } else if (req.currentUser?.role === 'ward_head') {
+      const wardId = req.currentUser.assignedWard?._id || req.currentUser.assignedWard;
+      scopeFilter = {
+        _id: { $in: validObjectIds },
+        $or: [{ ward: wardId }, { createdBy: req.currentUser._id }],
+      };
+    }
+
+    const membersToDelete = await Member.find(scopeFilter).select('_id booth ward');
     const deleteIds = membersToDelete.map((m) => m._id);
+    const deleteIdStrings = deleteIds.map((id) => String(id));
     if (!deleteIds.length) {
       return res.json({ message: 'No matching members found to delete.', deletedCount: 0, deletedIds: [] });
     }
@@ -635,12 +681,12 @@ exports.bulkDelete = async (req, res, next) => {
       req,
       action: 'members.bulk_deleted',
       module: 'members',
-      after: { ids: deleteIds, count: deletedResult.deletedCount },
+      after: { ids: deleteIdStrings, count: deletedResult.deletedCount },
     });
     res.json({
       message: `${deletedResult.deletedCount} members deleted successfully.`,
       deletedCount: deletedResult.deletedCount,
-      deletedIds: deleteIds,
+      deletedIds: deleteIdStrings,
     });
   } catch (error) {
     next(error);

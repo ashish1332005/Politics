@@ -182,6 +182,38 @@ const fallbackRegexConditions = (token) => {
   return conditions;
 };
 
+const FIELD_SEARCH_FIELDS = {
+  name: ['name', 'surname'],
+  guardian: ['guardianName'],
+  epic: ['voterId'],
+  house: ['houseNumber'],
+  mobile: ['mobile', 'altMobile'],
+};
+
+const fieldRegexConditions = (mode, token) => {
+  const fields = FIELD_SEARCH_FIELDS[mode];
+  if (!fields) return null;
+  const escaped = escapeRegex(token);
+  const conditions = fields.map((field) => ({ [field]: new RegExp(escaped, 'i') }));
+  if (mode === 'mobile') {
+    const digits = compactDigits(token);
+    if (digits) conditions.push(
+      { mobile: new RegExp(escapeRegex(digits), 'i') },
+      { altMobile: new RegExp(escapeRegex(digits), 'i') },
+    );
+  }
+  if (mode === 'epic') {
+    const epic = canonicalEpic(token);
+    if (epic) conditions.push({ voterId: new RegExp(escapeRegex(epic), 'i') });
+  }
+  return conditions;
+};
+
+const buildFieldSearchConditions = (query, mode) => {
+  const cleanMode = String(mode || '').trim();
+  if (!FIELD_SEARCH_FIELDS[cleanMode]) return buildSearchConditions(query);
+  return searchTokens(query).map((token) => ({ $or: fieldRegexConditions(cleanMode, token) || [] }));
+};
 const buildSearchConditions = (query) => searchTokens(query)
   .map((token) => {
     const loose = looseHindiToken(token);

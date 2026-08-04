@@ -66,7 +66,7 @@ class _VoterEditPageState extends State<VoterEditPage> {
   void initState() {
     super.initState();
     for (final key in fieldKeys) {
-      fields[key] = TextEditingController(text: _value(widget.voter[key]));
+      fields[key] = TextEditingController(text: _value(widget.voter[key], key));
     }
     gender = '${widget.voter['gender'] ?? ''}';
     relationType = '${widget.voter['relationType'] ?? ''}';
@@ -74,12 +74,90 @@ class _VoterEditPageState extends State<VoterEditPage> {
     verificationStatus = '${widget.voter['verificationStatus'] ?? 'pending'}';
   }
 
-  String _value(dynamic value) {
+  String _value(dynamic value, [String key = '']) {
     if (value == null) return '';
     final text = '$value';
+    final parsed = DateTime.tryParse(text);
+    if ((key == 'dob' || key == 'anniversary') && parsed != null) {
+      return DateFormat('MM-dd').format(parsed.toLocal());
+    }
     return text.contains('T') && text.length >= 10
         ? text.substring(0, 10)
         : text;
+  }
+
+  DateTime _monthDayInitial(String key) {
+    final text = fields[key]?.text.trim() ?? '';
+    final parts = text.split('-');
+    if (parts.length == 2) {
+      final month = int.tryParse(parts[0]);
+      final day = int.tryParse(parts[1]);
+      if (month != null && day != null) return DateTime(2000, month, day);
+    }
+    final parsed = DateTime.tryParse(text);
+    return parsed == null ? DateTime(2000, DateTime.now().month, DateTime.now().day) : DateTime(2000, parsed.month, parsed.day);
+  }
+
+  Future<DateTime?> _pickMonthDay(String key, String label) async {
+    var selected = _monthDayInitial(key);
+    return showDialog<DateTime>(
+      context: context,
+      builder: (context) => StatefulBuilder(builder: (context, setDialogState) {
+        final days = DateUtils.getDaysInMonth(2000, selected.month);
+        return AlertDialog(
+          title: Text(label),
+          content: SizedBox(
+            width: 360,
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              DropdownButtonFormField<int>(
+                initialValue: selected.month,
+                decoration: const InputDecoration(labelText: 'महीना'),
+                items: List.generate(12, (i) => i + 1)
+                    .map((month) => DropdownMenuItem(
+                          value: month,
+                          child: Text(DateFormat('MMMM').format(DateTime(2000, month, 1))),
+                        ))
+                    .toList(),
+                onChanged: (month) => setDialogState(() {
+                  if (month == null) return;
+                  final maxDay = DateUtils.getDaysInMonth(2000, month);
+                  selected = DateTime(2000, month, selected.day.clamp(1, maxDay));
+                }),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 240,
+                child: GridView.count(
+                  crossAxisCount: 7,
+                  mainAxisSpacing: 6,
+                  crossAxisSpacing: 6,
+                  children: List.generate(days, (i) {
+                    final day = i + 1;
+                    final picked = day == selected.day;
+                    return InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: () => setDialogState(() => selected = DateTime(2000, selected.month, day)),
+                      child: Container(
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: picked ? blue : const Color(0xfff3f6fb),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text('$day', style: TextStyle(color: picked ? Colors.white : navy, fontWeight: FontWeight.w800)),
+                      ),
+                    );
+                  }),
+                ),
+              ),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.pop(context, selected), child: const Text('Select')),
+          ],
+        );
+      }),
+    );
   }
 
   Future<void> save({bool addAnother = false}) async {
@@ -94,6 +172,13 @@ class _VoterEditPageState extends State<VoterEditPage> {
         'verificationStatus': verificationStatus,
       };
       if (body['age'] == '') body['age'] = null;
+      for (final dateKey in ['dob', 'anniversary']) {
+        final original = widget.voter[dateKey];
+        final originalText = original == null ? '' : '$original'.trim();
+        if ('${body[dateKey] ?? ''}'.trim().isEmpty && originalText.isEmpty) {
+          body.remove(dateKey);
+        }
+      }
       late final dynamic updated;
       if (selectedPhoto != null) {
         updated = await api.uploadFile(
@@ -586,7 +671,7 @@ class _VoterEditPageState extends State<VoterEditPage> {
         readOnly: true,
         decoration: InputDecoration(
             labelText: label,
-            helperText: 'Calendar से तारीख चुनें',
+            helperText: key == 'dob' ? 'सिर्फ तारीख और महीना चुनें — year नहीं' : 'तारीख और महीना चुनें',
             prefixIcon: const Icon(Icons.calendar_today_rounded),
             suffixIcon: Row(mainAxisSize: MainAxisSize.min, children: [
               if (fields[key]!.text.isNotEmpty)
@@ -601,15 +686,9 @@ class _VoterEditPageState extends State<VoterEditPage> {
               ),
             ])),
         onTap: () async {
-          final date = await showDatePicker(
-              context: context,
-              firstDate: DateTime(1900),
-              lastDate: DateTime.now().add(const Duration(days: 3650)),
-              initialDate:
-                  DateTime.tryParse(fields[key]!.text) ?? DateTime.now());
+          final date = await _pickMonthDay(key, label);
           if (date != null) {
-            setState(() =>
-                fields[key]!.text = DateFormat('yyyy-MM-dd').format(date));
+            setState(() => fields[key]!.text = DateFormat('MM-dd').format(date));
           }
         },
       );

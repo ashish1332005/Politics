@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
 import '../../core/api_client.dart';
@@ -55,6 +56,7 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
   String verificationStatus = '';
   String support = '';
   String contactTypeFilter = '';
+  String queryMode = '';
   String nameLetter = '';
   int currentPage = 1;
   late Future<Map<String, dynamic>> dashboardFuture;
@@ -77,6 +79,7 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
 
   void searchChanged(String _) {
     searchDebounce?.cancel();
+    if (queryMode.isNotEmpty) queryMode = '';
     setState(() {});
     searchDebounce = Timer(const Duration(milliseconds: 450), () {
       if (mounted) filtersChanged();
@@ -132,7 +135,8 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
       'verificationStatus': verificationStatus,
       'area': widget.initialAreaId,
       'letter': nameLetter,
-      if (nameLetter.isNotEmpty) 'qMode': 'name',
+      if (queryMode.isNotEmpty) 'qMode': queryMode,
+      if (queryMode.isEmpty && nameLetter.isNotEmpty) 'qMode': 'name',
     };
     for (final values in selectedOptionFilters.values) {
       query.addAll(values);
@@ -393,6 +397,14 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
         _ => '',
       };
 
+  String quickSearchMode(String label) {
+    final text = label.toLowerCase();
+    if (text.contains('पिता') || text.contains('पति') || text.contains('father')) return 'guardian';
+    if (text.contains('epic')) return 'epic';
+    if (text.contains('घर') || text.contains('house')) return 'house';
+    if (text.contains('मोबाइल') || text.contains('mobile')) return 'mobile';
+    return 'name';
+  }
   Future<void> useQuickSearch(String mode) async {
     final cleanMode = mode.startsWith('जैसे') ? 'नाम' : mode;
     final value = await showDialog<String>(
@@ -405,6 +417,7 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
     }
     setState(() {
       search.text = value.trim();
+      queryMode = quickSearchMode(cleanMode);
       search.selection = TextSelection.collapsed(offset: search.text.length);
       currentPage = 1;
       selectedIds.clear();
@@ -4861,6 +4874,7 @@ class DetailList extends StatelessWidget {
         info('घर संख्या', voter['houseNumber']),
         info('उम्र / लिंग',
             '${voter['age'] ?? '-'} / ${voter['gender'] ?? '-'}'),
+        info('जन्म तिथि', formatMonthDay(voter['dob'])),
         info('मोबाइल', voter['mobile']),
         info('पता', voter['address']),
         info('गाँव', voter['village']),
@@ -4940,7 +4954,7 @@ class _VoterFormState extends State<VoterForm> {
       'ward',
       'booth'
     ]) {
-      ctrls[f] = TextEditingController(text: '${widget.voter?[f] ?? ''}');
+      ctrls[f] = TextEditingController(text: initialFormValue(f, widget.voter?[f]));
     }
     support = widget.voter?['supportLevel'] ?? 'undecided';
     gender = '${widget.voter?['gender'] ?? ''}';
@@ -4973,6 +4987,13 @@ class _VoterFormState extends State<VoterForm> {
       'supportLevel': support,
       'contactType': contactType,
     };
+    for (final dateKey in ['dob']) {
+      final original = widget.voter?[dateKey];
+      final originalText = original == null ? '' : '$original'.trim();
+      if ('${body[dateKey] ?? ''}'.trim().isEmpty && originalText.isEmpty) {
+        body.remove(dateKey);
+      }
+    }
     if (isPersonal && ctrls['voterId']!.text.trim().isEmpty) {
       body.remove('voterId');
     }
@@ -5036,6 +5057,116 @@ class _VoterFormState extends State<VoterForm> {
     super.dispose();
   }
 
+  String initialFormValue(String key, dynamic value) {
+    if (value == null) return '';
+    final text = '$value';
+    final parsed = DateTime.tryParse(text);
+    if (key == 'dob' && parsed != null) {
+      return DateFormat('MM-dd').format(parsed.toLocal());
+    }
+    return text;
+  }
+
+  DateTime monthDayInitial(String key) {
+    final text = ctrls[key]?.text.trim() ?? '';
+    final parts = text.split('-');
+    if (parts.length == 2) {
+      final month = int.tryParse(parts[0]);
+      final day = int.tryParse(parts[1]);
+      if (month != null && day != null) return DateTime(2000, month, day);
+    }
+    final parsed = DateTime.tryParse(text);
+    return parsed == null ? DateTime(2000, DateTime.now().month, DateTime.now().day) : DateTime(2000, parsed.month, parsed.day);
+  }
+
+  Future<DateTime?> pickMonthDay(String key, String label) async {
+    var selected = monthDayInitial(key);
+    return showDialog<DateTime>(
+      context: context,
+      builder: (context) => StatefulBuilder(builder: (context, setDialogState) {
+        final days = DateUtils.getDaysInMonth(2000, selected.month);
+        return AlertDialog(
+          title: Text(label),
+          content: SizedBox(
+            width: 360,
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              DropdownButtonFormField<int>(
+                initialValue: selected.month,
+                decoration: const InputDecoration(labelText: 'महीना'),
+                items: List.generate(12, (i) => i + 1)
+                    .map((month) => DropdownMenuItem(
+                          value: month,
+                          child: Text(DateFormat('MMMM').format(DateTime(2000, month, 1))),
+                        ))
+                    .toList(),
+                onChanged: (month) => setDialogState(() {
+                  if (month == null) return;
+                  final maxDay = DateUtils.getDaysInMonth(2000, month);
+                  selected = DateTime(2000, month, selected.day.clamp(1, maxDay));
+                }),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 240,
+                child: GridView.count(
+                  crossAxisCount: 7,
+                  mainAxisSpacing: 6,
+                  crossAxisSpacing: 6,
+                  children: List.generate(days, (i) {
+                    final day = i + 1;
+                    final picked = day == selected.day;
+                    return InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: () => setDialogState(() => selected = DateTime(2000, selected.month, day)),
+                      child: Container(
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: picked ? blue : const Color(0xfff3f6fb),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text('$day', style: TextStyle(color: picked ? Colors.white : navy, fontWeight: FontWeight.w800)),
+                      ),
+                    );
+                  }),
+                ),
+              ),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.pop(context, selected), child: const Text('Select')),
+          ],
+        );
+      }),
+    );
+  }
+
+  Widget monthDayField(String key, {IconData? icon}) => TextField(
+        controller: ctrls[key],
+        readOnly: true,
+        decoration: InputDecoration(
+          labelText: voterFieldLabel(key),
+          helperText: 'सिर्फ तारीख और महीना चुनें — year नहीं',
+          prefixIcon: icon == null ? null : Icon(icon),
+          suffixIcon: Row(mainAxisSize: MainAxisSize.min, children: [
+            if (ctrls[key]!.text.isNotEmpty)
+              IconButton(
+                onPressed: () => setState(() => ctrls[key]!.clear()),
+                icon: const Icon(Icons.close_rounded, size: 18),
+              ),
+            const Padding(
+              padding: EdgeInsets.only(right: 8),
+              child: Icon(Icons.calendar_month_outlined),
+            ),
+          ]),
+        ),
+        onTap: () async {
+          final picked = await pickMonthDay(key, voterFieldLabel(key));
+          if (picked != null) {
+            setState(() => ctrls[key]!.text = DateFormat('MM-dd').format(picked));
+          }
+        },
+      );
   Widget photoPicker() {
     final bytes = selectedPhoto?.bytes;
     return Center(
@@ -5237,7 +5368,7 @@ class _VoterFormState extends State<VoterForm> {
             keyboardType: TextInputType.number,
             required: !isPersonal),
         const SizedBox(height: 12),
-        formField('dob', icon: Icons.calendar_today_outlined),
+        monthDayField('dob', icon: Icons.calendar_today_outlined),
         const SizedBox(height: 12),
         formField('mobile',
             icon: Icons.phone_outlined, keyboardType: TextInputType.phone),
@@ -5357,6 +5488,11 @@ class _VoterFormState extends State<VoterForm> {
   }
 }
 
+String formatMonthDay(dynamic value) {
+  final parsed = DateTime.tryParse('$value');
+  if (parsed == null) return '-';
+  return DateFormat('dd MMMM').format(parsed.toLocal());
+}
 String voterFieldLabel(String key) =>
     {
       'name': 'नाम',
