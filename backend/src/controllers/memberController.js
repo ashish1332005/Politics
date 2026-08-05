@@ -284,7 +284,7 @@ const optionDefinitions = {
     match: { partNumber: { $nin: ['', null] } },
     option: (id, count) => ({
       value: id.number || id.name,
-      label: id.name && id.number ? `${id.name} (??? ${id.number})` : id.name || `??? ${id.number || '-'}`,
+      label: id.name && id.number ? `${id.name} ? Part ${id.number}` : id.name || `Part ${id.number || '-'}`,
       count,
       filters: id.number ? { partNumber: id.number } : { sectionName: id.name },
     }),
