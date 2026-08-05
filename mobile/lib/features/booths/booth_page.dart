@@ -119,6 +119,12 @@ class _BoothPageState extends State<BoothPage> {
                         .toList();
                     final active =
                         assigned.where((u) => u['active'] != false).length;
+                    final rawBoothName = '${booth['name'] ?? ''}'.trim();
+                    final boothName = rawBoothName.isEmpty || rawBoothName == '-'
+                        ? ('${booth['area'] ?? booth['address'] ?? ''}'.trim().isEmpty
+                            ? 'Booth ${booth['number'] ?? '-'}'
+                            : '${booth['area'] ?? booth['address']}')
+                        : rawBoothName;
                     final voters = assigned.fold<int>(
                         0,
                         (sum, user) =>
@@ -164,7 +170,7 @@ class _BoothPageState extends State<BoothPage> {
                                                 color: navy,
                                                 fontSize: 17,
                                                 fontWeight: FontWeight.w900)),
-                                        Text('${booth['name'] ?? '-'}',
+                                        Text(boothName,
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                             style: const TextStyle(
@@ -206,6 +212,13 @@ class _BoothPageState extends State<BoothPage> {
                                 _BoothPill(
                                     Icons.groups_rounded, '$voters voters'),
                                 _BoothPill(Icons.edit_rounded, 'Edit'),
+                                if (api.user?['role'] == 'admin')
+                                  OutlinedButton.icon(
+                                    onPressed: () => _deleteBooth(booth),
+                                    icon: const Icon(Icons.delete_outline_rounded, size: 16, color: Colors.red),
+                                    label: const Text('Delete', style: TextStyle(color: Colors.red)),
+                                    style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact, side: const BorderSide(color: Color(0x33ef4444)), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))),
+                                  ),
                               ]),
                             ]),
                       ),
@@ -216,6 +229,27 @@ class _BoothPageState extends State<BoothPage> {
           },
         ),
       );
+
+  Future<void> _deleteBooth(Map<String, dynamic> booth) async {
+    final id = '${booth['_id'] ?? ''}';
+    if (id.isEmpty) return;
+    final label = '${booth['name'] ?? ''}'.trim().isNotEmpty ? '${booth['name']}' : 'Booth ${booth['number'] ?? '-'}';
+    final confirmed = await showDialog<bool>(context: context, builder: (dialogContext) => AlertDialog(
+      title: const Text('Delete booth?'),
+      content: Text('Delete "$label"? Assigned managers and voters will no longer be linked to this booth.'),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
+        FilledButton(style: FilledButton.styleFrom(backgroundColor: Colors.red), onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Delete')),
+      ],
+    ));
+    if (confirmed != true || !mounted) return;
+    try {
+      await api.delete('/api/booths/$id');
+      if (mounted) { setState(() {}); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Booth deleted'))); }
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))));
+    }
+  }
 
   Future<void> _openForm([Map<String, dynamic>? booth]) async {
     final name = TextEditingController(text: '${booth?['name'] ?? ''}');
