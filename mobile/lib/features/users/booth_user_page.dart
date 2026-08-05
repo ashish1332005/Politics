@@ -64,16 +64,6 @@ class _BoothUserPageState extends State<BoothUserPage> {
                     'बूथ खोजें, मतदाता देखें और सही manager को सुरक्षित access दें।',
                 icon: Icons.manage_accounts_rounded,
                 badges: const ['Role access', 'Booth wise', 'Secure'],
-                action: FilledButton.icon(
-                  onPressed: booths.isEmpty
-                      ? null
-                      : () => _openManagerForm(
-                            booths: booths,
-                            boothId: selectedBoothId,
-                          ),
-                  icon: const Icon(Icons.person_add_alt_1_rounded),
-                  label: const Text('New manager'),
-                ),
               ),
               _SummaryStrip(
                 booths: booths.length,
@@ -369,14 +359,10 @@ class _BoothWorkspace extends StatelessWidget {
       );
     }
     final boothId = '${booth!['_id']}';
+    final voterSectionKey = GlobalKey();
     return Column(children: [
       _Surface(
         title: 'Booth ${booth!['number'] ?? '-'}',
-        action: FilledButton.icon(
-          onPressed: onManualAdd,
-          icon: const Icon(Icons.person_add_alt_1_rounded),
-          label: const Text('Add manager'),
-        ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('${booth!['name'] ?? '-'}',
               style: const TextStyle(
@@ -389,7 +375,16 @@ class _BoothWorkspace extends StatelessWidget {
                 '${booth!['area'] ?? booth!['address'] ?? 'No area'}'),
             _Pill(Icons.supervisor_account_rounded, '${heads.length} manager'),
           ]),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
+          _ManagerChoicePanel(
+            onManualAdd: onManualAdd,
+            onPickVoter: () => Scrollable.ensureVisible(
+              voterSectionKey.currentContext ?? context,
+              duration: const Duration(milliseconds: 280),
+              curve: Curves.easeOut,
+            ),
+          ),
+          const SizedBox(height: 14),
           _HeadGrid(
             heads: heads,
             booths: booths,
@@ -400,7 +395,7 @@ class _BoothWorkspace extends StatelessWidget {
       ),
       const SizedBox(height: 12),
       _Surface(
-        title: 'Voters in this booth',
+        title: '2. Voter se manager chune',
         action: SizedBox(
           width: 250,
           child: TextField(
@@ -409,7 +404,7 @@ class _BoothWorkspace extends StatelessWidget {
             decoration: InputDecoration(
               isDense: true,
               prefixIcon: const Icon(Icons.search_rounded),
-              hintText: 'Name, mobile, EPIC...',
+              hintText: 'Name, mobile, EPIC search...',
               suffixIcon: voterSearch.text.isEmpty
                   ? null
                   : IconButton(
@@ -423,6 +418,9 @@ class _BoothWorkspace extends StatelessWidget {
           ),
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('Selected booth ke voter me se kisi voter ko manager banane ke liye Make manager dabayein.',
+              style: TextStyle(color: muted, fontSize: 12, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 10),
           _AlphabetBar(selected: letter, onSelected: onLetter),
           const SizedBox(height: 10),
           _BoothVoterList(
@@ -435,6 +433,103 @@ class _BoothWorkspace extends StatelessWidget {
       ),
     ]);
   }
+}
+
+class _ManagerChoicePanel extends StatelessWidget {
+  const _ManagerChoicePanel({required this.onManualAdd, required this.onPickVoter});
+
+  final VoidCallback onManualAdd;
+  final VoidCallback onPickVoter;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xfff7fbff),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: blue.withValues(alpha: .14)),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('1. Manager add karne ka tarika chune',
+              style: TextStyle(color: navy, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 4),
+          const Text('Admin confuse na ho - manager do tareeke se ban sakta hai.',
+              style: TextStyle(color: muted, fontSize: 12)),
+          const SizedBox(height: 10),
+          LayoutBuilder(builder: (context, box) {
+            final wide = box.maxWidth > 560;
+            final cards = [
+              _ManagerCreateCard(
+                icon: Icons.person_add_alt_1_rounded,
+                title: 'Manual manager add karein',
+                subtitle: 'Kisi bhi person ka name, mobile, email aur password daal kar manager banayein.',
+                action: 'Manual add',
+                color: blue,
+                onTap: onManualAdd,
+              ),
+              _ManagerCreateCard(
+                icon: Icons.how_to_vote_rounded,
+                title: 'Booth voter se chune',
+                subtitle: 'Is booth ke voter me se person chune - name/mobile auto fill hoga.',
+                action: 'Neeche voter list dekhein',
+                color: green,
+                onTap: onPickVoter,
+              ),
+            ];
+            if (!wide) {
+              return Column(children: [cards[0], const SizedBox(height: 10), cards[1]]);
+            }
+            return Row(children: [Expanded(child: cards[0]), const SizedBox(width: 10), Expanded(child: cards[1])]);
+          }),
+        ]),
+      );
+}
+
+class _ManagerCreateCard extends StatelessWidget {
+  const _ManagerCreateCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.action,
+    required this.color,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final String action;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          padding: const EdgeInsets.all(13),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: color.withValues(alpha: .24)),
+          ),
+          child: Row(children: [
+            CircleAvatar(
+              backgroundColor: color.withValues(alpha: .12),
+              child: Icon(icon, color: color),
+            ),
+            const SizedBox(width: 10),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(title, style: const TextStyle(color: navy, fontWeight: FontWeight.w900)),
+              const SizedBox(height: 3),
+              Text(subtitle, style: const TextStyle(color: muted, fontSize: 11, height: 1.25)),
+              const SizedBox(height: 8),
+              Text(action, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w900)),
+            ])),
+            Icon(Icons.chevron_right_rounded, color: color),
+          ]),
+        ),
+      );
 }
 
 class _HeadGrid extends StatelessWidget {
@@ -1013,6 +1108,7 @@ class _BoothUserFormState extends State<BoothUserForm> {
   bool canPrint = false;
   bool canExport = false;
   bool canViewMobile = false;
+  bool canBackup = false;
   bool showPassword = false;
   bool saving = false;
   String error = '';
@@ -1025,6 +1121,7 @@ class _BoothUserFormState extends State<BoothUserForm> {
     canPrint = permissions?['canPrintProfiles'] == true;
     canExport = permissions?['canExportData'] == true;
     canViewMobile = permissions?['canViewFullMobile'] == true;
+    canBackup = permissions?['canBackup'] == true;
   }
 
   @override
@@ -1093,8 +1190,9 @@ class _BoothUserFormState extends State<BoothUserForm> {
   @override
   Widget build(BuildContext context) {
     final mobile = MediaQuery.sizeOf(context).width < 700;
-    final title =
-        widget.user == null ? 'बूथ मैनेजर जोड़ें' : 'मैनेजर संपादित करें';
+    final title = widget.user == null
+        ? (widget.candidate == null ? 'Manual booth manager add karein' : 'Voter se manager banayein')
+        : 'Manager access edit karein';
     final form = ListView(
       padding: const EdgeInsets.fromLTRB(18, 14, 18, 24),
       shrinkWrap: !mobile,
@@ -1364,9 +1462,13 @@ class _BoothUserFormState extends State<BoothUserForm> {
           borderRadius: BorderRadius.circular(18),
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('अनुमतियाँ',
+          const Text('Task access control',
               style: TextStyle(color: navy, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 4),
+          const Text('Admin yahan decide kare ki manager ko kya access milega.',
+              style: TextStyle(color: muted, fontSize: 12)),
           const SizedBox(height: 10),
+          _fixedAccessCard(),
           _permissionCard(
               Icons.login_rounded,
               'Active login',
@@ -1387,11 +1489,41 @@ class _BoothUserFormState extends State<BoothUserForm> {
               (value) => setState(() => canPrint = value)),
           _permissionCard(
               Icons.file_download_rounded,
-              'मतदाता data export करें',
-              'Excel/CSV export की अनुमति',
+              'Voter data export karein',
+              'Excel/CSV export ki permission',
               canExport,
               (value) => setState(() => canExport = value)),
+          _permissionCard(
+              Icons.backup_rounded,
+              'Backup access',
+              'Data backup/download jaise sensitive kaam ki permission',
+              canBackup,
+              (value) => setState(() => canBackup = value)),
         ]),
+      );
+
+  Widget _fixedAccessCard() => Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Container(
+          padding: const EdgeInsets.all(11),
+          decoration: BoxDecoration(
+            color: const Color(0xffecfdf3),
+            borderRadius: BorderRadius.circular(15),
+            border: Border.all(color: green.withValues(alpha: .24)),
+          ),
+          child: const Row(children: [
+            Icon(Icons.verified_user_rounded, color: green),
+            SizedBox(width: 10),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('Basic booth work', style: TextStyle(color: navy, fontWeight: FontWeight.w900)),
+                Text('Assigned booth ke voters dekhna/add/edit karna always allowed rahega.',
+                    style: TextStyle(color: muted, fontSize: 11)),
+              ]),
+            ),
+            Icon(Icons.lock_open_rounded, color: green),
+          ]),
+        ),
       );
 
   Widget _permissionCard(IconData icon, String title, String subtitle,
