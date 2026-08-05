@@ -857,9 +857,9 @@ const parsePdfTextLayerMembers = async (filePath) => {
   }
   const normalizedMembers = members.map((member) => ({
     ...member,
-    assemblyNumber: documentHeader.assemblyNumber || member.assemblyNumber,
-    assemblyName: documentHeader.assemblyName || member.assemblyName,
-    partNumber: documentHeader.partNumber || member.partNumber,
+    assemblyNumber: member.assemblyNumber || documentHeader.assemblyNumber,
+    assemblyName: member.assemblyName || documentHeader.assemblyName,
+    partNumber: member.partNumber || documentHeader.partNumber,
   }));
   return { text: documentText.join('\n'), members: normalizedMembers, imageOnlyPages, header: documentHeader };
 };
@@ -935,6 +935,11 @@ const parsePdfMembers = async (filePath, importFileName, onOcrProgress) => {
         ? [{
           ...header,
           name: record.name,
+          assemblyNumber: record.assemblyNumber || header.assemblyNumber || '',
+          assemblyName: record.assemblyName || header.assemblyName || '',
+          partNumber: record.partNumber || header.partNumber || '',
+          sectionNumber: record.sectionNumber || '',
+          sectionName: record.sectionName || '',
           guardianName: record.guardianName || '',
           relationType: record.relationType || '',
           houseNumber: cleanValue(record.houseNumber),

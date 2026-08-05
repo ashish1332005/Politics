@@ -547,11 +547,13 @@ def main():
         page_header = {key: value for key, value in raw_header.items() if value and key != "sectionMap"}
 
         for record in result:
-            merged = {**record, **page_header}
+            # Keep card-level values when OCR found them. The page header is only a fallback.
+            # Spreading it last used to overwrite every card with the same section/part.
+            merged = {**page_header, **record}
             sec_num = str(record.get("sectionNumber") or merged.get("sectionNumber") or "").strip()
             if sec_num:
                 merged["sectionNumber"] = sec_num
-                if page_sec_map.get(sec_num):
+                if page_sec_map.get(sec_num) and not merged.get("sectionName"):
                     merged["sectionName"] = page_sec_map[sec_num]
             elif not merged.get("sectionName") and len(page_sec_map) == 1:
                 merged["sectionNumber"] = list(page_sec_map.keys())[0]
