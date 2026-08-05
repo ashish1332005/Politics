@@ -1,5 +1,6 @@
 const Booth = require('../models/Booth');
 const Ward = require('../models/Ward');
+const Member = require('../models/Member');
 
 const isObjectId = (value) => /^[a-f\d]{24}$/i.test(String(value || ''));
 
@@ -18,7 +19,24 @@ const resolveWard = async (value) => {
 exports.list = async (req, res, next) => {
   try {
     const filter = req.currentUser.role === 'booth' ? { _id: req.currentUser.assignedBooth?._id } : {};
-    res.json(await Booth.find(filter).populate('ward').sort({ number: 1 }));
+    const booths = await Booth.find(filter).populate('ward').sort({ number: 1 }).lean();
+    const ids = booths.map((booth) => booth._id);
+    const members = ids.length
+      ? await Member.find({ booth: { $in: ids } }).select('booth sectionName village gramPanchayat').lean()
+      : [];
+    const byBooth = new Map();
+    for (const member of members) {
+      const key = String(member.booth || '');
+      if (!byBooth.has(key)) byBooth.set(key, new Set());
+      [member.sectionName, member.village].forEach((value) => {
+        const text = String(value || '').trim();
+        if (text) byBooth.get(key).add(text);
+      });
+    }
+    res.json(booths.map((booth) => ({
+      ...booth,
+      locationNames: [...(byBooth.get(String(booth._id)) || new Set())],
+    })));
   } catch (e) { next(e); }
 };
 exports.create = async (req, res, next) => {
