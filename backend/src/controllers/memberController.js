@@ -280,7 +280,7 @@ const optionDefinitions = {
   tehsil: { field: 'tehsil' },
   municipality: { field: 'municipality' },
   partNumber: {
-    group: { number: '$partNumber', name: { $first: '$sectionName' } },
+    group: { number: '$partNumber', name: '$sectionName' },
     match: { partNumber: { $nin: ['', null] } },
     option: (id, count) => ({
       value: id.number || id.name,
