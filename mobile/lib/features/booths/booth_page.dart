@@ -106,6 +106,8 @@ class _BoothPageState extends State<BoothPage> {
                     label: const Text('बूथ जोड़ें'),
                   ),
                 )
+              else if (query.isEmpty)
+                _BoothHierarchyDirectory(booths: booths, onOpen: _openForm)
               else
                 Wrap(
                   spacing: 12,
@@ -355,6 +357,28 @@ class _BoothPageState extends State<BoothPage> {
       address.dispose();
     }
   }
+}
+
+class _BoothHierarchyDirectory extends StatefulWidget {
+  const _BoothHierarchyDirectory({required this.booths, required this.onOpen});
+  final List<Map<String, dynamic>> booths;
+  final Future<void> Function([Map<String, dynamic>? booth]) onOpen;
+  @override State<_BoothHierarchyDirectory> createState() => _BoothHierarchyDirectoryState();
+}
+class _BoothHierarchyDirectoryState extends State<_BoothHierarchyDirectory> {
+  String? assembly; String? village;
+  String _assemblyOf(Map<String, dynamic> booth) { final ward = booth['ward'] is Map ? booth['ward'] as Map : const {}; return (ward['name'] ?? ward['number'] ?? 'Unmapped assembly').toString().trim(); }
+  List<String> _locations(Map<String, dynamic> booth) { final values = List<String>.from((booth['locationNames'] as List? ?? const []).map((v) => v.toString())); if (values.isEmpty && (booth['area'] ?? '').toString().trim().isNotEmpty) values.add(booth['area'].toString()); if (values.isEmpty) values.add('Unmapped village'); return values.toSet().toList(); }
+  @override Widget build(BuildContext context) {
+    if (assembly == null) return _level('Choose assembly / ward', Icons.account_balance_rounded, _assemblies(), (value) => setState(() => assembly = value));
+    final assemblyBooths = widget.booths.where((b) => _assemblyOf(b) == assembly).toList();
+    if (village == null) { final villages = <String>{}; for (final booth in assemblyBooths) villages.addAll(_locations(booth)); return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [_back('Assembly: ' + assembly!, () => setState(() => assembly = null)), _level('Choose village / location', Icons.location_city_rounded, villages.toList(), (value) => setState(() => village = value))]); }
+    final matches = assemblyBooths.where((b) => _locations(b).contains(village)).toList();
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [_back(assembly! + ' - ' + village!, () => setState(() => village = null)), ...matches.map((booth) => Card(margin: const EdgeInsets.only(bottom: 10), child: ListTile(leading: const CircleAvatar(backgroundColor: softBlue, child: Icon(Icons.how_to_vote_rounded, color: blue)), title: Text('Booth ' + (booth['number'] ?? '-').toString(), style: const TextStyle(color: navy, fontWeight: FontWeight.w900)), subtitle: Text((booth['name'] ?? village).toString(), maxLines: 2, overflow: TextOverflow.ellipsis), trailing: const Icon(Icons.chevron_right_rounded, color: blue), onTap: () => widget.onOpen(booth)))), if (matches.isEmpty) const Padding(padding: EdgeInsets.all(18), child: Text('No booth found for this village.'))]);
+  }
+  List<String> _assemblies() => widget.booths.map(_assemblyOf).toSet().toList();
+  Widget _back(String label, VoidCallback onTap) => Align(alignment: Alignment.centerLeft, child: TextButton.icon(onPressed: onTap, icon: const Icon(Icons.arrow_back_rounded), label: Text(label)));
+  Widget _level(String title, IconData icon, List<String> values, ValueChanged<String> onTap) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Padding(padding: const EdgeInsets.only(bottom: 8), child: Text(title, style: const TextStyle(color: navy, fontSize: 16, fontWeight: FontWeight.w900))), ...values.map((value) => Card(margin: const EdgeInsets.only(bottom: 10), child: ListTile(leading: Icon(icon, color: blue), title: Text(value, style: const TextStyle(color: navy, fontWeight: FontWeight.w800)), trailing: const Icon(Icons.chevron_right_rounded, color: blue), onTap: () => onTap(value))))]);
 }
 
 class _BoothMetric extends StatelessWidget {
