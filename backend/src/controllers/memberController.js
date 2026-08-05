@@ -158,13 +158,16 @@ exports.create = async (req, res, next) => {
 
 exports.list = async (req, res, next) => {
   try {
-    const { q, party, supportLevel, gender, booth, ward, area, verificationStatus, location, village, gramPanchayat, tehsil, municipality, caste, organizationPost, occupation, contactType, sectionNumber, sectionName, assemblyNumber, assemblyName, partNumber, letter } = req.query;
+    const { q, qMode, party, supportLevel, gender, booth, ward, area, verificationStatus, location, village, gramPanchayat, tehsil, municipality, caste, organizationPost, occupation, contactType, sectionNumber, sectionName, assemblyNumber, assemblyName, partNumber, letter } = req.query;
     const limit = Math.min(Number(req.query.limit) || 100, 500);
     const page = Math.max(Number(req.query.page) || 1, 1);
     const paged = String(req.query.paged || '').toLowerCase() === 'true' || req.query.page !== undefined;
     const filter = applyMemberScope(req.currentUser, {});
     if (q) {
-      const conditions = buildSearchConditions(q);
+      // Keep quick-search modes scoped to the selected field.
+      const conditions = qMode
+        ? buildFieldSearchConditions(q, String(qMode).trim().toLowerCase())
+        : buildSearchConditions(q);
       filter.$and = [...(filter.$and || []), ...conditions];
     }
     if (party) filter.party = party;
@@ -204,7 +207,7 @@ exports.list = async (req, res, next) => {
     let members;
     let total;
     if (q) {
-      const exactValues = searchExactCandidates(q);
+      const exactValues = qMode ? [] : searchExactCandidates(q);
       const exactFilter = exactValues.length ? { ...filter, searchExact: { $in: exactValues } } : null;
       const [matchingTotal, exactTotal] = await Promise.all([
         Member.countDocuments(filter),

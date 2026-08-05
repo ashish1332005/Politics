@@ -154,34 +154,28 @@ class OfflineVoterCache {
     return items.where((raw) {
       final item = Map<String, dynamic>.from(raw);
       if (queryTokens.isNotEmpty) {
+        final mode = (query['qMode'] ?? '').trim().toLowerCase();
         final details = List<dynamic>.from(item['extraDetails'] as List? ?? []);
-        final text = _normalize([
-          item['name'],
-          item['surname'],
-          item['mobile'],
-          item['altMobile'],
-          item['voterId'],
-          item['voterSerial'],
-          item['guardianName'],
-          item['houseNumber'],
-          item['address'],
-          item['village'],
-          item['gramPanchayat'],
-          item['tehsil'],
-          item['municipality'],
-          item['location'],
-          item['caste'],
-          item['subCaste'],
-          item['organizationPost'],
-          item['occupation'],
-          item['contactType'],
-          item['sectionNumber'],
-          item['sectionName'],
-          item['assemblyNumber'],
-          item['assemblyName'],
-          item['partNumber'],
+        final allText = [
+          item['name'], item['surname'], item['mobile'], item['altMobile'],
+          item['voterId'], item['voterSerial'], item['guardianName'],
+          item['houseNumber'], item['address'], item['village'],
+          item['gramPanchayat'], item['tehsil'], item['municipality'],
+          item['location'], item['caste'], item['subCaste'],
+          item['organizationPost'], item['occupation'], item['contactType'],
+          item['sectionNumber'], item['sectionName'], item['assemblyNumber'],
+          item['assemblyName'], item['partNumber'],
           ...details.expand((detail) => [detail['label'], detail['value']]),
-        ].join(' '));
+        ];
+        final scopedText = switch (mode) {
+          'name' => [item['name'], item['surname']],
+          'guardian' => [item['guardianName']],
+          'epic' => [item['voterId']],
+          'mobile' => [item['mobile'], item['altMobile']],
+          'house' => [item['houseNumber']],
+          _ => allText,
+        };
+        final text = _normalize(scopedText.join(' '));
         if (!queryTokens.every(text.contains)) return false;
       }
       for (final key in [
