@@ -110,7 +110,12 @@ class _BoothPageState extends State<BoothPage> {
                 Wrap(
                   spacing: 12,
                   runSpacing: 12,
-                  children: filtered.map((booth) {
+                  children: filtered.asMap().entries.map((entry) {
+                    final booth = entry.value;
+                    final boothIndex = entry.key;
+                    final groupLabel = _boothGroupLabel(booth);
+                    final showGroup = boothIndex == 0 ||
+                        _boothGroupLabel(filtered[boothIndex - 1]) != groupLabel;
                     final ward =
                         booth['ward'] is Map ? booth['ward'] as Map : const {};
                     final assigned = managers
@@ -129,7 +134,9 @@ class _BoothPageState extends State<BoothPage> {
                         0,
                         (sum, user) =>
                             sum + _boothStat(user, 'boothVoterCount'));
-                    return InkWell(
+                    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      if (showGroup) _BoothGroupHeader(label: groupLabel),
+                      InkWell(
                       onTap: () => _openForm(booth),
                       borderRadius: BorderRadius.circular(22),
                       child: Container(
@@ -222,7 +229,8 @@ class _BoothPageState extends State<BoothPage> {
                               ]),
                             ]),
                       ),
-                    );
+                      ),
+                    ]);
                   }).toList(),
                 ),
             ]);
@@ -404,6 +412,28 @@ class _BoothPill extends StatelessWidget {
                   color: navy, fontSize: 11, fontWeight: FontWeight.w800)),
         ]),
       );
+}
+
+String _boothGroupLabel(Map<String, dynamic> booth) {
+  final ward = booth['ward'] is Map ? booth['ward'] as Map : const {};
+  final assembly = '${ward['name'] ?? ward['number'] ?? ''}'.trim();
+  final village = '${booth['area'] ?? booth['address'] ?? ''}'.trim();
+  return [if (assembly.isNotEmpty) assembly, if (village.isNotEmpty) village]
+      .join(' ? ');
+}
+
+class _BoothGroupHeader extends StatelessWidget {
+  const _BoothGroupHeader({required this.label});
+  final String label;
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(top: 8, bottom: 2),
+    child: Row(children: [
+      const Icon(Icons.folder_rounded, color: blue, size: 20),
+      const SizedBox(width: 8),
+      Expanded(child: Text(label.isEmpty ? 'Unmapped location' : label, style: const TextStyle(color: navy, fontSize: 15, fontWeight: FontWeight.w900))),
+    ]),
+  );
 }
 
 String _assignedBoothId(Map<String, dynamic> user) {
