@@ -83,10 +83,10 @@ const pdfPageCount = async (pdfPath) => {
   return Number(match[1]);
 };
 
-const renderPage = async (pdfPath, outputDir, pageNumber) => {
+const renderPage = async (pdfPath, outputDir, pageNumber, dpi = process.env.OCR_DPI || '180') => {
   const prefix = path.join(outputDir, `render-${pageNumber}`);
   await run(commandFromEnv('PDFTOPPM_PATH', 'pdftoppm'), [
-    '-png', '-singlefile', '-r', process.env.OCR_DPI || '180',
+    '-png', '-singlefile', '-r', String(dpi),
     '-f', String(pageNumber), '-l', String(pageNumber), pdfPath, prefix,
   ]);
   const rendered = `${prefix}.png`;
@@ -377,7 +377,8 @@ const lowMemoryOcrPdf = async (pdfPath, importFileName, pageRange = {}) => {
     const pageNumber = startPage + offset;
     let rendered;
     try {
-      rendered = await renderPage(pdfPath, workDir, pageNumber);
+      const isMaster = pageNumber === Number(process.env.OCR_MASTER_PAGE || 1);
+      rendered = await renderPage(pdfPath, workDir, pageNumber, isMaster ? (process.env.OCR_MASTER_DPI || '300') : (process.env.OCR_DPI || '180'));
       onProgress?.({
         phase: 'ocr',
         processedPages: offset,

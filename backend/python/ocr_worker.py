@@ -366,22 +366,24 @@ def read_header(page_path, is_voter_page=True):
     if image is None:
         return ""
     height, width = image.shape[:2]
-    crop_ratio = 0.12 if is_voter_page else 0.45
+    crop_ratio = 0.12 if is_voter_page else 0.62
     header = image[0:round(height * crop_ratio), 0:width]
     gray = cv2.cvtColor(header, cv2.COLOR_BGR2GRAY)
-    gray = cv2.resize(gray, None, fx=2.2, fy=2.2, interpolation=cv2.INTER_CUBIC)
+    gray = cv2.resize(gray, None, fx=2.5 if is_voter_page else 3.2, fy=2.5 if is_voter_page else 3.2, interpolation=cv2.INTER_CUBIC)
     gray = cv2.createCLAHE(2.0, (8, 8)).apply(gray)
-    hindi = pytesseract.image_to_string(
-        gray,
-        lang=os.getenv("OCR_LANGUAGES", "hin+eng"),
-        config="--psm 6",
-    )
-    english = pytesseract.image_to_string(
-        gray,
-        lang="eng",
-        config="--psm 6",
-    )
-    return hindi + "\n" + english
+    variants = [gray]
+    if not is_voter_page:
+        variants.extend([
+            cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1],
+            cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 41, 11),
+        ])
+    outputs = []
+    for variant in variants:
+        for psm in ((6, 11, 12) if not is_voter_page else (6,)):
+            outputs.append(pytesseract.image_to_string(variant, lang=os.getenv("OCR_LANGUAGES", "hin+eng"), config=f"--psm {psm}"))
+            if not is_voter_page:
+                outputs.append(pytesseract.image_to_string(variant, lang="eng", config=f"--psm {psm}"))
+    return "\n".join(outputs)
 
 
 def parse_header_numbers(text):
@@ -471,7 +473,8 @@ def parse_header_numbers(text):
         number = normalize_section_number(match.group(1))
         name = tidy_name(match.group(2))
         if number and name and not re.search(r"(?:EPIC|RJ/|मतदाता|निर्वाचक)", name, re.IGNORECASE) and has_devanagari(name) >= 2:
-            section_map[number] = name
+            if len(name) >= len(section_map.get(number, '')):
+                section_map[number] = name
 
     section_matches = list(re.finditer(
         r"(?:अनुभाग|section|SUT|UM|UT|SU|अिुभाग|अनुमाग|(?:^|\n)\s*अनुभाग\s*की\s*संख्या\s*व\s*नाम)[^\n:：;]{0,100}[:：;]\s*([0-9०-९OQILSZBG]{1,3})\s*[-–:]\s*([^\n]+)",
@@ -499,8 +502,8 @@ def parse_header_numbers(text):
                 section_number = cand_num
             if has_devanagari(cand_name) >= 2:
                 section_number = cand_num
-                section_name = cand_name
-                break
+                if len(cand_name) >= len(section_name):
+                    section_name = cand_name
             elif not section_name:
                 section_name = cand_name
 
