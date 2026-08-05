@@ -279,7 +279,16 @@ const optionDefinitions = {
   gramPanchayat: { field: 'gramPanchayat' },
   tehsil: { field: 'tehsil' },
   municipality: { field: 'municipality' },
-  partNumber: { field: 'partNumber' },
+  partNumber: {
+    group: { number: '$partNumber', name: { $first: '$sectionName' } },
+    match: { partNumber: { $nin: ['', null] } },
+    option: (id, count) => ({
+      value: id.number || id.name,
+      label: id.name && id.number ? `${id.name} (??? ${id.number})` : id.name || `??? ${id.number || '-'}`,
+      count,
+      filters: id.number ? { partNumber: id.number } : { sectionName: id.name },
+    }),
+  },
   caste: { field: 'caste' },
   occupation: { field: 'occupation' },
   organizationPost: { field: 'organizationPost' },
