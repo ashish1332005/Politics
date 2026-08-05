@@ -369,17 +369,17 @@ def read_header(page_path, is_voter_page=True):
     crop_ratio = 0.12 if is_voter_page else 0.62
     header = image[0:round(height * crop_ratio), 0:width]
     gray = cv2.cvtColor(header, cv2.COLOR_BGR2GRAY)
-    gray = cv2.resize(gray, None, fx=2.5 if is_voter_page else 3.2, fy=2.5 if is_voter_page else 3.2, interpolation=cv2.INTER_CUBIC)
+    gray = cv2.resize(gray, None, fx=2.2 if is_voter_page else 2.4, fy=2.2 if is_voter_page else 2.4, interpolation=cv2.INTER_CUBIC)
     gray = cv2.createCLAHE(2.0, (8, 8)).apply(gray)
     variants = [gray]
     if not is_voter_page:
         variants.extend([
             cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1],
-            cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 41, 11),
+            cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 31, 9),
         ])
     outputs = []
     for variant in variants:
-        for psm in ((6, 11, 12) if not is_voter_page else (6,)):
+        for psm in ((6, 11) if not is_voter_page else (6,)):
             outputs.append(pytesseract.image_to_string(variant, lang=os.getenv("OCR_LANGUAGES", "hin+eng"), config=f"--psm {psm}"))
             if not is_voter_page:
                 outputs.append(pytesseract.image_to_string(variant, lang="eng", config=f"--psm {psm}"))
