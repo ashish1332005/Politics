@@ -551,7 +551,7 @@ def main():
         for record in result:
             # Keep card-level values when OCR found them. The page header is only a fallback.
             # Spreading it last used to overwrite every card with the same section/part.
-            merged = {**page_header, **record}
+            merged = {**page_header, **{key: value for key, value in record.items() if value not in (None, "")}}
             sec_num = str(record.get("sectionNumber") or merged.get("sectionNumber") or "").strip()
             if sec_num:
                 merged["sectionNumber"] = sec_num
