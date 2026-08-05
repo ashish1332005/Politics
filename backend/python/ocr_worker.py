@@ -152,7 +152,9 @@ def parse_card(text, epic_text, photo_path, page_no, cell_no, focused_house=""):
         text or "",
         re.IGNORECASE,
     )
-    section_number = addition_match.group(2) if addition_match else ""
+    # Section/part metadata belongs to the page header, not the voter card.
+    # The old heuristic treated serial/EPIC digits as section numbers.
+    section_number = ""
     confidence += 10 if voter_id else 0
     return {
         "name": name,
