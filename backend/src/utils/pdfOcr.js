@@ -404,6 +404,10 @@ const lowMemoryOcrPdf = async (pdfPath, importFileName, pageRange = {}) => {
       records.push(...(result.records || []));
       if (headerTexts.length < 3 && result.headerText) headerTexts.push(result.headerText);
       for (const [key, value] of Object.entries(result.header || {})) {
+        if (key === 'sectionMap' && value && typeof value === 'object') {
+          header.sectionMap = { ...(header.sectionMap || {}), ...value };
+          continue;
+        }
         if (!header[key] && value) header[key] = value;
       }
       onProgress?.({

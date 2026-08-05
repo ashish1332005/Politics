@@ -1337,6 +1337,7 @@ const runPdfImport = async ({ file, body, currentUser }, uploadId) => {
           'assemblyNumber',
           'assemblyName',
           'partNumber',
+          'partName',
           'sectionNumber',
           'sectionName',
         ]);
@@ -1361,7 +1362,7 @@ const runPdfImport = async ({ file, body, currentUser }, uploadId) => {
         existing.booth = booth;
         existing.ward = ward;
         existing.area = item.village ? itemArea : (existing.area || assemblyArea);
-        assignNonEmptyFields(existing, item, ['tehsil', 'gramPanchayat', 'village']);
+        assignNonEmptyFields(existing, item, ['tehsil', 'gramPanchayat', 'village', 'postOffice', 'policeStation', 'district', 'pinCode']);
         if (!existing.party && party?._id) existing.party = party._id;
         existing.updatedBy = currentUser._id;
         existing.sourceDocument = {
@@ -1393,6 +1394,7 @@ const runPdfImport = async ({ file, body, currentUser }, uploadId) => {
         assemblyNumber: item.assemblyNumber,
         assemblyName: item.assemblyName,
         partNumber: item.partNumber,
+        partName: item.partName,
         sectionNumber: item.sectionNumber,
         sectionName: item.sectionName,
         address: item.address,
@@ -1401,6 +1403,10 @@ const runPdfImport = async ({ file, body, currentUser }, uploadId) => {
         ward,
         area: itemArea,
         tehsil: item.tehsil,
+        postOffice: item.postOffice,
+        policeStation: item.policeStation,
+        district: item.district,
+        pinCode: item.pinCode,
         gramPanchayat: item.gramPanchayat,
         village: item.village,
         party: party?._id,

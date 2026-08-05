@@ -199,7 +199,7 @@ exports.list = async (req, res, next) => {
     if (req.query.missingHouse === 'true') filter.$and = [...(filter.$and || []), { $or: [{ houseNumber: '' }, { houseNumber: null }, { houseNumber: { $exists: false } }] }];
     if (booth && req.currentUser.role === 'admin') filter.booth = booth;
     const listQuery = (query) => Member.find(query)
-      .select('contactType photo name surname mobile altMobile dob estimatedDob anniversary voterId voterSerial guardianName houseNumber address location area tehsil gramPanchayat village municipality caste subCaste organizationPost organizationLevel influenceLevel occupation education extraDetails supportLevel ward booth updatedAt age gender sectionNumber sectionName assemblyNumber assemblyName partNumber')
+      .select('contactType photo name surname mobile altMobile dob estimatedDob anniversary voterId voterSerial guardianName houseNumber address location area tehsil gramPanchayat village municipality caste subCaste organizationPost organizationLevel influenceLevel occupation education extraDetails supportLevel ward booth updatedAt age gender sectionNumber sectionName assemblyNumber assemblyName partNumber partName postOffice policeStation district pinCode')
       .populate(populate)
       .sort(req.query.sort === 'recent' ? { updatedAt: -1 } : { name: 1, surname: 1, houseNumber: 1 })
       .collation({ locale: 'en', numericOrdering: true, strength: 1 });

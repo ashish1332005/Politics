@@ -438,6 +438,16 @@ def parse_header_numbers(text):
         ).strip(" -,:;|\t")
         return name
 
+    def labeled_value(labels, numeric=False):
+        label = "(?:" + "|".join(labels) + ")"
+        match = re.search(label + r"\s*(?:\u0915\u094d\u0930\u092e\u093e\u0902\u0915|\u0938\u0902\u0916\u094d\u092f\u093e|\u0928\u093e\u092e|number|no|name)?\s*[:?;\-]\s*([^\n]+)", normalized, re.IGNORECASE)
+        if not match:
+            return ""
+        value = clean(match.group(1)).strip(" -,:;|\t")
+        if numeric:
+            return normalize_digits(value)
+        return tidy_name(value)
+
     assembly = first_match([
         r"(?:विधान\s*सभा|assembly|constituency|AC|furs|Seat)[^\n:：;]{0,100}[:：;]\s*([0-9०-९OQILSZBG]{1,3})\s*[-–:]\s*([^\n]+)",
     ])
@@ -503,9 +513,17 @@ def parse_header_numbers(text):
         "assemblyNumber": normalize_assembly_number(assembly.group(1)) if assembly else "",
         "assemblyName": tidy_name(assembly.group(2)) if assembly else "",
         "partNumber": normalize_digits(part.group(1)) if part else "",
+        "partName": labeled_value([r"\u092d\u093e\u0917\s*(?:\u0915\u093e\s*)?(?:\u0928\u093e\u092e|\u0935\u093f\u0935\u0930\u0923)", r"part\s*(?:name|description)"]),
         "sectionNumber": section_number,
         "sectionName": section_name,
         "sectionMap": section_map,
+        "village": labeled_value([r"\u0917\u094d\u0930\u093e\u092e", r"\u0917\u093e\u0901\u0935", r"\u0917\u093e\u0902\u0935", r"village"]),
+        "gramPanchayat": labeled_value([r"\u0917\u094d\u0930\u093e\u092e\s*\u092a\u0902\u091a\u093e\u092f\u0924", r"gram\s*panchayat"]),
+        "postOffice": labeled_value([r"\u0921\u093e\u0915\s*\u0918\u0930", r"\u0921\u093e\u0915\u0918\u0930", r"post\s*office"]),
+        "policeStation": labeled_value([r"\u092a\u0941\u0932\u093f\u0938\s*\u0925\u093e\u0928\u093e", r"\u0925\u093e\u0928\u093e", r"police\s*station"]),
+        "tehsil": labeled_value([r"\u0924\u0939\u0938\u0940\u0932", r"tehsil"]),
+        "district": labeled_value([r"\u091c\u093f\u0932\u093e", r"district"]),
+        "pinCode": labeled_value([r"\u092a\u093f\u0928\s*\u0915\u094b\u0921", r"pin\s*code"], numeric=True)
     }
 
 
@@ -520,8 +538,21 @@ def main():
     if os.getenv("TESSERACT_PATH"):
         pytesseract.pytesseract.tesseract_cmd = os.getenv("TESSERACT_PATH")
 
+    master_page = int(os.getenv("OCR_MASTER_PAGE", "1"))
+    skip_pages = {
+        int(value.strip()) for value in os.getenv("OCR_SKIP_PAGES", "2").split(",")
+        if value.strip().isdigit()
+    }
+
     def process_page_bundle(item):
         page_no, page = item
+        # Electoral-roll PDFs use the first scanned page as a location/master
+        # sheet. Read the larger header area but never treat it as voter cards.
+        if page_no == master_page:
+            return read_header(page, is_voter_page=False), []
+        # Cover/index pages must not create empty or duplicate voter records.
+        if page_no in skip_pages:
+            return "", []
         header = read_header(page, is_voter_page=True)
         return header, process_page(page, output_dir, page_no)
 
