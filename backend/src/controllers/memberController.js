@@ -265,8 +265,9 @@ const optionDefinitions = {
     group: { number: '$sectionNumber', name: '$sectionName' },
     match: { $or: [{ sectionNumber: { $nin: ['', null] } }, { sectionName: { $nin: ['', null] } }] },
     option: (id, count) => ({
-      value: id.number || id.name,
-      label: [id.number, id.name].filter(Boolean).join(' - '),
+      value: id.name || id.number,
+      // A number alone is ambiguous; show the location name first.
+      label: id.name && id.number ? `${id.name} (${id.number})` : id.name || `Section ${id.number || '-'}`,
       count,
       filters: {
         ...(id.number ? { sectionNumber: id.number } : {}),
