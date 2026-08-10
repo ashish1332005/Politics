@@ -266,17 +266,15 @@ const optionDefinitions = {
     }),
   },
   section: {
-    group: { number: '$sectionNumber', name: '$sectionName' },
-    match: { $or: [{ sectionNumber: { $nin: ['', null] } }, { sectionName: { $nin: ['', null] } }] },
+    // Older imports can miss sectionNumber even when the mohalla name is the
+    // same. Group by the stable name so one mohalla is shown only once.
+    group: '$sectionName',
+    match: { sectionName: { $nin: ['', null] } },
     option: (id, count) => ({
-      value: id.name || id.number,
-      // A number alone is ambiguous; show the location name first.
-      label: id.name && id.number ? `${id.name} (${id.number})` : id.name || `Section ${id.number || '-'}`,
+      value: id,
+      label: id,
       count,
-      filters: {
-        ...(id.number ? { sectionNumber: id.number } : {}),
-        ...(id.name ? { sectionName: id.name } : {}),
-      },
+      filters: { sectionName: id },
     }),
   },
   partVillage: {
