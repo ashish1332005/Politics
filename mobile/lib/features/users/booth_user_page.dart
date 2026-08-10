@@ -875,6 +875,7 @@ class _BoothVoterList extends StatelessWidget {
         key: ValueKey('$boothId-$query-$letter'),
         load: () => api.getQuery('/api/members', {
           'booth': boothId,
+          'contactType': 'voter',
           'q': query,
           'letter': letter,
           if (letter.isNotEmpty) 'qMode': 'name',
