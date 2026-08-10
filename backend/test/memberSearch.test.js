@@ -5,6 +5,7 @@ const Member = require('../src/models/Member');
 const {
   buildMemberSearchData,
   buildSearchConditions,
+  buildFieldSearchConditions,
   canonicalEpic,
   searchExactCandidates,
 } = require('../src/utils/memberSearch');
@@ -33,6 +34,18 @@ test('supports loose Hindi matra matching and multi-field query tokens', () => {
   assert.deepEqual(conditions[1].$or[0], { searchKeys: 'सहाडा' });
 });
 
+test('scopes quick search to voter name, guardian name or EPIC', () => {
+  const name = buildFieldSearchConditions('राम', 'name');
+  assert.deepEqual(Object.keys(name[0].$or[0]), ['name']);
+  assert.deepEqual(Object.keys(name[0].$or[1]), ['surname']);
+
+  const guardian = buildFieldSearchConditions('मोहनलाल', 'guardian');
+  assert.equal(guardian[0].$or.length, 1);
+  assert.deepEqual(Object.keys(guardian[0].$or[0]), ['guardianName']);
+
+  const epic = buildFieldSearchConditions('ABC1234567', 'epic');
+  assert.ok(epic[0].$or.every((condition) => Object.keys(condition)[0] === 'voterId'));
+});
 test('canonicalizes common OCR mistakes in EPIC numbers', () => {
   assert.equal(canonicalEpic('SNEO5736O6'), 'SNE0573606');
   assert.ok(searchExactCandidates('SNE0573606').includes('sne0573606'));

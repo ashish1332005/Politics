@@ -1,4 +1,4 @@
-﻿const XLSX = require('xlsx');
+const XLSX = require('xlsx');
 const ImportPreview = require('../models/ImportPreview');
 const Member = require('../models/Member');
 const ImportReview = require('../models/ImportReview');
@@ -15,17 +15,17 @@ const targets = [
 const guess = (header) => {
   const key = String(header).toLowerCase().replace(/[\s_-]/g, '');
   const aliases = {
-    name: ['name', 'fullname', 'à¤¨à¤¾à¤®'],
-    surname: ['surname', 'lastname', 'à¤‰à¤ªà¤¨à¤¾à¤®'],
-    mobile: ['mobile', 'phone', 'à¤®à¥‹à¤¬à¤¾à¤‡à¤²'],
-    voterId: ['voterid', 'epic', 'à¤®à¤¤à¤¦à¤¾à¤¤à¤¾à¤ªà¤¹à¤šà¤¾à¤¨à¤ªà¤¤à¥à¤°'],
-    guardianName: ['guardianname', 'fatherhusband', 'à¤ªà¤¿à¤¤à¤¾à¤•à¤¾à¤¨à¤¾à¤®'],
-    address: ['address', 'à¤ªà¤¤à¤¾'],
-    village: ['village', 'à¤—à¤¾à¤‚à¤µ', 'à¤—à¤¾à¤à¤µ'],
-    tehsil: ['tehsil', 'à¤¤à¤¹à¤¸à¥€à¤²'],
-    caste: ['caste', 'à¤œà¤¾à¤¤à¤¿'],
+    name: ['name', 'fullname', 'नाम'],
+    surname: ['surname', 'lastname', 'उपनाम'],
+    mobile: ['mobile', 'phone', 'मोबाइल'],
+    voterId: ['voterid', 'epic', 'मतदातापहचानपत्र'],
+    guardianName: ['guardianname', 'fatherhusband', 'पिताकानाम'],
+    address: ['address', 'पता'],
+    village: ['village', 'गांव', 'गाँव'],
+    tehsil: ['tehsil', 'तहसील'],
+    caste: ['caste', 'जाति'],
     areaName: ['area', 'क्षेत्र', 'पंचायत', 'नगरपालिका'],
-    organizationPost: ['post', 'designation', 'à¤ªà¤¦'],
+    organizationPost: ['post', 'designation', 'पद'],
   };
   return Object.entries(aliases).find(([, values]) => values.some((value) => key.includes(value)))?.[0] || '';
 };

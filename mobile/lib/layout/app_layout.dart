@@ -47,103 +47,181 @@ class CongressMark extends StatelessWidget {
 class MobileHeader extends StatelessWidget {
   const MobileHeader({
     super.key,
-    this.title =
-        'Ã Â¤Â®Ã Â¤Â¤Ã Â¤Â¦Ã Â¤Â¾Ã Â¤Â¤Ã Â¤Â¾ Ã Â¤Â«Ã Â¥â€¹Ã Â¤Â¨ Ã Â¤Â¬Ã Â¥ÂÃ Â¤â€¢',
+    this.title = 'मतदाता फ़ोन बुक',
     this.onSearch,
     this.onLogout,
   });
+
   final String title;
   final VoidCallback? onSearch;
   final VoidCallback? onLogout;
 
   @override
-  Widget build(BuildContext context) {
-    final isPhone = MediaQuery.sizeOf(context).width < 640;
-    return Container(
-      padding: EdgeInsets.fromLTRB(isPhone ? 8 : 18, 5, isPhone ? 8 : 18, 7),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: border)),
-      ),
-      child: SafeArea(
-        bottom: false,
-        child: Row(children: [
-          if (Scaffold.maybeOf(context)?.hasDrawer ?? false)
-            IconButton(
-              tooltip:
-                  'Ã Â¤Â®Ã Â¥â€¡Ã Â¤Â¨Ã Â¥â€š Ã Â¤â€“Ã Â¥â€¹Ã Â¤Â²Ã Â¥â€¡Ã Â¤â€š',
-              onPressed: () => Scaffold.of(context).openDrawer(),
-              icon: const Icon(Icons.menu_rounded, color: navy, size: 26),
+  Widget build(BuildContext context) => LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 420;
+          final veryCompact = constraints.maxWidth < 350;
+          final scaledText = MediaQuery.textScalerOf(context).scale(1) > 1.2;
+          final hasDrawer = Scaffold.maybeOf(context)?.hasDrawer ?? false;
+          final actionSize = veryCompact ? 40.0 : 44.0;
+
+          Widget action({required Widget child}) => SizedBox(
+                width: actionSize,
+                height: actionSize,
+                child: child,
+              );
+
+          return Container(
+            padding: EdgeInsets.fromLTRB(
+              compact ? 4 : 14,
+              5,
+              compact ? 4 : 14,
+              7,
             ),
-          Expanded(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              border: Border(bottom: BorderSide(color: border)),
+            ),
+            child: SafeArea(
+              bottom: false,
+              child: Row(children: [
+                if (hasDrawer)
+                  action(
+                    child: IconButton(
+                      key: const ValueKey('header-menu'),
+                      tooltip: 'मेनू खोलें',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: () => Scaffold.of(context).openDrawer(),
+                      icon: Icon(
+                        Icons.menu_rounded,
                         color: navy,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900)),
-                const Text(
-                    'Ã Â¤â€ Ã Â¤Â¸Ã Â¤Â¾Ã Â¤Â¨ Ã Â¤Â®Ã Â¤Â¤Ã Â¤Â¦Ã Â¤Â¾Ã Â¤Â¤Ã Â¤Â¾ Ã Â¤Â¸Ã Â¤â€šÃ Â¤ÂªÃ Â¤Â°Ã Â¥ÂÃ Â¤â€¢ Ã Â¤â€Ã Â¤Â° Ã Â¤ÂªÃ Â¥ÂÃ Â¤Â°Ã Â¤Â¬Ã Â¤â€šÃ Â¤Â§Ã Â¤Â¨',
-                    style: TextStyle(color: muted, fontSize: 10)),
-              ],
-            ),
-          ),
-          if (onSearch != null)
-            IconButton(
-              tooltip:
-                  'Ã Â¤Â®Ã Â¤Â¤Ã Â¤Â¦Ã Â¤Â¾Ã Â¤Â¤Ã Â¤Â¾ Ã Â¤â€“Ã Â¥â€¹Ã Â¤Å“Ã Â¥â€¡Ã Â¤â€š',
-              onPressed: onSearch,
-              icon: const Icon(Icons.search_rounded, color: navy),
-            ),
-          FutureBuilder<Map<String, dynamic>>(
-            future: api.get('/api/notifications/today'),
-            builder: (context, snapshot) {
-              final count = snapshot.data?['count'] ?? 0;
-              return Stack(clipBehavior: Clip.none, children: [
-                IconButton.filledTonal(
-                  tooltip:
-                      'Ã Â¤â€ Ã Â¤Å“ Ã Â¤â€¢Ã Â¥â‚¬ Ã Â¤Â¸Ã Â¥â€šÃ Â¤Å¡Ã Â¤Â¨Ã Â¤Â¾Ã Â¤ÂÃ Â¤Â',
-                  style: IconButton.styleFrom(
-                    backgroundColor: softBlue,
-                  ),
-                  onPressed: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) => const CelebrationsPage())),
-                  icon: Icon(Icons.notifications_none_rounded,
-                      color: navy, size: 23),
-                ),
-                if (count > 0)
-                  Positioned(
-                    right: 1,
-                    top: -1,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 5, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: rose,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: Colors.white, width: 1.5),
+                        size: veryCompact ? 24 : 27,
                       ),
-                      child: Text('$count',
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 9,
-                              fontWeight: FontWeight.w900)),
                     ),
                   ),
-              ]);
-            },
-          ),
-        ]),
-      ),
-    );
-  }
+                SizedBox(width: hasDrawer ? 2 : 6),
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: navy,
+                          fontSize: compact ? 17 : 18,
+                          height: 1.1,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      if (!veryCompact && !scaledText) ...[
+                        const SizedBox(height: 2),
+                        const Text(
+                          'आसान मतदाता संपर्क और प्रबंधन',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(color: muted, fontSize: 10),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                if (onSearch != null)
+                  action(
+                    child: IconButton(
+                      key: const ValueKey('header-search'),
+                      tooltip: 'मतदाता खोजें',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: onSearch,
+                      icon: const Icon(Icons.search_rounded, color: navy),
+                    ),
+                  ),
+                action(
+                  child: FutureBuilder<Map<String, dynamic>>(
+                    future: api.get('/api/notifications/today'),
+                    builder: (context, snapshot) {
+                      final count = snapshot.data?['count'] ?? 0;
+                      return Stack(clipBehavior: Clip.none, children: [
+                        IconButton.filledTonal(
+                          key: const ValueKey('header-notifications'),
+                          tooltip: 'आज की सूचनाएँ',
+                          visualDensity: VisualDensity.compact,
+                          style: IconButton.styleFrom(
+                            backgroundColor: softBlue,
+                          ),
+                          onPressed: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const CelebrationsPage(),
+                            ),
+                          ),
+                          icon: const Icon(
+                            Icons.notifications_none_rounded,
+                            color: navy,
+                            size: 22,
+                          ),
+                        ),
+                        if (count > 0)
+                          Positioned(
+                            right: 0,
+                            top: -2,
+                            child: Container(
+                              constraints: const BoxConstraints(minWidth: 18),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: rose,
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: Colors.white,
+                                  width: 1.5,
+                                ),
+                              ),
+                              child: Text(
+                                count > 99 ? '99+' : '$count',
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 8,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ]);
+                    },
+                  ),
+                ),
+                if (onLogout != null)
+                  action(
+                    child: PopupMenuButton<String>(
+                      key: const ValueKey('header-account-menu'),
+                      tooltip: 'खाता विकल्प',
+                      icon: const Icon(Icons.more_vert_rounded, color: navy),
+                      onSelected: (value) {
+                        if (value == 'logout') onLogout!();
+                      },
+                      itemBuilder: (_) => const [
+                        PopupMenuItem(
+                          value: 'logout',
+                          child: Row(children: [
+                            Icon(Icons.logout_rounded, color: rose),
+                            SizedBox(width: 10),
+                            Text('लॉग आउट'),
+                          ]),
+                        ),
+                      ],
+                    ),
+                  ),
+              ]),
+            ),
+          );
+        },
+      );
 }
 
 class DesktopSidebar extends StatelessWidget {
@@ -169,8 +247,7 @@ class DesktopSidebar extends StatelessWidget {
                   CongressMark(size: 42),
                   SizedBox(width: 10),
                   Expanded(
-                      child: Text(
-                          'Ã Â¤â€¢Ã Â¤Â¾Ã Â¤â€šÃ Â¤â€”Ã Â¥ÂÃ Â¤Â°Ã Â¥â€¡Ã Â¤Â¸ Ã Â¤Â¸Ã Â¤â€šÃ Â¤â€”Ã Â¤Â Ã Â¤Â¨\nÃ Â¤ÂªÃ Â¥ÂÃ Â¤Â°Ã Â¤Â¬Ã Â¤â€šÃ Â¤Â§Ã Â¤Â¨ Ã Â¤ÂªÃ Â¥ÂÃ Â¤Â°Ã Â¤Â£Ã Â¤Â¾Ã Â¤Â²Ã Â¥â‚¬',
+                      child: Text('कांग्रेस संगठन\nप्रबंधन प्रणाली',
                           style: TextStyle(
                               color: Colors.white,
                               height: 1.25,
@@ -263,9 +340,14 @@ class PageHeading extends StatelessWidget {
 }
 
 class AppDrawer extends StatelessWidget {
-  const AppDrawer({super.key, required this.role, required this.openPage});
+  const AppDrawer({
+    super.key,
+    required this.role,
+    required this.onLogout,
+  });
+
   final String role;
-  final void Function(Widget page, String title) openPage;
+  final VoidCallback onLogout;
 
   @override
   Widget build(BuildContext context) => Drawer(
@@ -277,28 +359,49 @@ class AppDrawer extends StatelessWidget {
                 CongressMark(),
                 SizedBox(width: 12),
                 Expanded(
-                    child: Text(
-                        'Ã Â¤â€¢Ã Â¤Â¾Ã Â¤â€šÃ Â¤â€”Ã Â¥ÂÃ Â¤Â°Ã Â¥â€¡Ã Â¤Â¸ Ã Â¤Â¸Ã Â¤â€šÃ Â¤â€”Ã Â¤Â Ã Â¤Â¨',
-                        style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w900,
-                            color: navy))),
+                  child: Text(
+                    'कांग्रेस संगठन',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                      color: navy,
+                    ),
+                  ),
+                ),
               ]),
             ),
-            const Divider(),
+            const Divider(height: 1),
             ListTile(
-                leading: const CircleAvatar(
-                    backgroundColor: softBlue,
-                    child: Icon(Icons.person_outline, color: blue)),
-                title: Text(api.user?['name'] ?? 'Admin User',
-                    style: const TextStyle(fontWeight: FontWeight.w900)),
-                subtitle: Text(role)),
+              leading: const CircleAvatar(
+                backgroundColor: softBlue,
+                child: Icon(Icons.person_outline, color: blue),
+              ),
+              title: Text(
+                api.user?['name'] ?? 'User',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.w900),
+              ),
+              subtitle: Text(role),
+            ),
             const Spacer(),
+            const Divider(height: 1),
+            ListTile(
+              key: const ValueKey('drawer-logout'),
+              leading: const Icon(Icons.logout_rounded, color: rose),
+              title: const Text(
+                'लॉग आउट',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
+              onTap: onLogout,
+            ),
             const Padding(
-              padding: EdgeInsets.all(20),
+              padding: EdgeInsets.fromLTRB(20, 10, 20, 20),
               child: Text(
-                  'Ã Â¤Â¸Ã Â¥ÂÃ Â¤Â°Ã Â¤â€¢Ã Â¥ÂÃ Â¤Â·Ã Â¤Â¿Ã Â¤Â¤ Ã Â¤Â®Ã Â¤Â¤Ã Â¤Â¦Ã Â¤Â¾Ã Â¤Â¤Ã Â¤Â¾ Ã Â¤ÂªÃ Â¥ÂÃ Â¤Â°Ã Â¤Â¬Ã Â¤â€šÃ Â¤Â§Ã Â¤Â¨ Ã Â¤ÂªÃ Â¥ÂÃ Â¤Â°Ã Â¤Â£Ã Â¤Â¾Ã Â¤Â²Ã Â¥â‚¬',
-                  style: TextStyle(color: muted)),
+                'सुरक्षित मतदाता प्रबंधन प्रणाली',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: muted),
+              ),
             ),
           ]),
         ),

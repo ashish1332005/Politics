@@ -297,9 +297,9 @@ const pick = (row, ...keys) => {
 
 const normalizeGender = (value) => {
   const gender = String(value || '').trim().toLowerCase();
-  if (['m', 'male', '?????', '??'].includes(gender)) return 'male';
-  if (['f', 'female', '?????', '??????'].includes(gender)) return 'female';
-  if (['o', 'other', 'others', '????', 'third gender', 'transgender'].includes(gender)) return 'other';
+  if (['m', 'male', 'पुरुष', 'पु'].includes(gender)) return 'male';
+  if (['f', 'female', 'महिला', 'स्त्री'].includes(gender)) return 'female';
+  if (['o', 'other', 'others', 'अन्य', 'third gender', 'transgender'].includes(gender)) return 'other';
   return '';
 };
 
@@ -328,43 +328,43 @@ const buildExtraDetails = (row) => Object.entries(row)
   ))
   .map(([label, value]) => ({ label: cleanValue(label), value: cleanValue(value) }));
 const normalize = (row) => {
-  const age = pick(row, 'age', 'Age', '????');
-  const address = legacyLocation(pick(row, 'address', 'Address', '???'));
-  const village = legacyLocation(pick(row, 'village', 'villege', 'Village', '????', '????'));
-  const gramPanchayat = legacyLocation(pick(row, 'gramPanchayat', 'gram panchayat', 'Gram Panchayat', '????? ??????'));
-  const tehsil = legacyLocation(pick(row, 'tehsil', 'Tehsil', 'block', 'Block', '?????'));
+  const age = pick(row, 'age', 'Age', 'उम्र', 'आयु');
+  const address = legacyLocation(pick(row, 'address', 'Address', 'पता'));
+  const village = legacyLocation(pick(row, 'village', 'villege', 'Village', 'गांव', 'गाँव'));
+  const gramPanchayat = legacyLocation(pick(row, 'gramPanchayat', 'gram panchayat', 'Gram Panchayat', 'ग्राम पंचायत'));
+  const tehsil = legacyLocation(pick(row, 'tehsil', 'Tehsil', 'block', 'Block', 'तहसील'));
   const presentCity = legacyLocation(pick(row, 'presant city', 'present city', 'Present City'));
   const presentState = legacyLocation(pick(row, 'presant state', 'present state', 'Present State'));
   const extraDetails = buildExtraDetails(row);
   if (presentCity) extraDetails.push({ label: 'Present City', value: presentCity });
   if (presentState) extraDetails.push({ label: 'Present State', value: presentState });
   return {
-    name: pick(row, 'name', 'Name', 'firstName', 'First Name', '???'),
-    surname: pick(row, 'surname', 'Surname', 'lastName', 'Last Name', '?????'),
-    mobile: String(pick(row, 'mobile', 'Mobile', 'Mobile No', 'phone', 'Phone', '??????') || '').trim(),
-    altMobile: String(pick(row, 'altMobile', 'Alternate Mobile', '???????? ??????') || '').trim(),
+    name: pick(row, 'name', 'Name', 'firstName', 'First Name', 'नाम'),
+    surname: pick(row, 'surname', 'Surname', 'lastName', 'Last Name', 'उपनाम'),
+    mobile: String(pick(row, 'mobile', 'Mobile', 'Mobile No', 'phone', 'Phone', 'मोबाइल') || '').trim(),
+    altMobile: String(pick(row, 'altMobile', 'Alternate Mobile', 'वैकल्पिक मोबाइल') || '').trim(),
     address,
     location: village || gramPanchayat || address,
-    gender: normalizeGender(pick(row, 'gender', 'Gender', '????')),
-    occupation: pick(row, 'occupation', 'Occupation', '???????'),
-    education: pick(row, 'education', 'Education', '??????'),
-    caste: pick(row, 'caste', 'Caste', 'Cast', '????'),
-    subCaste: pick(row, 'subCaste', 'Sub Caste', 'Sub-Caste', '??????'),
-    organizationPost: pick(row, 'organizationPost', 'Post', 'post', '??'),
-    organizationLevel: pick(row, 'organizationLevel', 'Post Level', '?? ????'),
+    gender: normalizeGender(pick(row, 'gender', 'Gender', 'लिंग')),
+    occupation: pick(row, 'occupation', 'Occupation', 'व्यवसाय'),
+    education: pick(row, 'education', 'Education', 'शिक्षा'),
+    caste: pick(row, 'caste', 'Caste', 'Cast', 'जाति'),
+    subCaste: pick(row, 'subCaste', 'Sub Caste', 'Sub-Caste', 'उपजाति'),
+    organizationPost: pick(row, 'organizationPost', 'Post', 'post', 'पद'),
+    organizationLevel: pick(row, 'organizationLevel', 'Post Level', 'पद स्तर'),
     supportLevel: String(pick(row, 'supportLevel', 'Support Level') || 'undecided').toLowerCase(),
-    voterId: pick(row, 'voterId', 'Voter ID', 'EPIC No', 'EPIC Number', 'EPIC', '???? ID', '?????? ????? ????'),
-    voterSerial: pick(row, 'voterSerial', 'Serial', 'Serial No', 'Sl. No. In Part', '???????'),
-    guardianName: pick(row, 'guardianName', 'Father/Husband', 's/o, d/o, w/o Name', '????/??? ?? ???', '???? ?? ???', '??? ?? ???'),
+    voterId: pick(row, 'voterId', 'Voter ID', 'EPIC No', 'EPIC Number', 'EPIC', 'मतदाता ID', 'मतदाता पहचान पत्र'),
+    voterSerial: pick(row, 'voterSerial', 'Serial', 'Serial No', 'Sl. No. In Part', 'क्रमांक'),
+    guardianName: pick(row, 'guardianName', 'Father/Husband', 's/o, d/o, w/o Name', 'पिता/पति का नाम', 'पिता का नाम', 'पति का नाम'),
     relationType: pick(row, 'relationType', 'RLN Type'),
-    houseNumber: pick(row, 'houseNumber', 'House Number', '??? ??????'),
+    houseNumber: pick(row, 'houseNumber', 'House Number', 'घर संख्या', 'गृह संख्या'),
     age,
     estimatedDob: estimateDobFromAge(age),
-    assemblyNumber: pick(row, 'assemblyNumber', 'AC No', 'Assembly No', '???????? ??????'),
-    assemblyName: pick(row, 'assemblyName', 'AC Name', 'Assembly Name', 'vidhansabha', '????????'),
-    partNumber: pick(row, 'partNumber', 'Part No.', 'Part No', '??? ??????'),
-    sectionNumber: pick(row, 'sectionNumber', 'Section Number', '?????? ??????'),
-    sectionName: legacyLocation(pick(row, 'sectionName', 'Section Name', '?????? ???')),
+    assemblyNumber: pick(row, 'assemblyNumber', 'AC No', 'Assembly No', 'विधानसभा संख्या'),
+    assemblyName: pick(row, 'assemblyName', 'AC Name', 'Assembly Name', 'vidhansabha', 'विधानसभा'),
+    partNumber: pick(row, 'partNumber', 'Part No.', 'Part No', 'भाग संख्या'),
+    sectionNumber: pick(row, 'sectionNumber', 'Section Number', 'अनुभाग संख्या'),
+    sectionName: legacyLocation(pick(row, 'sectionName', 'Section Name', 'अनुभाग नाम')),
     tehsil,
     gramPanchayat,
     village,
@@ -667,20 +667,20 @@ const parseHindiVoterRoll = (text, headerOverride) => {
     const end = serialMatches[i + 1]?.index || normalized.length;
     chunks.push(normalized.slice(start, end));
   }
-  const fallbackChunks = chunks.length ? chunks : normalized.split(/(?=à¤¨à¤¿à¤°à¥à¤µà¤¾\S*\s+à¤•à¤¾\s+à¤¨à¤¾à¤®)/);
+  const fallbackChunks = chunks.length ? chunks : normalized.split(/(?=निर्वाचक\S*\s+का\s+नाम)/);
 
   return fallbackChunks.map((chunk) => {
     const voterId = extractVoterId(chunk);
     const serial = chunk.match(/^\s*(\d{1,6})/m)?.[1];
-    const name = chunk.match(/(?:à¤¨à¤¿à¤°à¥à¤µà¤¾\S*|à¤®à¤¤à¤¦à¤¾à¤¤à¤¾)\s*(?:à¤•à¤¾)?\s*à¤¨à¤¾à¤®\s*[:ï¼š-]?\s*([^\n]+)/)?.[1];
-    const father = chunk.match(/(?:à¤ªà¤¿à¤¤à¤¾|à¤ªà¤¿\S*)\s*(?:à¤•à¤¾)?\s*à¤¨à¤¾à¤®\s*[:ï¼š-]?\s*([^\n]+)/)?.[1];
-    const husband = chunk.match(/(?:à¤ªà¤¤à¤¿|à¤ªà¤¤à¥à¤¤à¤¿|à¤ªà¥à¤°à¤¤à¤¿)\s*(?:à¤•à¤¾)?\s*à¤¨à¤¾à¤®\s*[:ï¼š-]?\s*([^\n]+)/)?.[1];
-    const mother = chunk.match(/à¤®à¤¾à¤¤à¤¾\s+à¤•à¤¾\s+à¤¨à¤¾à¤®\s*[:ï¼š-]?\s*([^\n]+)/)?.[1];
-    const house = chunk.match(/à¤—à¥ƒà¤¹\s*à¤¸à¤‚à¤–à¥à¤¯à¤¾\s*[:ï¼š-]?\s*([^\n]+)/)?.[1];
-    const age = chunk.match(/(?:à¤‰à¤®à¥à¤°|à¤‰à¤ªà¥à¤°|à¤†à¤¯à¥)\s*[:ï¼š-]?\s*([0-9]{1,3})/i)?.[1];
-    const genderText = chunk.match(/à¤²à¤¿à¤‚à¤—\s*[:ï¼š-]?\s*([^\n\s]+)/)?.[1];
+    const name = chunk.match(/(?:निर्वाचक\S*|मतदाता)\s*(?:का)?\s*नाम\s*[:：-]?\s*([^\n]+)/)?.[1];
+    const father = chunk.match(/(?:पिता|पि\S*)\s*(?:का)?\s*नाम\s*[:：-]?\s*([^\n]+)/)?.[1];
+    const husband = chunk.match(/(?:पति|पत्ति|प्रति)\s*(?:का)?\s*नाम\s*[:：-]?\s*([^\n]+)/)?.[1];
+    const mother = chunk.match(/माता\s+का\s+नाम\s*[:：-]?\s*([^\n]+)/)?.[1];
+    const house = chunk.match(/गृह\s*संख्या\s*[:：-]?\s*([^\n]+)/)?.[1];
+    const age = chunk.match(/(?:उम्र|उप्र|आयु)\s*[:：-]?\s*([0-9]{1,3})/i)?.[1];
+    const genderText = chunk.match(/लिंग\s*[:：-]?\s*([^\n\s]+)/)?.[1];
     const cleanOcrField = (value) => cleanValue(value)
-      .replace(/\s+(?:of|fire|fra|rs|à¤—à¥ƒà¤¹|à¤‰à¤®à¥à¤°|à¤²à¤¿à¤‚à¤—)\b.*$/i, '')
+      .replace(/\s+(?:of|fire|fra|rs|गृह|उम्र|लिंग)\b.*$/i, '')
       .replace(/[|\\]+$/g, '')
       .trim();
     const guardianName = cleanOcrField(father || husband || mother || '');
@@ -927,8 +927,8 @@ const parsePdfMembers = async (filePath, importFileName, onOcrProgress) => {
     ...parseHeader(text),
     ...(extracted.ocr?.header || {}),
   };
-  header.assemblyName = cleanHeaderName(header.assemblyName, /à¤­à¤¾à¤—\s*à¤¸à¤‚à¤–à¥à¤¯à¤¾|à¤…à¤¨à¥à¤­à¤¾à¤—/i);
-  header.sectionName = cleanHeaderName(header.sectionName, /à¤­à¤¾à¤—\s*à¤¸à¤‚à¤–à¥à¤¯à¤¾|à¤µà¤¿à¤§à¤¾à¤¨\s*à¤¸à¤­à¤¾/i);
+  header.assemblyName = cleanHeaderName(header.assemblyName, /भाग\s*संख्या|अनुभाग/i);
+  header.sectionName = cleanHeaderName(header.sectionName, /भाग\s*संख्या|विधान\s*सभा/i);
   const voterRollMembers = extracted.ocr?.voterRecords?.length
     ? extracted.ocr.voterRecords.flatMap((record) => (
       record.name

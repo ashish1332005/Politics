@@ -52,21 +52,20 @@ class _BoothPageState extends State<BoothPage> {
                 0, (sum, user) => sum + _boothStat(user, 'boothVoterCount'));
             return AppPage(children: [
               PremiumFeatureHero(
-                title:
-                    'Ã Â¤Â¬Ã Â¥â€šÃ Â¤Â¥ Ã Â¤ÂªÃ Â¥ÂÃ Â¤Â°Ã Â¤Â¬Ã Â¤â€šÃ Â¤Â§Ã Â¤Â¨',
+                title: 'बूथ प्रबंधन',
                 subtitle:
-                    'Ã Â¤Â¬Ã Â¥â€šÃ Â¤Â¥ Ã Â¤â€¢Ã Â¥â‚¬ Ã Â¤Å“Ã Â¤Â¾Ã Â¤Â¨Ã Â¤â€¢Ã Â¤Â¾Ã Â¤Â°Ã Â¥â‚¬, ward mapping Ã Â¤â€Ã Â¤Â° address Ã Â¤ÂÃ Â¤â€¢ Ã Â¤Å“Ã Â¤â€”Ã Â¤Â¹ Ã Â¤Â¸Ã Â¤â€šÃ Â¤Â­Ã Â¤Â¾Ã Â¤Â²Ã Â¥â€¡Ã Â¤â€šÃ Â¥Â¤',
+                    'बूथ की जानकारी, ward mapping और address एक जगह संभालें।',
                 icon: Icons.how_to_vote_rounded,
                 badges: const ['Ward linked', 'Organized', 'Secure'],
                 action: FilledButton.icon(
                   onPressed: () => _openForm(),
                   icon: const Icon(Icons.add_rounded),
-                  label: const Text('Ã Â¤Â¨Ã Â¤Â¯Ã Â¤Â¾ Ã Â¤Â¬Ã Â¥â€šÃ Â¤Â¥'),
+                  label: const Text('नया बूथ'),
                 ),
               ),
               Wrap(spacing: 10, runSpacing: 10, children: [
-                _BoothMetric('Ã Â¤â€¢Ã Â¥ÂÃ Â¤Â² Ã Â¤Â¬Ã Â¥â€šÃ Â¤Â¥',
-                    booths.length, Icons.how_to_vote_rounded, blue),
+                _BoothMetric(
+                    'कुल बूथ', booths.length, Icons.how_to_vote_rounded, blue),
                 _BoothMetric('Active manager', activeManagers,
                     Icons.verified_user_rounded, green),
                 _BoothMetric(
@@ -77,14 +76,12 @@ class _BoothPageState extends State<BoothPage> {
                 controller: search,
                 onChanged: (_) => setState(() {}),
                 decoration: InputDecoration(
-                  hintText:
-                      'Ã Â¤Â¬Ã Â¥â€šÃ Â¤Â¥ Ã Â¤Â¨Ã Â¤â€šÃ Â¤Â¬Ã Â¤Â°, Ã Â¤Â¨Ã Â¤Â¾Ã Â¤Â®, Ã Â¤ÂµÃ Â¤Â¾Ã Â¤Â°Ã Â¥ÂÃ Â¤Â¡ Ã Â¤Â¯Ã Â¤Â¾ Ã Â¤â€¢Ã Â¥ÂÃ Â¤Â·Ã Â¥â€¡Ã Â¤Â¤Ã Â¥ÂÃ Â¤Â° Ã Â¤â€“Ã Â¥â€¹Ã Â¤Å“Ã Â¥â€¡Ã Â¤â€š...',
+                  hintText: 'बूथ नंबर, नाम, वार्ड या क्षेत्र खोजें...',
                   prefixIcon: const Icon(Icons.search_rounded),
                   suffixIcon: search.text.isEmpty
                       ? null
                       : IconButton(
-                          tooltip:
-                              'Search Ã Â¤Â¸Ã Â¤Â¾Ã Â¤Â« Ã Â¤â€¢Ã Â¤Â°Ã Â¥â€¡Ã Â¤â€š',
+                          tooltip: 'Search साफ करें',
                           onPressed: () {
                             search.clear();
                             setState(() {});
@@ -94,24 +91,19 @@ class _BoothPageState extends State<BoothPage> {
                 ),
               ),
               PremiumSectionTitle(
-                title:
-                    'Ã Â¤Â¸Ã Â¤Â­Ã Â¥â‚¬ Ã Â¤Â¬Ã Â¥â€šÃ Â¤Â¥ (${filtered.length}/${booths.length})',
-                subtitle:
-                    'Ã Â¤Â¸Ã Â¤â€šÃ Â¤ÂªÃ Â¤Â¾Ã Â¤Â¦Ã Â¤Â¿Ã Â¤Â¤ Ã Â¤â€¢Ã Â¤Â°Ã Â¤Â¨Ã Â¥â€¡ Ã Â¤â€¢Ã Â¥â€¡ Ã Â¤Â²Ã Â¤Â¿Ã Â¤Â card Ã Â¤ÂªÃ Â¤Â° tap Ã Â¤â€¢Ã Â¤Â°Ã Â¥â€¡Ã Â¤â€š',
+                title: 'सभी बूथ (${filtered.length}/${booths.length})',
+                subtitle: 'संपादित करने के लिए card पर tap करें',
                 icon: Icons.location_city_rounded,
               ),
               if (booths.isEmpty)
                 PremiumEmptyState(
                   icon: Icons.how_to_vote_outlined,
-                  title:
-                      'Ã Â¤â€¦Ã Â¤Â­Ã Â¥â‚¬ Ã Â¤â€¢Ã Â¥â€¹Ã Â¤Ë† Ã Â¤Â¬Ã Â¥â€šÃ Â¤Â¥ Ã Â¤Â¨Ã Â¤Â¹Ã Â¥â‚¬Ã Â¤â€š Ã Â¤Â¹Ã Â¥Ë†',
-                  subtitle:
-                      'Ã Â¤ÂªÃ Â¤Â¹Ã Â¤Â²Ã Â¤Â¾ Ã Â¤Â¬Ã Â¥â€šÃ Â¤Â¥ Ã Â¤Å“Ã Â¥â€¹Ã Â¤Â¡Ã Â¤Â¼Ã Â¤â€¢Ã Â¤Â° Ã Â¤ÂªÃ Â¥ÂÃ Â¤Â°Ã Â¤Â¬Ã Â¤â€šÃ Â¤Â§Ã Â¤Â¨ Ã Â¤Â¶Ã Â¥ÂÃ Â¤Â°Ã Â¥â€š Ã Â¤â€¢Ã Â¤Â°Ã Â¥â€¡Ã Â¤â€š',
+                  title: 'अभी कोई बूथ नहीं है',
+                  subtitle: 'पहला बूथ जोड़कर प्रबंधन शुरू करें',
                   action: FilledButton.icon(
                     onPressed: () => _openForm(),
                     icon: const Icon(Icons.add_rounded),
-                    label: const Text(
-                        'Ã Â¤Â¬Ã Â¥â€šÃ Â¤Â¥ Ã Â¤Å“Ã Â¥â€¹Ã Â¤Â¡Ã Â¤Â¼Ã Â¥â€¡Ã Â¤â€š'),
+                    label: const Text('बूथ जोड़ें'),
                   ),
                 )
               else if (query.isEmpty)
@@ -190,8 +182,7 @@ class _BoothPageState extends State<BoothPage> {
                                             crossAxisAlignment:
                                                 CrossAxisAlignment.start,
                                             children: [
-                                              Text(
-                                                  'Ã Â¤Â¬Ã Â¥â€šÃ Â¤Â¥ ${booth['number'] ?? '-'}',
+                                              Text(' ${booth['number'] ?? '-'}',
                                                   style: const TextStyle(
                                                       color: navy,
                                                       fontSize: 17,
@@ -217,7 +208,7 @@ class _BoothPageState extends State<BoothPage> {
                                                 : green,
                                             size: 16),
                                         label: Text(assigned.isEmpty
-                                            ? 'Manager Ã Â¤Â¨Ã Â¤Â¹Ã Â¥â‚¬Ã Â¤â€š'
+                                            ? 'Manager '
                                             : '$active active'),
                                       ),
                                     ]),
@@ -226,13 +217,13 @@ class _BoothPageState extends State<BoothPage> {
                                       [
                                         if ('${ward['number'] ?? ''}'
                                             .isNotEmpty)
-                                          'Ã Â¤ÂµÃ Â¤Â¾Ã Â¤Â°Ã Â¥ÂÃ Â¤Â¡ ${ward['number']}',
+                                          'वार्ड ${ward['number']}',
                                         '${booth['area'] ?? ''}',
                                         '${booth['address'] ?? ''}',
                                       ]
                                           .where((value) =>
                                               value.trim().isNotEmpty)
-                                          .join(' Ã‚Â· '),
+                                          .join(' · '),
                                       maxLines: 2,
                                       overflow: TextOverflow.ellipsis,
                                       style: const TextStyle(
@@ -332,10 +323,7 @@ class _BoothPageState extends State<BoothPage> {
           ),
           const SizedBox(width: 10),
           Expanded(
-            child: Text(
-                booth == null
-                    ? 'Ã Â¤Â¨Ã Â¤Â¯Ã Â¤Â¾ Ã Â¤Â¬Ã Â¥â€šÃ Â¤Â¥ Ã Â¤Å“Ã Â¥â€¹Ã Â¤Â¡Ã Â¤Â¼Ã Â¥â€¡Ã Â¤â€š'
-                    : 'Ã Â¤Â¬Ã Â¥â€šÃ Â¤Â¥ Ã Â¤Â¸Ã Â¤â€šÃ Â¤ÂªÃ Â¤Â¾Ã Â¤Â¦Ã Â¤Â¿Ã Â¤Â¤ Ã Â¤â€¢Ã Â¤Â°Ã Â¥â€¡Ã Â¤â€š',
+            child: Text(booth == null ? '  ' : 'बूथ संपादित करें',
                 style: const TextStyle(fontWeight: FontWeight.w900)),
           ),
         ]),
@@ -345,39 +333,34 @@ class _BoothPageState extends State<BoothPage> {
                 controller: number,
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
-                    labelText:
-                        'Ã Â¤Â¬Ã Â¥â€šÃ Â¤Â¥ Ã Â¤Â¸Ã Â¤â€šÃ Â¤â€“Ã Â¥ÂÃ Â¤Â¯Ã Â¤Â¾ *',
+                    labelText: 'बूथ संख्या *',
                     prefixIcon: Icon(Icons.confirmation_number_rounded),
-                    helperText: 'Ã Â¤Å“Ã Â¥Ë†Ã Â¤Â¸Ã Â¥â€¡ 79, 80, 81')),
+                    helperText: 'जैसे 79, 80, 81')),
             const SizedBox(height: 10),
             TextField(
                 controller: name,
                 decoration: const InputDecoration(
-                    labelText:
-                        'Ã Â¤â€¦Ã Â¤Â¨Ã Â¥ÂÃ Â¤Â­Ã Â¤Â¾Ã Â¤â€” / Ã Â¤â€”Ã Â¤Â¾Ã Â¤ÂÃ Â¤Âµ Ã Â¤Â¨Ã Â¤Â¾Ã Â¤Â® *',
+                    labelText: 'अनुभाग / गाँव नाम *',
                     prefixIcon: Icon(Icons.home_work_rounded),
-                    helperText:
-                        'PDF Ã Â¤Â®Ã Â¥â€¡Ã Â¤â€š Ã Â¤â€ Ã Â¤Â¯Ã Â¤Â¾ Ã Â¤â€¦Ã Â¤Â¨Ã Â¥ÂÃ Â¤Â­Ã Â¤Â¾Ã Â¤â€” Ã Â¤Â¯Ã Â¤Â¾ Ã Â¤â€”Ã Â¤Â¾Ã Â¤ÂÃ Â¤Âµ Ã Â¤Â¨Ã Â¤Â¾Ã Â¤Â®')),
+                    helperText: 'PDF में आया अनुभाग या गाँव नाम')),
             const SizedBox(height: 10),
             TextField(
                 controller: ward,
                 decoration: const InputDecoration(
-                    labelText:
-                        'Ã Â¤ÂµÃ Â¤Â¾Ã Â¤Â°Ã Â¥ÂÃ Â¤Â¡ Ã Â¤Â¸Ã Â¤â€šÃ Â¤â€“Ã Â¥ÂÃ Â¤Â¯Ã Â¤Â¾ / Ã Â¤Â¨Ã Â¤Â¾Ã Â¤Â® *',
+                    labelText: 'वार्ड संख्या / नाम *',
                     prefixIcon: Icon(Icons.map_rounded))),
             const SizedBox(height: 10),
             TextField(
                 controller: area,
                 decoration: const InputDecoration(
-                    labelText:
-                        'Ã Â¤â€”Ã Â¤Â¾Ã Â¤ÂÃ Â¤Âµ / Ã Â¤â€¢Ã Â¥ÂÃ Â¤Â·Ã Â¥â€¡Ã Â¤Â¤Ã Â¥ÂÃ Â¤Â°',
+                    labelText: 'गाँव / क्षेत्र',
                     prefixIcon: Icon(Icons.location_city_rounded))),
             const SizedBox(height: 10),
             TextField(
                 controller: address,
                 maxLines: 2,
                 decoration: const InputDecoration(
-                    labelText: 'Ã Â¤ÂªÃ Â¥â€šÃ Â¤Â°Ã Â¤Â¾ Ã Â¤ÂªÃ Â¤Â¤Ã Â¤Â¾',
+                    labelText: 'पूरा पता',
                     prefixIcon: Icon(Icons.location_on_rounded))),
           ]),
         ),
@@ -389,20 +372,18 @@ class _BoothPageState extends State<BoothPage> {
                 final ok = await showDialog<bool>(
                   context: context,
                   builder: (dialogContext) => AlertDialog(
-                    title: const Text(
-                        'Ã Â¤Â¬Ã Â¥â€šÃ Â¤Â¥ Ã Â¤Â¹Ã Â¤Å¸Ã Â¤Â¾Ã Â¤ÂÃ Â¤Â?'),
+                    title: const Text('बूथ हटाएँ?'),
                     content: const Text(
-                        'Ã Â¤â€¡Ã Â¤Â¸ Ã Â¤Â¬Ã Â¥â€šÃ Â¤Â¥ Ã Â¤â€¢Ã Â¥â‚¬ mapping Ã Â¤Â¹Ã Â¤Å¸ Ã Â¤Å“Ã Â¤Â¾Ã Â¤ÂÃ Â¤â€”Ã Â¥â‚¬Ã Â¥Â¤ Ã Â¤Å“Ã Â¥ÂÃ Â¤Â¡Ã Â¤Â¼Ã Â¥â€¡ voters Ã Â¤â€¢Ã Â¥â€¹ Ã Â¤ÂªÃ Â¤Â¹Ã Â¤Â²Ã Â¥â€¡ Ã Â¤Â¦Ã Â¥â€šÃ Â¤Â¸Ã Â¤Â°Ã Â¥â€¡ Ã Â¤Â¬Ã Â¥â€šÃ Â¤Â¥ Ã Â¤Â®Ã Â¥â€¡Ã Â¤â€š assign Ã Â¤â€¢Ã Â¤Â°Ã Â¥â€¡Ã Â¤â€šÃ Â¥Â¤'),
+                        'इस बूथ की mapping हट जाएगी। जुड़े voters को पहले दूसरे बूथ में assign करें।'),
                     actions: [
                       TextButton(
                           onPressed: () => Navigator.pop(dialogContext, false),
-                          child: const Text(
-                              'Ã Â¤Â°Ã Â¤Â¦Ã Â¥ÂÃ Â¤Â¦ Ã Â¤â€¢Ã Â¤Â°Ã Â¥â€¡Ã Â¤â€š')),
+                          child: const Text('रद्द करें')),
                       FilledButton(
                         style:
                             FilledButton.styleFrom(backgroundColor: Colors.red),
                         onPressed: () => Navigator.pop(dialogContext, true),
-                        child: const Text('Ã Â¤Â¹Ã Â¤Å¸Ã Â¤Â¾Ã Â¤ÂÃ Â¤Â'),
+                        child: const Text('हटाएँ'),
                       ),
                     ],
                   ),
@@ -423,16 +404,14 @@ class _BoothPageState extends State<BoothPage> {
                 }
               },
               icon: const Icon(Icons.delete_outline_rounded),
-              label: const Text(
-                  'Ã Â¤Â¬Ã Â¥â€šÃ Â¤Â¥ Ã Â¤Â¹Ã Â¤Å¸Ã Â¤Â¾Ã Â¤ÂÃ Â¤Â'),
+              label: const Text('बूथ हटाएँ'),
             ),
           TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text(
-                  'Ã Â¤Â°Ã Â¤Â¦Ã Â¥ÂÃ Â¤Â¦ Ã Â¤â€¢Ã Â¤Â°Ã Â¥â€¡Ã Â¤â€š')),
+              child: const Text('रद्द करें')),
           FilledButton(
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('Ã Â¤Â¸Ã Â¤Â¹Ã Â¥â€¡Ã Â¤Å“Ã Â¥â€¡Ã Â¤â€š')),
+              child: const Text('सहेजें')),
         ],
       ),
     );
@@ -536,7 +515,7 @@ class _BoothHierarchyDirectoryState extends State<_BoothHierarchyDirectory> {
       }
     }
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      _back('Assembly: ' + assembly! + ' Â· ????: ' + village!,
+      _back('Assembly: ' + assembly! + '  गाँव: ' + village!,
           () => setState(() => village = null)),
       _level(
         'Choose section',

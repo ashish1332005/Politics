@@ -279,6 +279,27 @@ const optionDefinitions = {
       },
     }),
   },
+  partVillage: {
+    group: { village: '$village', partNumber: '$partNumber' },
+    match: {
+      $or: [
+        { village: { $nin: ['', null] } },
+        { partNumber: { $nin: ['', null] } },
+      ],
+    },
+    option: (id, count) => ({
+      value: [id.village, id.partNumber].filter(Boolean).join('|'),
+      label: [
+        id.village || 'गाँव उपलब्ध नहीं',
+        id.partNumber ? `भाग ${id.partNumber}` : '',
+      ].filter(Boolean).join(' · '),
+      count,
+      filters: {
+        ...(id.village ? { village: id.village } : {}),
+        ...(id.partNumber ? { partNumber: id.partNumber } : {}),
+      },
+    }),
+  },
   village: { field: 'village' },
   gramPanchayat: { field: 'gramPanchayat' },
   tehsil: { field: 'tehsil' },
@@ -288,7 +309,7 @@ const optionDefinitions = {
     match: { partNumber: { $nin: ['', null] } },
     option: (id, count) => ({
       value: id.number || id.name,
-      label: id.name && id.number ? `${id.name} ? Part ${id.number}` : id.name || `Part ${id.number || '-'}`,
+      label: id.name && id.number ? `${id.name} · भाग ${id.number}` : id.name || `Part ${id.number || '-'}`,
       count,
       filters: id.number ? { partNumber: id.number } : { sectionName: id.name },
     }),

@@ -24,6 +24,14 @@ class _AppShellState extends State<AppShell> {
 
   void select(int index) => setState(() => selected = index);
 
+  void logout() {
+    api.logout();
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginPage()),
+      (_) => false,
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -87,9 +95,12 @@ class _AppShellState extends State<AppShell> {
     final wide = MediaQuery.sizeOf(context).width >= 900;
     final currentItems = items;
     return Scaffold(
-      drawer: wide || widget.role == 'booth'
+      drawer: wide
           ? null
-          : AppDrawer(role: widget.role, openPage: (_, __) {}),
+          : AppDrawer(
+              role: widget.role,
+              onLogout: logout,
+            ),
       body: Row(children: [
         if (wide)
           DesktopSidebar(
@@ -99,15 +110,7 @@ class _AppShellState extends State<AppShell> {
             MobileHeader(
               title: currentItems[selected].label,
               onSearch: () => select(widget.role == 'booth' ? 0 : 1),
-              onLogout: widget.role == 'booth'
-                  ? () {
-                      api.logout();
-                      Navigator.of(context).pushAndRemoveUntil(
-                        MaterialPageRoute(builder: (_) => const LoginPage()),
-                        (_) => false,
-                      );
-                    }
-                  : null,
+              onLogout: widget.role == 'booth' ? logout : null,
             ),
             Expanded(
               child: IndexedStack(

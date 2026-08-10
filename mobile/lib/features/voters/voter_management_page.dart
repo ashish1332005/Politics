@@ -79,7 +79,6 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
 
   void searchChanged(String _) {
     searchDebounce?.cancel();
-    if (queryMode.isNotEmpty) queryMode = '';
     setState(() {});
     searchDebounce = Timer(const Duration(milliseconds: 450), () {
       if (mounted) filtersChanged();
@@ -207,6 +206,7 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
       gender = '';
       verificationStatus = '';
       contactTypeFilter = '';
+      queryMode = '';
       nameLetter = '';
       currentPage = 1;
       selectedIds.clear();
@@ -218,6 +218,14 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
 
   String _filterValue(String field, TextEditingController controller) =>
       selectedOptionLabels[field] ?? controller.text.trim();
+
+  String get partVillageValue =>
+      selectedOptionLabels['partVillage'] ??
+      [
+        if (village.text.trim().isNotEmpty) village.text.trim(),
+        if (boothNumber.text.trim().isNotEmpty)
+          'भाग ${boothNumber.text.trim()}',
+      ].join(' · ');
 
   void _rememberRecentFilter(String field, String title, _FilterOption option) {
     recentFilters.removeWhere(
@@ -237,6 +245,19 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
   }
 
   void _applyRecentFilter(_RecentFilter filter) => setState(() {
+        if (filter.field == 'partVillage') {
+          for (final field in ['village', 'partNumber', 'section']) {
+            selectedOptionFilters.remove(field);
+            selectedOptionLabels.remove(field);
+          }
+          village.text = filter.filters['village'] ?? '';
+          boothNumber.text = filter.filters['partNumber'] ?? '';
+          sectionNumber.clear();
+          sectionName.clear();
+        } else if (filter.field == 'section') {
+          sectionNumber.text = filter.filters['sectionNumber'] ?? '';
+          sectionName.text = filter.filters['sectionName'] ?? filter.label;
+        }
         selectedOptionFilters[filter.field] = filter.filters;
         selectedOptionLabels[filter.field] = filter.label;
         currentPage = 1;
@@ -264,9 +285,11 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
   void _clearLocationFilters() => setState(() {
         for (final field in [
           'assembly',
+          'partVillage',
           'village',
           'gramPanchayat',
-          'partNumber'
+          'partNumber',
+          'section',
         ]) {
           selectedOptionFilters.remove(field);
           selectedOptionLabels.remove(field);
@@ -275,6 +298,8 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
         village.clear();
         gramPanchayat.clear();
         boothNumber.clear();
+        sectionNumber.clear();
+        sectionName.clear();
         currentPage = 1;
         selectedIds.clear();
         refreshVoters();
@@ -337,16 +362,9 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
             }));
     add('विधानसभा', _filterValue('assembly', assemblyNumber),
         () => _clearSmartOrText('assembly', assemblyNumber));
-    add('गाँव', _filterValue('village', village),
-        () => _clearSmartOrText('village', village));
-    add('पंचायत', _filterValue('gramPanchayat', gramPanchayat),
-        () => _clearSmartOrText('gramPanchayat', gramPanchayat));
-    add('भाग', _filterValue('partNumber', boothNumber),
-        () => _clearSmartOrText('partNumber', boothNumber));
-    add('अनुभाग नं.', sectionNumber.text,
-        () => _clearFilterText(sectionNumber));
-    add('अनुभाग', _filterValue('section', sectionName),
-        () => _clearSmartOrText('section', sectionName));
+    add('भाग / गाँव', partVillageValue, _clearPartVillageFilter);
+    add('अनुभाग / मोहल्ला', _filterValue('section', sectionName),
+        _clearSectionFilter);
     add('तहसील', _filterValue('tehsil', tehsil),
         () => _clearSmartOrText('tehsil', tehsil));
     add('नगर पालिका', _filterValue('municipality', municipality),
@@ -408,26 +426,25 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
     return 'name';
   }
 
-  Future<void> useQuickSearch(String mode) async {
+  void useQuickSearch(String mode) {
     final cleanMode = mode.startsWith('जैसे') ? 'नाम' : mode;
-    final value = await showDialog<String>(
-      context: context,
-      builder: (_) => _QuickSearchDialog(mode: cleanMode),
-    );
-    if (value == null || value.trim().isEmpty || !mounted) {
-      searchFocus.requestFocus();
-      return;
-    }
     setState(() {
-      search.text = value.trim();
       queryMode = quickSearchMode(cleanMode);
-      search.selection = TextSelection.collapsed(offset: search.text.length);
       currentPage = 1;
       selectedIds.clear();
       refreshVoters();
     });
     searchFocus.requestFocus();
   }
+
+  String get queryModeLabel => switch (queryMode) {
+        'name' => 'नाम',
+        'guardian' => 'पिता/पति',
+        'epic' => 'EPIC',
+        'house' => 'घर',
+        'mobile' => 'मोबाइल',
+        _ => '',
+      };
 
   Future<void> openLocationCorrection() async {
     final changed = await showDialog<bool>(
@@ -445,6 +462,7 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
 
   static const smartFieldKeys = <String, List<String>>{
     'assembly': ['assemblyNumber', 'assemblyName'],
+    'partVillage': ['village', 'partNumber'],
     'village': ['village'],
     'gramPanchayat': ['gramPanchayat'],
     'tehsil': ['tehsil'],
@@ -457,6 +475,14 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
   };
 
   Future<void> openSmartFilter(String field, String title) async {
+    if (field == 'section' &&
+        api.user?['role'] != 'booth' &&
+        partVillageValue.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('पहले भाग / गाँव चुनें।')),
+      );
+      return;
+    }
     final current = Map<String, String?>.from(filterQuery);
     for (final key in smartFieldKeys[field] ?? const <String>[]) {
       current.remove(key);
@@ -474,6 +500,19 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
     );
     if (option == null || !mounted) return;
     setState(() {
+      if (field == 'partVillage') {
+        for (final oldField in ['village', 'partNumber', 'section']) {
+          selectedOptionFilters.remove(oldField);
+          selectedOptionLabels.remove(oldField);
+        }
+        village.text = option.filters['village'] ?? '';
+        boothNumber.text = option.filters['partNumber'] ?? '';
+        sectionNumber.clear();
+        sectionName.clear();
+      } else if (field == 'section') {
+        sectionNumber.text = option.filters['sectionNumber'] ?? '';
+        sectionName.text = option.filters['sectionName'] ?? option.label;
+      }
       selectedOptionFilters[field] = option.filters;
       selectedOptionLabels[field] = option.label;
       _rememberRecentFilter(field, title, option);
@@ -497,13 +536,53 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
         ),
       );
 
-  void clearSmartFilter(String field) => setState(() {
-        selectedOptionFilters.remove(field);
-        selectedOptionLabels.remove(field);
+  void _clearPartVillageFilter() => setState(() {
+        for (final field in [
+          'partVillage',
+          'village',
+          'partNumber',
+          'section'
+        ]) {
+          selectedOptionFilters.remove(field);
+          selectedOptionLabels.remove(field);
+        }
+        village.clear();
+        boothNumber.clear();
+        sectionNumber.clear();
+        sectionName.clear();
         currentPage = 1;
         selectedIds.clear();
         refreshVoters();
       });
+
+  void _clearSectionFilter() => setState(() {
+        selectedOptionFilters.remove('section');
+        selectedOptionLabels.remove('section');
+        sectionNumber.clear();
+        sectionName.clear();
+        currentPage = 1;
+        selectedIds.clear();
+        refreshVoters();
+      });
+
+  void clearSmartFilter(String field) {
+    if (field == 'partVillage') {
+      _clearPartVillageFilter();
+      return;
+    }
+    if (field == 'section') {
+      _clearSectionFilter();
+      return;
+    }
+    setState(() {
+      selectedOptionFilters.remove(field);
+      selectedOptionLabels.remove(field);
+      currentPage = 1;
+      selectedIds.clear();
+      refreshVoters();
+    });
+  }
+
   Future<void> openCustomPrint() async {
     final options = await showDialog<_PrintOptions>(
       context: context,
@@ -673,8 +752,39 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
     var nextVerification = verificationStatus;
     final nextVillage = TextEditingController(text: village.text);
     final nextBooth = TextEditingController(text: boothNumber.text);
+    final nextPartVillage = TextEditingController(text: partVillageValue);
+    final nextSectionNumber = TextEditingController(text: sectionNumber.text);
+    final nextSectionName = TextEditingController(text: sectionName.text);
+    final nextSection = TextEditingController(
+      text: _filterValue('section', sectionName),
+    );
     final nextPosition = TextEditingController(text: organizationPost.text);
     final nextOccupation = TextEditingController(text: occupation.text);
+
+    void applyPhoneFilters() => setState(() {
+          support = nextSupport;
+          gender = nextGender;
+          verificationStatus = nextVerification;
+          for (final field in [
+            'partVillage',
+            'village',
+            'partNumber',
+            'section',
+          ]) {
+            selectedOptionFilters.remove(field);
+            selectedOptionLabels.remove(field);
+          }
+          village.text = nextVillage.text.trim();
+          boothNumber.text = nextBooth.text.trim();
+          sectionNumber.text = nextSectionNumber.text.trim();
+          sectionName.text = nextSectionName.text.trim();
+          organizationPost.text = nextPosition.text.trim();
+          occupation.text = nextOccupation.text.trim();
+          currentPage = 1;
+          selectedIds.clear();
+          refreshVoters();
+        });
+
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -749,53 +859,76 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
               ),
               const SizedBox(height: 12),
               TextField(
-                controller: nextVillage,
+                controller: nextPartVillage,
+                readOnly: true,
                 decoration: InputDecoration(
-                  labelText: 'गाँव / क्षेत्र',
-                  prefixIcon: const Icon(Icons.location_on_outlined),
-                  suffixIcon: IconButton(
-                    tooltip: 'Database से गाँव चुनें',
-                    icon: const Icon(Icons.list_alt_rounded),
-                    onPressed: () async {
-                      final option = await pickFilterOption('village', 'गाँव', {
-                        if (nextSupport.isNotEmpty) 'supportLevel': nextSupport,
-                        if (nextGender.isNotEmpty) 'gender': nextGender,
-                        if (nextVerification.isNotEmpty)
-                          'verificationStatus': nextVerification,
-                      });
-                      if (option == null) return;
-                      setSheetState(() => nextVillage.text =
-                          option.filters['village'] ?? option.label);
-                    },
-                  ),
+                  labelText: 'भाग / गाँव',
+                  prefixIcon: const Icon(Icons.holiday_village_outlined),
+                  suffixIcon: const Icon(Icons.list_alt_rounded),
                 ),
+                onTap: () async {
+                  final option = await pickFilterOption(
+                    'partVillage',
+                    'भाग / गाँव',
+                    {
+                      if (nextSupport.isNotEmpty) 'supportLevel': nextSupport,
+                      if (nextGender.isNotEmpty) 'gender': nextGender,
+                      if (nextVerification.isNotEmpty)
+                        'verificationStatus': nextVerification,
+                    },
+                  );
+                  if (option == null) return;
+                  setSheetState(() {
+                    nextPartVillage.text = option.label;
+                    nextVillage.text = option.filters['village'] ?? '';
+                    nextBooth.text = option.filters['partNumber'] ?? '';
+                    nextSection.clear();
+                    nextSectionNumber.clear();
+                    nextSectionName.clear();
+                  });
+                },
               ),
               const SizedBox(height: 12),
               TextField(
-                controller: nextBooth,
-                keyboardType: TextInputType.number,
+                controller: nextSection,
+                readOnly: true,
                 decoration: InputDecoration(
-                  labelText: 'भाग / बूथ संख्या',
-                  prefixIcon: const Icon(Icons.how_to_vote_outlined),
-                  suffixIcon: IconButton(
-                    tooltip: 'Database से भाग चुनें',
-                    icon: const Icon(Icons.list_alt_rounded),
-                    onPressed: () async {
-                      final option =
-                          await pickFilterOption('partNumber', 'भाग / बूथ', {
-                        if (nextSupport.isNotEmpty) 'supportLevel': nextSupport,
-                        if (nextGender.isNotEmpty) 'gender': nextGender,
-                        if (nextVerification.isNotEmpty)
-                          'verificationStatus': nextVerification,
-                        if (nextVillage.text.trim().isNotEmpty)
-                          'village': nextVillage.text.trim(),
-                      });
-                      if (option == null) return;
-                      setSheetState(() => nextBooth.text =
-                          option.filters['partNumber'] ?? option.label);
-                    },
-                  ),
+                  labelText: 'अनुभाग / मोहल्ला',
+                  prefixIcon: const Icon(Icons.segment_rounded),
+                  suffixIcon: const Icon(Icons.list_alt_rounded),
                 ),
+                onTap: () async {
+                  if (nextVillage.text.trim().isEmpty &&
+                      nextBooth.text.trim().isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('पहले भाग / गाँव चुनें।')),
+                    );
+                    return;
+                  }
+                  final option = await pickFilterOption(
+                    'section',
+                    'अनुभाग / मोहल्ला',
+                    {
+                      if (nextSupport.isNotEmpty) 'supportLevel': nextSupport,
+                      if (nextGender.isNotEmpty) 'gender': nextGender,
+                      if (nextVerification.isNotEmpty)
+                        'verificationStatus': nextVerification,
+                      if (nextVillage.text.trim().isNotEmpty)
+                        'village': nextVillage.text.trim(),
+                      if (nextBooth.text.trim().isNotEmpty)
+                        'partNumber': nextBooth.text.trim(),
+                    },
+                  );
+                  if (option == null) return;
+                  setSheetState(() {
+                    nextSection.text = option.label;
+                    nextSectionNumber.text =
+                        option.filters['sectionNumber'] ?? '';
+                    nextSectionName.text = option.filters['sectionName'] ?? '';
+                  });
+                  applyPhoneFilters();
+                  if (sheetContext.mounted) Navigator.pop(sheetContext);
+                },
               ),
               const SizedBox(height: 12),
               TextField(
@@ -877,17 +1010,7 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
                 height: 52,
                 child: FilledButton.icon(
                   onPressed: () {
-                    setState(() {
-                      support = nextSupport;
-                      gender = nextGender;
-                      verificationStatus = nextVerification;
-                      village.text = nextVillage.text.trim();
-                      boothNumber.text = nextBooth.text.trim();
-                      organizationPost.text = nextPosition.text.trim();
-                      occupation.text = nextOccupation.text.trim();
-                      currentPage = 1;
-                      refreshVoters();
-                    });
+                    applyPhoneFilters();
                     Navigator.pop(sheetContext);
                   },
                   icon: const Icon(Icons.check_rounded),
@@ -901,6 +1024,10 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
     );
     nextVillage.dispose();
     nextBooth.dispose();
+    nextPartVillage.dispose();
+    nextSectionNumber.dispose();
+    nextSectionName.dispose();
+    nextSection.dispose();
     nextPosition.dispose();
     nextOccupation.dispose();
   }
@@ -917,6 +1044,8 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
               controller: search,
               focusNode: searchFocus,
               listening: listening,
+              selectedMode: queryMode,
+              selectedModeLabel: queryModeLabel,
               onChanged: searchChanged,
               onSubmitted: (_) => filtersChanged(),
               onClear: () {
@@ -1011,14 +1140,13 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
             if (api.user?['role'] != 'booth')
               _LocationFilterCard(
                 assembly: _filterValue('assembly', assemblyNumber),
-                village: _filterValue('village', village),
-                gramPanchayat: _filterValue('gramPanchayat', gramPanchayat),
-                partNumber: _filterValue('partNumber', boothNumber),
+                partVillage: partVillageValue,
+                section: _filterValue('section', sectionName),
                 onPickAssembly: () => openSmartFilter('assembly', 'विधानसभा'),
-                onPickVillage: () => openSmartFilter('village', 'गाँव'),
-                onPickPanchayat: () =>
-                    openSmartFilter('gramPanchayat', 'ग्राम पंचायत'),
-                onPickPart: () => openSmartFilter('partNumber', 'भाग / बूथ'),
+                onPickPartVillage: () =>
+                    openSmartFilter('partVillage', 'भाग / गाँव'),
+                onPickSection: () =>
+                    openSmartFilter('section', 'अनुभाग / मोहल्ला'),
                 onClear: _clearLocationFilters,
                 compact: true,
               ),
@@ -1149,6 +1277,8 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
           controller: search,
           focusNode: searchFocus,
           listening: listening,
+          selectedMode: queryMode,
+          selectedModeLabel: queryModeLabel,
           onChanged: searchChanged,
           onSubmitted: (_) {
             searchDebounce?.cancel();
@@ -1198,7 +1328,7 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
               style: TextStyle(color: Colors.red, fontWeight: FontWeight.w700)),
         ),
       const SizedBox(height: 8),
-      _SearchHelpStrip(onPick: useQuickSearch),
+      _SearchHelpStrip(selectedMode: queryMode, onPick: useQuickSearch),
       _ContactTypeFilterChips(
         selected: contactTypeFilter,
         onChanged: _setContactTypeFilter,
@@ -1213,6 +1343,10 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
             : () => setState(() {
                   selectedOptionFilters.clear();
                   selectedOptionLabels.clear();
+                  village.clear();
+                  boothNumber.clear();
+                  sectionNumber.clear();
+                  sectionName.clear();
                   currentPage = 1;
                   selectedIds.clear();
                   refreshVoters();
@@ -1233,14 +1367,11 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
       if (api.user?['role'] != 'booth')
         _LocationFilterCard(
           assembly: _filterValue('assembly', assemblyNumber),
-          village: _filterValue('village', village),
-          gramPanchayat: _filterValue('gramPanchayat', gramPanchayat),
-          partNumber: _filterValue('partNumber', boothNumber),
+          partVillage: partVillageValue,
+          section: _filterValue('section', sectionName),
           onPickAssembly: () => openSmartFilter('assembly', 'विधानसभा'),
-          onPickVillage: () => openSmartFilter('village', 'गाँव'),
-          onPickPanchayat: () =>
-              openSmartFilter('gramPanchayat', 'ग्राम पंचायत'),
-          onPickPart: () => openSmartFilter('partNumber', 'भाग / बूथ'),
+          onPickPartVillage: () => openSmartFilter('partVillage', 'भाग / गाँव'),
+          onPickSection: () => openSmartFilter('section', 'अनुभाग / मोहल्ला'),
           onClear: _clearLocationFilters,
         ),
       _RecentFilterStrip(
@@ -1271,28 +1402,20 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
                   icon: Icons.account_balance_outlined,
                   onChanged: (_) => filtersChanged(),
                   onPick: () => openSmartFilter('assembly', 'विधानसभा')),
-              _SearchFilter(
-                  controller: boothNumber,
-                  label: 'भाग / बूथ संख्या',
-                  icon: Icons.how_to_vote_outlined,
-                  onChanged: (_) => filtersChanged(),
-                  onPick: () => openSmartFilter('partNumber', 'भाग / बूथ')),
-              _SearchFilter(
-                  controller: sectionNumber,
-                  label: 'अनुभाग संख्या',
-                  icon: Icons.format_list_numbered,
-                  onChanged: (_) => filtersChanged()),
-              _SearchFilter(
-                  controller: sectionName,
-                  label: 'अनुभाग नाम',
-                  icon: Icons.segment,
-                  onChanged: (_) => filtersChanged()),
-              _SearchFilter(
-                  controller: village,
-                  label: 'गाँव',
-                  icon: Icons.home_work_outlined,
-                  onChanged: (_) => filtersChanged(),
-                  onPick: () => openSmartFilter('village', 'गाँव')),
+              _DatabaseFilterPicker(
+                label: 'भाग / गाँव',
+                icon: Icons.holiday_village_outlined,
+                value: partVillageValue,
+                onTap: () => openSmartFilter('partVillage', 'भाग / गाँव'),
+                onClear: _clearPartVillageFilter,
+              ),
+              _DatabaseFilterPicker(
+                label: 'अनुभाग / मोहल्ला',
+                icon: Icons.segment_rounded,
+                value: _filterValue('section', sectionName),
+                onTap: () => openSmartFilter('section', 'अनुभाग / मोहल्ला'),
+                onClear: _clearSectionFilter,
+              ),
               _SearchFilter(
                   controller: gramPanchayat,
                   label: 'ग्राम पंचायत',
@@ -1692,33 +1815,28 @@ class _ActiveFilterChips extends StatelessWidget {
 class _LocationFilterCard extends StatelessWidget {
   const _LocationFilterCard({
     required this.assembly,
-    required this.village,
-    required this.gramPanchayat,
-    required this.partNumber,
+    required this.partVillage,
+    required this.section,
     required this.onPickAssembly,
-    required this.onPickVillage,
-    required this.onPickPanchayat,
-    required this.onPickPart,
+    required this.onPickPartVillage,
+    required this.onPickSection,
     required this.onClear,
     this.compact = false,
   });
 
   final String assembly;
-  final String village;
-  final String gramPanchayat;
-  final String partNumber;
+  final String partVillage;
+  final String section;
   final VoidCallback onPickAssembly;
-  final VoidCallback onPickVillage;
-  final VoidCallback onPickPanchayat;
-  final VoidCallback onPickPart;
+  final VoidCallback onPickPartVillage;
+  final VoidCallback onPickSection;
   final VoidCallback onClear;
   final bool compact;
 
   bool get hasAny =>
       assembly.trim().isNotEmpty ||
-      village.trim().isNotEmpty ||
-      gramPanchayat.trim().isNotEmpty ||
-      partNumber.trim().isNotEmpty;
+      partVillage.trim().isNotEmpty ||
+      section.trim().isNotEmpty;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -1739,76 +1857,86 @@ class _LocationFilterCard extends StatelessWidget {
               ),
             ],
           ),
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  color: softBlue,
-                  borderRadius: BorderRadius.circular(13),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: softBlue,
+                    borderRadius: BorderRadius.circular(13),
+                  ),
+                  child: const Icon(Icons.map_rounded, color: blue, size: 20),
                 ),
-                child: const Icon(Icons.map_rounded, color: blue, size: 20),
-              ),
-              const SizedBox(width: 10),
-              const Expanded(
-                child: Column(
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('गाँव + पंचायत + भाग',
-                          style: TextStyle(
-                              color: navy,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w900)),
+                      Text(
+                        'भाग / गाँव → अनुभाग / मोहल्ला',
+                        style: TextStyle(
+                          color: navy,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
                       SizedBox(height: 2),
                       Text(
-                          'गाँव अकेला unique नहीं — पूरी location key से filter करें',
-                          style: TextStyle(color: muted, fontSize: 11)),
-                    ]),
-              ),
-              if (hasAny)
-                IconButton(
-                  tooltip: 'Location filter हटाएँ',
-                  onPressed: onClear,
-                  icon: const Icon(Icons.close_rounded, color: muted),
+                        'पहले भाग / गाँव चुनें, फिर उससे संबंधित अनुभाग चुनें',
+                        style: TextStyle(color: muted, fontSize: 11),
+                      ),
+                    ],
+                  ),
                 ),
-            ]),
-            const SizedBox(height: 11),
-            LayoutBuilder(builder: (context, constraints) {
-              final chipWidth = constraints.maxWidth < 380
-                  ? (constraints.maxWidth - 8) / 2
-                  : compact
-                      ? 150.0
-                      : 168.0;
-              return Wrap(spacing: 8, runSpacing: 8, children: [
-                _LocationPickChip(
+                if (hasAny)
+                  IconButton(
+                    tooltip: 'Location filter हटाएँ',
+                    onPressed: onClear,
+                    icon: const Icon(Icons.close_rounded, color: muted),
+                  ),
+              ]),
+              const SizedBox(height: 11),
+              LayoutBuilder(builder: (context, constraints) {
+                final chipWidth = constraints.maxWidth < 520
+                    ? constraints.maxWidth
+                    : compact
+                        ? 150.0
+                        : 190.0;
+                return Wrap(spacing: 8, runSpacing: 8, children: [
+                  _LocationPickChip(
                     width: chipWidth,
                     label: 'विधानसभा',
                     value: assembly,
                     icon: Icons.account_balance_rounded,
-                    onTap: onPickAssembly),
-                _LocationPickChip(
+                    onTap: onPickAssembly,
+                  ),
+                  _LocationPickChip(
                     width: chipWidth,
-                    label: 'गाँव',
-                    value: village,
-                    icon: Icons.home_work_rounded,
-                    onTap: onPickVillage),
-                _LocationPickChip(
-                    width: chipWidth,
-                    label: 'पंचायत',
-                    value: gramPanchayat,
+                    label: 'भाग / गाँव',
+                    value: partVillage,
                     icon: Icons.holiday_village_rounded,
-                    onTap: onPickPanchayat),
-                _LocationPickChip(
+                    onTap: onPickPartVillage,
+                  ),
+                  _LocationPickChip(
                     width: chipWidth,
-                    label: 'भाग',
-                    value: partNumber,
-                    icon: Icons.how_to_vote_rounded,
-                    onTap: onPickPart),
-              ]);
-            }),
-          ]),
+                    label: 'अनुभाग / मोहल्ला',
+                    value: section,
+                    icon: Icons.segment_rounded,
+                    onTap: partVillage.trim().isNotEmpty
+                        ? onPickSection
+                        : () => ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('पहले भाग / गाँव चुनें।'),
+                              ),
+                            ),
+                  ),
+                ]);
+              }),
+            ],
+          ),
         ),
       );
 }
@@ -1956,13 +2084,13 @@ class _SmartSearchPanel extends StatelessWidget {
 
   static const fields = <_SmartFilterDef>[
     _SmartFilterDef('assembly', 'विधानसभा', Icons.account_balance_rounded),
-    _SmartFilterDef('village', 'गाँव', Icons.location_city_rounded),
+    _SmartFilterDef('partVillage', 'भाग / गाँव', Icons.holiday_village_rounded),
     _SmartFilterDef(
         'gramPanchayat', 'ग्राम पंचायत', Icons.holiday_village_rounded),
     _SmartFilterDef('tehsil', 'तहसील', Icons.apartment_rounded),
     _SmartFilterDef('municipality', 'नगर पालिका', Icons.location_city_outlined),
-    _SmartFilterDef('partNumber', 'भाग / बूथ', Icons.how_to_vote_rounded),
-    _SmartFilterDef('section', 'अनुभाग', Icons.format_list_numbered_rounded),
+    _SmartFilterDef(
+        'section', 'अनुभाग / मोहल्ला', Icons.format_list_numbered_rounded),
     _SmartFilterDef('caste', 'जाति', Icons.groups_2_rounded),
     _SmartFilterDef('occupation', 'Vyavsay', Icons.work_rounded),
     _SmartFilterDef('organizationPost', 'संगठन पद', Icons.badge_rounded),
@@ -2031,11 +2159,22 @@ class _SmartSearchPanel extends StatelessWidget {
       );
 }
 
+IconData _searchModeIcon(String mode) => switch (mode) {
+      'name' => Icons.person_search_rounded,
+      'guardian' => Icons.family_restroom_rounded,
+      'epic' => Icons.badge_outlined,
+      'house' => Icons.home_rounded,
+      'mobile' => Icons.phone_rounded,
+      _ => Icons.search_rounded,
+    };
+
 class _EasyVoterSearchCard extends StatelessWidget {
   const _EasyVoterSearchCard({
     required this.controller,
     required this.focusNode,
     required this.listening,
+    required this.selectedMode,
+    required this.selectedModeLabel,
     required this.onChanged,
     required this.onSubmitted,
     required this.onClear,
@@ -2046,6 +2185,8 @@ class _EasyVoterSearchCard extends StatelessWidget {
   final TextEditingController controller;
   final FocusNode focusNode;
   final bool listening;
+  final String selectedMode;
+  final String selectedModeLabel;
   final ValueChanged<String> onChanged;
   final ValueChanged<String> onSubmitted;
   final VoidCallback onClear;
@@ -2096,6 +2237,8 @@ class _EasyVoterSearchCard extends StatelessWidget {
             controller: controller,
             focusNode: focusNode,
             listening: listening,
+            selectedMode: selectedMode,
+            selectedModeLabel: selectedModeLabel,
             onChanged: onChanged,
             onSubmitted: onSubmitted,
             onClear: onClear,
@@ -2111,7 +2254,11 @@ class _EasyVoterSearchCard extends StatelessWidget {
                     fontWeight: FontWeight.w800)),
           ],
           const SizedBox(height: 11),
-          _SearchHelpStrip(compact: true, onPick: onQuickPick),
+          _SearchHelpStrip(
+            compact: true,
+            selectedMode: selectedMode,
+            onPick: onQuickPick,
+          ),
         ]),
       );
 }
@@ -2121,6 +2268,8 @@ class _EasyVoterSearchField extends StatelessWidget {
     required this.controller,
     required this.focusNode,
     required this.listening,
+    required this.selectedMode,
+    required this.selectedModeLabel,
     required this.onChanged,
     required this.onSubmitted,
     required this.onClear,
@@ -2131,6 +2280,8 @@ class _EasyVoterSearchField extends StatelessWidget {
   final TextEditingController controller;
   final FocusNode focusNode;
   final bool listening;
+  final String selectedMode;
+  final String selectedModeLabel;
   final ValueChanged<String> onChanged;
   final ValueChanged<String> onSubmitted;
   final VoidCallback onClear;
@@ -2146,11 +2297,18 @@ class _EasyVoterSearchField extends StatelessWidget {
         onSubmitted: onSubmitted,
         style: const TextStyle(fontWeight: FontWeight.w800, color: navy),
         decoration: InputDecoration(
-          hintText: compact
-              ? 'नाम, पिता/पति, EPIC, मोबाइल...'
-              : 'नाम, पिता/पति, EPIC, मोबाइल, घर, गाँव या पंचायत खोजें...',
+          hintText: selectedModeLabel.isNotEmpty
+              ? '$selectedModeLabel से खोजें...'
+              : compact
+                  ? 'नाम, पिता/पति, EPIC, मोबाइल...'
+                  : 'नाम, पिता/पति, EPIC, मोबाइल, घर, गाँव या पंचायत खोजें...',
           hintStyle: const TextStyle(color: muted, fontWeight: FontWeight.w600),
-          prefixIcon: const Icon(Icons.search_rounded, color: blue),
+          prefixIcon: Icon(
+            selectedMode.isEmpty
+                ? Icons.search_rounded
+                : _searchModeIcon(selectedMode),
+            color: blue,
+          ),
           suffixIcon: Row(mainAxisSize: MainAxisSize.min, children: [
             if (controller.text.isNotEmpty)
               IconButton(
@@ -2188,8 +2346,13 @@ class _EasyVoterSearchField extends StatelessWidget {
 }
 
 class _SearchHelpStrip extends StatelessWidget {
-  const _SearchHelpStrip({this.compact = false, this.onPick});
+  const _SearchHelpStrip({
+    this.compact = false,
+    this.selectedMode = '',
+    this.onPick,
+  });
   final bool compact;
+  final String selectedMode;
   final ValueChanged<String>? onPick;
 
   @override
@@ -2197,12 +2360,36 @@ class _SearchHelpStrip extends StatelessWidget {
         spacing: 7,
         runSpacing: 7,
         children: [
-          _SearchHintChip(Icons.person_search_rounded, 'नाम', onTap: onPick),
-          _SearchHintChip(Icons.family_restroom_rounded, 'पिता/पति',
-              onTap: onPick),
-          _SearchHintChip(Icons.badge_outlined, 'EPIC', onTap: onPick),
-          _SearchHintChip(Icons.home_rounded, 'घर', onTap: onPick),
-          _SearchHintChip(Icons.phone_rounded, 'मोबाइल', onTap: onPick),
+          _SearchHintChip(
+            Icons.person_search_rounded,
+            'नाम',
+            selected: selectedMode == 'name',
+            onTap: onPick,
+          ),
+          _SearchHintChip(
+            Icons.family_restroom_rounded,
+            'पिता/पति',
+            selected: selectedMode == 'guardian',
+            onTap: onPick,
+          ),
+          _SearchHintChip(
+            Icons.badge_outlined,
+            'EPIC',
+            selected: selectedMode == 'epic',
+            onTap: onPick,
+          ),
+          _SearchHintChip(
+            Icons.home_rounded,
+            'घर',
+            selected: selectedMode == 'house',
+            onTap: onPick,
+          ),
+          _SearchHintChip(
+            Icons.phone_rounded,
+            'मोबाइल',
+            selected: selectedMode == 'mobile',
+            onTap: onPick,
+          ),
           if (!compact)
             _SearchHintChip(Icons.lightbulb_outline_rounded, 'जैसे: राम मोहन',
                 onTap: onPick),
@@ -2211,9 +2398,15 @@ class _SearchHelpStrip extends StatelessWidget {
 }
 
 class _SearchHintChip extends StatelessWidget {
-  const _SearchHintChip(this.icon, this.label, {this.onTap});
+  const _SearchHintChip(
+    this.icon,
+    this.label, {
+    this.selected = false,
+    this.onTap,
+  });
   final IconData icon;
   final String label;
+  final bool selected;
   final ValueChanged<String>? onTap;
 
   @override
@@ -2223,84 +2416,23 @@ class _SearchHintChip extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
           decoration: BoxDecoration(
-            color: const Color(0xfff6f8fc),
+            color: selected ? softBlue : const Color(0xfff6f8fc),
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: border),
+            border: Border.all(color: selected ? blue : border),
           ),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Icon(icon, color: blue, size: 14),
+            Icon(icon, color: selected ? blue : muted, size: 14),
             const SizedBox(width: 5),
-            Text(label,
-                style: const TextStyle(
-                    color: navy, fontSize: 12, fontWeight: FontWeight.w800)),
+            Text(
+              label,
+              style: TextStyle(
+                color: selected ? blue : navy,
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
           ]),
         ),
-      );
-}
-
-class _QuickSearchDialog extends StatefulWidget {
-  const _QuickSearchDialog({required this.mode});
-  final String mode;
-
-  @override
-  State<_QuickSearchDialog> createState() => _QuickSearchDialogState();
-}
-
-class _QuickSearchDialogState extends State<_QuickSearchDialog> {
-  final controller = TextEditingController();
-
-  @override
-  void dispose() {
-    controller.dispose();
-    super.dispose();
-  }
-
-  String get hint => switch (widget.mode) {
-        'पिता/पति' => 'पिता या पति का नाम लिखें...',
-        'EPIC' => 'EPIC नंबर लिखें...',
-        'घर' => 'घर संख्या लिखें...',
-        'मोबाइल' => 'मोबाइल नंबर लिखें...',
-        _ => 'मतदाता का नाम लिखें...',
-      };
-
-  IconData get icon => switch (widget.mode) {
-        'पिता/पति' => Icons.family_restroom_rounded,
-        'EPIC' => Icons.badge_outlined,
-        'घर' => Icons.home_rounded,
-        'मोबाइल' => Icons.phone_rounded,
-        _ => Icons.person_search_rounded,
-      };
-
-  @override
-  Widget build(BuildContext context) => AlertDialog(
-        title: Row(children: [
-          CircleAvatar(
-            backgroundColor: softBlue,
-            child: Icon(icon, color: blue),
-          ),
-          const SizedBox(width: 10),
-          Expanded(child: Text('${widget.mode} से खोजें')),
-        ]),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          textInputAction: TextInputAction.search,
-          onSubmitted: (value) => Navigator.pop(context, value),
-          decoration: InputDecoration(
-            hintText: hint,
-            prefixIcon: Icon(icon),
-          ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
-          FilledButton.icon(
-            onPressed: () => Navigator.pop(context, controller.text),
-            icon: const Icon(Icons.search_rounded),
-            label: const Text('Search'),
-          ),
-        ],
       );
 }
 
@@ -3551,7 +3683,7 @@ class _LocationCorrectionDialogState extends State<_LocationCorrectionDialog> {
                           style: const TextStyle(
                               color: navy, fontWeight: FontWeight.w900)),
                       Text(
-                          "EPIC ${voter['voterId'] ?? '-'} ? ?? ${voter['houseNumber'] ?? '-'}",
+                          "EPIC ${voter['voterId'] ?? '-'} • घर ${voter['houseNumber'] ?? '-'}",
                           style: const TextStyle(color: muted, fontSize: 12)),
                     ])),
               ]),
