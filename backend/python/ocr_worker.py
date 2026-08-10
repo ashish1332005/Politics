@@ -442,16 +442,16 @@ def parse_header_numbers(text):
 
     def canonical_section_name(value):
         text = clean(value)
-        if re.search(r"?????\s*???", text):
-            return "????? ??? ?? ???, ?????"
-        if re.search(r"??????", text):
-            return "?????? ?? ???, ?????"
-        if re.search(r"?????", text):
-            return "????? ?? ???, ?????"
-        if re.search(r"?????\s*????", text):
-            return "????? ????, ?????"
-        if re.search(r"????????\s*??????", text):
-            return "???????? ??????, ??????"
+        if re.search(r"(?:\u092a\u091f\u0935\u093e\u0930|Weare)\s*.*\u092d\u0935\u0928", text):
+            return "\u092a\u091f\u0935\u093e\u0930 \u092d\u0935\u0928 \u0915\u0947 \u092a\u093e\u0938, \u092d\u0940\u0902\u091f\u093e"
+        if re.search(r"\u091a\u094c\u0930\u093e\u092f\u093e", text):
+            return "\u091a\u094c\u0930\u093e\u092f\u093e \u0915\u0947 \u092a\u093e\u0938, \u092d\u0940\u0902\u091f\u093e"
+        if re.search(r"\u0930\u093e\u0935\u0932\u093e|\u0930\u0935\u0932\u093e|\u0936\u0935\u0932\u093e", text):
+            return "\u0930\u093e\u0935\u0932\u093e \u0915\u0947 \u092a\u093e\u0938, \u092d\u0940\u0902\u091f\u093e"
+        if re.search(r"\u0926\u0947\u0935\u0930\u0940", text):
+            return "\u0926\u0947\u0935\u0930\u0940 \u092e\u0917\u0930\u0940, \u092d\u0940\u0902\u091f\u093e"
+        if re.search(r"\u0938\u092e\u094d\u092a\u0942\u0930\u094d\u0923", text):
+            return "\u0938\u092e\u094d\u092a\u0942\u0930\u094d\u0923 \u0938\u0947\u092e\u0932\u093e\u091f, \u0938\u0947\u092e\u0932\u093e\u091f"
         return text
 
     def labeled_value(labels, numeric=False):
@@ -471,10 +471,23 @@ def parse_header_numbers(text):
     assembly = first_match([
         r"(?:विधान\s*सभा|assembly|constituency|AC|furs|Seat)[^\n:：;]{0,100}[:：;]\s*([0-9०-९OQILSZBG]{1,3})\s*[-–:]\s*([^\n]+)",
     ])
-    part = first_match([
-        r"(?:भाग|part)\s*(?:संख्या|नं\.?|number|no\.?)?\s*[:：;\-]*\s*([0-9०-९OQILSZBG]{1,4})",
-        r"(?:AMT|sear|den|deat|our)[^\n:：;]{0,50}[:：;]\s*[:：;]?\s*([0-9०-९OQILSZBG]{1,4})",
-    ])
+    # OCR returns several header variants concatenated together. Searching the
+    # whole blob lets a hallucinated digit from a later variant overwrite the
+    # real value (the master page has a deliberately blank भाग संख्या).
+    # Inspect only the first labelled occurrence and accept a number on that
+    # same line, preserving a blank master-page part.
+    part = None
+    part_label = re.compile(
+        r"(?:\u092d\u093e\u0917[ \t]*(?:\u0938\u0902\u0916\u094d\u092f\u093e|\u0928\u0902\.?|number|no\.?)|part[ \t]*(?:number|no\.?))",
+        re.IGNORECASE,
+    )
+    label_match = part_label.search(normalized)
+    if label_match:
+        line_end = normalized.find("\n", label_match.start())
+        if line_end < 0:
+            line_end = len(normalized)
+        part_tail = normalized[label_match.end():line_end]
+        part = re.search(r"[:?;\-]*[ \t]*([0-9\u0966-\u096fOQILSZBG]{1,4})", part_tail)
 
     section_map = {}
     section_block = re.search(
@@ -489,7 +502,7 @@ def parse_header_numbers(text):
         re.IGNORECASE,
     ):
         number = normalize_section_number(match.group(1))
-        name = tidy_name(match.group(2))
+        name = canonical_section_name(tidy_name(match.group(2)))
         if number and name and not re.search(r"(?:EPIC|RJ/|मतदाता|निर्वाचक)", name, re.IGNORECASE) and has_devanagari(name) >= 2:
             if len(name) >= len(section_map.get(number, '')):
                 section_map[number] = name
@@ -521,7 +534,7 @@ def parse_header_numbers(text):
         raw_number = match.group(1)
         number = normalize_section_number(raw_number) if raw_number else "1"
         name = canonical_section_name(tidy_name(match.group(2)))
-        if number and name and has_devanagari(name) >= 2 and len(name) >= len(section_map.get(number, "")):
+        if number and name and has_devanagari(name) >= 2 and not re.search(r"\u092e\u0924\u0926\u093e\u0928|\u0915\u0947\u0902\u0926\u094d\u0930|\u0935\u093f\u0935\u0930\u0923|\u092a\u0941\u0930\u0941\u0937|\u092e\u0939\u093f\u0932\u093e|\u0938\u093e\u092e\u093e\u0928\u094d\u092f", name) and len(name) >= len(section_map.get(number, "")):
             section_map[number] = name
 
     section_number = ""
@@ -554,7 +567,7 @@ def parse_header_numbers(text):
         "sectionMap": section_map,
         "village": labeled_value([r"\u0917\u094d\u0930\u093e\u092e", r"\u0917\u093e\u0901\u0935", r"\u0917\u093e\u0902\u0935", r"village"]),
         "gramPanchayat": labeled_value([r"\u0917\u094d\u0930\u093e\u092e\s*\u092a\u0902\u091a\u093e\u092f\u0924", r"gram\s*panchayat"]),
-        "postOffice": labeled_value([r"\u0921\u093e\u0915\s*\u0918\u0930", r"\u0921\u093e\u0915\u0918\u0930", r"post\s*office"]),
+        "postOffice": labeled_value([r"\u0921\u093e\u0915\s*\u0918\u0930", r"\u0921\u093e\u0915\u0918\u0930", r"\u092a\u094b\u0938\u094d\u091f\s*\u0911\u092b\u093f\u0938", r"post\s*office"]),
         "policeStation": labeled_value([r"\u092a\u0941\u0932\u093f\u0938\s*\u0925\u093e\u0928\u093e", r"\u0925\u093e\u0928\u093e", r"police\s*station"]),
         "tehsil": labeled_value([r"\u0924\u0939\u0938\u0940\u0932", r"tehsil"]),
         "district": labeled_value([r"\u091c\u093f\u0932\u093e", r"district"]),
