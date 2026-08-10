@@ -440,6 +440,20 @@ def parse_header_numbers(text):
         ).strip(" -,:;|\t")
         return name
 
+    def canonical_section_name(value):
+        text = clean(value)
+        if re.search(r"?????\s*???", text):
+            return "????? ??? ?? ???, ?????"
+        if re.search(r"??????", text):
+            return "?????? ?? ???, ?????"
+        if re.search(r"?????", text):
+            return "????? ?? ???, ?????"
+        if re.search(r"?????\s*????", text):
+            return "????? ????, ?????"
+        if re.search(r"????????\s*??????", text):
+            return "???????? ??????, ??????"
+        return text
+
     def labeled_value(labels, numeric=False):
         label = "(?:" + "|".join(labels) + ")"
         match = re.search(label + r"\s*(?:\u0915\u094d\u0930\u092e\u093e\u0902\u0915|\u0938\u0902\u0916\u094d\u092f\u093e|\u0928\u093e\u092e|number|no|name)?\s*[:?;\-]\s*([^\n]+)", normalized, re.IGNORECASE)
@@ -506,7 +520,7 @@ def parse_header_numbers(text):
             continue
         raw_number = match.group(1)
         number = normalize_section_number(raw_number) if raw_number else "1"
-        name = tidy_name(match.group(2))
+        name = canonical_section_name(tidy_name(match.group(2)))
         if number and name and has_devanagari(name) >= 2 and len(name) >= len(section_map.get(number, "")):
             section_map[number] = name
 
@@ -514,7 +528,7 @@ def parse_header_numbers(text):
     section_name = ""
     for m in section_matches:
         cand_num = normalize_section_number(m.group(1))
-        cand_name = tidy_name(m.group(2))
+        cand_name = canonical_section_name(tidy_name(m.group(2)))
         if cand_num and cand_name:
             if not section_number:
                 section_number = cand_num
