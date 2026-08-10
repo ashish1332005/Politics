@@ -3,7 +3,15 @@ const Ward = require('../models/Ward');
 const Member = require('../models/Member');
 
 const isObjectId = (value) => /^[a-f\d]{24}$/i.test(String(value || ''));
-
+const locationKey = (value) => String(value || '')
+  .normalize('NFKC')
+  .toLocaleLowerCase('hi-IN')
+  .replace(/[\u0900-\u0903\u093a-\u094c\u094e-\u0957\u0962\u0963]/g, '')
+  .replace(/[^\p{L}\p{N}]+/gu, '');
+const cleanerLocationName = (left, right) => {
+  const score = (value) => (String(value).match(/[\u0900-\u0903]/g) || []).length;
+  return score(right) < score(left) ? right : left;
+};
 const resolveWard = async (value) => {
   if (!value || isObjectId(value)) return value;
   const text = String(value).trim();
@@ -41,10 +49,17 @@ exports.list = async (req, res, next) => {
       if (sectionName) summary.sectionNames.add(sectionName);
       const assemblyName = String(member.assemblyName || '').trim();
       if (assemblyName && village && sectionName) {
-        const hierarchyKey = [assemblyName, village, sectionName].join('\u0000');
+        const hierarchyKey = [
+          locationKey(assemblyName),
+          locationKey(village),
+          locationKey(sectionName),
+        ].join('\u0000');
         const existing = summary.hierarchy.get(hierarchyKey);
-        if (existing) existing.count += 1;
-        else summary.hierarchy.set(hierarchyKey, {
+        if (existing) {
+          existing.count += 1;
+          existing.village = cleanerLocationName(existing.village, village);
+          existing.sectionName = cleanerLocationName(existing.sectionName, sectionName);
+        } else summary.hierarchy.set(hierarchyKey, {
           assemblyNumber: String(member.assemblyNumber || '').trim(),
           assemblyName,
           partNumber: String(member.partNumber || '').trim(),

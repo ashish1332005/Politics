@@ -1,4 +1,4 @@
-const SEARCH_VERSION = 2;
+const SEARCH_VERSION = 3;
 const SEARCH_SOURCE_FIELDS = [
   'name',
   'surname',
@@ -98,6 +98,25 @@ const addPersonSubstrings = (keys, value) => {
   }
 };
 
+const devanagariConsonants = {
+  'क': 'k', 'ख': 'kh', 'ग': 'g', 'घ': 'gh', 'ङ': 'n',
+  'च': 'ch', 'छ': 'chh', 'ज': 'j', 'झ': 'jh', 'ञ': 'n',
+  'ट': 't', 'ठ': 'th', 'ड': 'd', 'ढ': 'dh', 'ण': 'n',
+  'त': 't', 'थ': 'th', 'द': 'd', 'ध': 'dh', 'न': 'n',
+  'प': 'p', 'फ': 'ph', 'ब': 'b', 'भ': 'bh', 'म': 'm',
+  'य': 'y', 'र': 'r', 'ल': 'l', 'व': 'v', 'श': 'sh',
+  'ष': 'sh', 'स': 's', 'ह': 'h', 'ळ': 'l', 'ड़': 'd', 'ढ़': 'dh',
+};
+
+const phoneticSkeleton = (value) => {
+  const text = normalizeSearchValue(value);
+  if (!text) return '';
+  if (/[\u0900-\u097f]/.test(text)) {
+    return [...text].map((char) => devanagariConsonants[char] || '').join('');
+  }
+  return text.replace(/[^a-z]/g, '').replace(/[aeiou]/g, '');
+};
+
 const deletionKeys = (value, { digitsOnly = false } = {}) => {
   const normalized = digitsOnly
     ? compactDigits(value)
@@ -110,6 +129,8 @@ const deletionKeys = (value, { digitsOnly = false } = {}) => {
     normalized.split(' ').forEach((token) => variants.add(token));
     const loose = looseHindiToken(normalized);
     if (loose) variants.add('~' + loose);
+    const phonetic = phoneticSkeleton(normalized);
+    if (phonetic.length >= 3) variants.add('#' + phonetic);
   }
   const keys = new Set();
   for (const variant of variants) {

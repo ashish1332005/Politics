@@ -67,6 +67,12 @@ test('matches joined names and one-character typing mistakes within selected fie
   const typoEpic = buildFieldSearchConditions('ABC1234568', 'epic');
   assert.ok(typoEpic[0].$or[0].searchEpicKeys.$in.length > 0);
 });
+test('matches Latin typing with Hindi and OCR-transposed voter names', () => {
+  const hindi = buildMemberSearchData({ name: 'अजुर्नलाल' });
+  const latinQuery = buildFieldSearchConditions('arjunlal', 'name');
+  const queryKeys = latinQuery[0].$or[0].searchNameKeys.$in;
+  assert.ok(hindi.searchNameKeys.some((key) => queryKeys.includes(key)));
+});
 test('canonicalizes common OCR mistakes in EPIC numbers', () => {
   assert.equal(canonicalEpic('SNEO5736O6'), 'SNE0573606');
   assert.ok(searchExactCandidates('SNE0573606').includes('sne0573606'));
@@ -80,7 +86,7 @@ test('member validation automatically refreshes search data', async () => {
     booth: new mongoose.Types.ObjectId(),
   });
   await member.validate();
-  assert.equal(member.searchVersion, 2);
+  assert.equal(member.searchVersion, 3);
   assert.ok(member.searchKeys.includes('राम'));
   assert.ok(member.searchKeys.includes('लाल'));
 });
