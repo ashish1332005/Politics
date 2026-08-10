@@ -3,7 +3,7 @@ const QRCode = require('qrcode');
 const Member = require('../models/Member');
 const Family = require('../models/Family');
 const Booth = require('../models/Booth');
-const { applyMemberScope, assertBoothAccess, assertWardAccess } = require('../utils/boothAccess');
+const { applyMemberScope, assertBoothAccess, assertWardAccess, requirePermission } = require('../utils/boothAccess');
 const { writeActivity } = require('../middleware/activityLogger');
 const { requireValidEpic } = require('../utils/epic');
 const { syncMemberFamily, removeMemberFromFamilies } = require('../utils/familySync');
@@ -115,6 +115,7 @@ const attachBoothWard = async (data, user) => {
 };
 
 exports.create = async (req, res, next) => {
+  try { requirePermission(req.currentUser, 'canCreateVoters'); } catch (error) { return next(error); }
   try {
     const data = { ...req.body };
     data.contactType = data.contactType === 'personal' ? 'personal' : 'voter';
@@ -564,6 +565,7 @@ exports.get = async (req, res, next) => {
 };
 
 exports.update = async (req, res, next) => {
+  try { requirePermission(req.currentUser, 'canEditVoters'); } catch (error) { return next(error); }
   try {
     const member = await Member.findById(req.params.id);
     if (!member) return res.status(404).json({ message: 'Member not found' });
@@ -592,7 +594,10 @@ exports.update = async (req, res, next) => {
     }
     delete updates.voterId;
     Object.assign(member, updates);
-    if (req.file) member.photo = await persistLocalImage(req.file.path, req.currentUser._id, true);
+    if (req.file) {
+      requirePermission(req.currentUser, 'canEditPhoto');
+      member.photo = await persistLocalImage(req.file.path, req.currentUser._id, true);
+    }
     member.updatedBy = req.currentUser._id;
     member.duplicateWarnings = await duplicateWarnings(member, member._id);
     if (member.duplicateWarnings.length && member.verificationStatus !== 'verified') member.verificationStatus = 'duplicate';
@@ -606,6 +611,7 @@ exports.update = async (req, res, next) => {
 };
 
 exports.remove = async (req, res, next) => {
+  try { requirePermission(req.currentUser, 'canDeleteVoters'); } catch (error) { return next(error); }
   try {
     const member = await Member.findById(req.params.id);
     if (!member) return res.status(404).json({ message: 'Member not found' });
@@ -624,6 +630,7 @@ exports.remove = async (req, res, next) => {
 };
 
 exports.removeAll = async (req, res, next) => {
+  try { requirePermission(req.currentUser, 'canDeleteVoters'); } catch (error) { return next(error); }
   try {
     if (req.body?.confirmation !== 'DELETE ALL VOTERS') {
       return res.status(400).json({ message: 'Bulk delete confirmation is invalid.' });
@@ -649,6 +656,7 @@ exports.removeAll = async (req, res, next) => {
 };
 
 exports.bulkDelete = async (req, res, next) => {
+  try { requirePermission(req.currentUser, 'canDeleteVoters'); } catch (error) { return next(error); }
   try {
     const rawIds = req.body?.ids || req.query?.ids;
     const ids = Array.isArray(rawIds)

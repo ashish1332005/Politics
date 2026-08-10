@@ -399,12 +399,15 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
 
   String quickSearchMode(String label) {
     final text = label.toLowerCase();
-    if (text.contains('पिता') || text.contains('पति') || text.contains('father')) return 'guardian';
+    if (text.contains('पिता') ||
+        text.contains('पति') ||
+        text.contains('father')) return 'guardian';
     if (text.contains('epic')) return 'epic';
     if (text.contains('घर') || text.contains('house')) return 'house';
     if (text.contains('मोबाइल') || text.contains('mobile')) return 'mobile';
     return 'name';
   }
+
   Future<void> useQuickSearch(String mode) async {
     final cleanMode = mode.startsWith('जैसे') ? 'नाम' : mode;
     final value = await showDialog<String>(
@@ -997,19 +1000,28 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
               onClearAll: clearFilters,
               compact: true,
             ),
-            _LocationFilterCard(
-              assembly: _filterValue('assembly', assemblyNumber),
-              village: _filterValue('village', village),
-              gramPanchayat: _filterValue('gramPanchayat', gramPanchayat),
-              partNumber: _filterValue('partNumber', boothNumber),
-              onPickAssembly: () => openSmartFilter('assembly', 'विधानसभा'),
-              onPickVillage: () => openSmartFilter('village', 'गाँव'),
-              onPickPanchayat: () =>
-                  openSmartFilter('gramPanchayat', 'ग्राम पंचायत'),
-              onPickPart: () => openSmartFilter('partNumber', 'भाग / बूथ'),
-              onClear: _clearLocationFilters,
-              compact: true,
-            ),
+            if (api.user?['role'] == 'booth')
+              _SearchFilter(
+                controller: sectionName,
+                label: 'अनुभाग चुनें',
+                icon: Icons.segment_rounded,
+                onChanged: (_) => filtersChanged(),
+                onPick: () => openSmartFilter('section', 'अनुभाग'),
+              ),
+            if (api.user?['role'] != 'booth')
+              _LocationFilterCard(
+                assembly: _filterValue('assembly', assemblyNumber),
+                village: _filterValue('village', village),
+                gramPanchayat: _filterValue('gramPanchayat', gramPanchayat),
+                partNumber: _filterValue('partNumber', boothNumber),
+                onPickAssembly: () => openSmartFilter('assembly', 'विधानसभा'),
+                onPickVillage: () => openSmartFilter('village', 'गाँव'),
+                onPickPanchayat: () =>
+                    openSmartFilter('gramPanchayat', 'ग्राम पंचायत'),
+                onPickPart: () => openSmartFilter('partNumber', 'भाग / बूथ'),
+                onClear: _clearLocationFilters,
+                compact: true,
+              ),
             _RecentFilterStrip(
               items: recentFilters,
               onTap: _applyRecentFilter,
@@ -1150,16 +1162,20 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
           onMic: toggleVoiceSearch,
           compact: compact,
         );
-        final filterButton = OutlinedButton.icon(
-          onPressed: () =>
-              setState(() => showAdvancedFilters = !showAdvancedFilters),
-          icon: Icon(
-            showAdvancedFilters ? Icons.filter_alt_rounded : Icons.tune_rounded,
-            color: blue,
-          ),
-          label:
-              Text(showAdvancedFilters ? 'फ़िल्टर छिपाएँ' : 'एडवांस फ़िल्टर'),
-        );
+        final filterButton = api.user?['role'] == 'booth'
+            ? const SizedBox.shrink()
+            : OutlinedButton.icon(
+                onPressed: () =>
+                    setState(() => showAdvancedFilters = !showAdvancedFilters),
+                icon: Icon(
+                  showAdvancedFilters
+                      ? Icons.filter_alt_rounded
+                      : Icons.tune_rounded,
+                  color: blue,
+                ),
+                label: Text(
+                    showAdvancedFilters ? 'फ़िल्टर छिपाएँ' : 'एडवांस फ़िल्टर'),
+              );
         if (compact) {
           return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1206,17 +1222,27 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
         items: activeFilterChips,
         onClearAll: clearFilters,
       ),
-      _LocationFilterCard(
-        assembly: _filterValue('assembly', assemblyNumber),
-        village: _filterValue('village', village),
-        gramPanchayat: _filterValue('gramPanchayat', gramPanchayat),
-        partNumber: _filterValue('partNumber', boothNumber),
-        onPickAssembly: () => openSmartFilter('assembly', 'विधानसभा'),
-        onPickVillage: () => openSmartFilter('village', 'गाँव'),
-        onPickPanchayat: () => openSmartFilter('gramPanchayat', 'ग्राम पंचायत'),
-        onPickPart: () => openSmartFilter('partNumber', 'भाग / बूथ'),
-        onClear: _clearLocationFilters,
-      ),
+      if (api.user?['role'] == 'booth')
+        _SearchFilter(
+          controller: sectionName,
+          label: 'अनुभाग चुनें',
+          icon: Icons.segment_rounded,
+          onChanged: (_) => filtersChanged(),
+          onPick: () => openSmartFilter('section', 'अनुभाग'),
+        ),
+      if (api.user?['role'] != 'booth')
+        _LocationFilterCard(
+          assembly: _filterValue('assembly', assemblyNumber),
+          village: _filterValue('village', village),
+          gramPanchayat: _filterValue('gramPanchayat', gramPanchayat),
+          partNumber: _filterValue('partNumber', boothNumber),
+          onPickAssembly: () => openSmartFilter('assembly', 'विधानसभा'),
+          onPickVillage: () => openSmartFilter('village', 'गाँव'),
+          onPickPanchayat: () =>
+              openSmartFilter('gramPanchayat', 'ग्राम पंचायत'),
+          onPickPart: () => openSmartFilter('partNumber', 'भाग / बूथ'),
+          onClear: _clearLocationFilters,
+        ),
       _RecentFilterStrip(
         items: recentFilters,
         onTap: _applyRecentFilter,
@@ -4954,7 +4980,8 @@ class _VoterFormState extends State<VoterForm> {
       'ward',
       'booth'
     ]) {
-      ctrls[f] = TextEditingController(text: initialFormValue(f, widget.voter?[f]));
+      ctrls[f] =
+          TextEditingController(text: initialFormValue(f, widget.voter?[f]));
     }
     support = widget.voter?['supportLevel'] ?? 'undecided';
     gender = '${widget.voter?['gender'] ?? ''}';
@@ -5076,7 +5103,9 @@ class _VoterFormState extends State<VoterForm> {
       if (month != null && day != null) return DateTime(2000, month, day);
     }
     final parsed = DateTime.tryParse(text);
-    return parsed == null ? DateTime(2000, DateTime.now().month, DateTime.now().day) : DateTime(2000, parsed.month, parsed.day);
+    return parsed == null
+        ? DateTime(2000, DateTime.now().month, DateTime.now().day)
+        : DateTime(2000, parsed.month, parsed.day);
   }
 
   Future<DateTime?> pickMonthDay(String key, String label) async {
@@ -5096,13 +5125,15 @@ class _VoterFormState extends State<VoterForm> {
                 items: List.generate(12, (i) => i + 1)
                     .map((month) => DropdownMenuItem(
                           value: month,
-                          child: Text(DateFormat('MMMM').format(DateTime(2000, month, 1))),
+                          child: Text(DateFormat('MMMM')
+                              .format(DateTime(2000, month, 1))),
                         ))
                     .toList(),
                 onChanged: (month) => setDialogState(() {
                   if (month == null) return;
                   final maxDay = DateUtils.getDaysInMonth(2000, month);
-                  selected = DateTime(2000, month, selected.day.clamp(1, maxDay));
+                  selected =
+                      DateTime(2000, month, selected.day.clamp(1, maxDay));
                 }),
               ),
               const SizedBox(height: 12),
@@ -5117,14 +5148,18 @@ class _VoterFormState extends State<VoterForm> {
                     final picked = day == selected.day;
                     return InkWell(
                       borderRadius: BorderRadius.circular(12),
-                      onTap: () => setDialogState(() => selected = DateTime(2000, selected.month, day)),
+                      onTap: () => setDialogState(
+                          () => selected = DateTime(2000, selected.month, day)),
                       child: Container(
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
                           color: picked ? blue : const Color(0xfff3f6fb),
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: Text('$day', style: TextStyle(color: picked ? Colors.white : navy, fontWeight: FontWeight.w800)),
+                        child: Text('$day',
+                            style: TextStyle(
+                                color: picked ? Colors.white : navy,
+                                fontWeight: FontWeight.w800)),
                       ),
                     );
                   }),
@@ -5133,8 +5168,12 @@ class _VoterFormState extends State<VoterForm> {
             ]),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-            FilledButton(onPressed: () => Navigator.pop(context, selected), child: const Text('Select')),
+            TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel')),
+            FilledButton(
+                onPressed: () => Navigator.pop(context, selected),
+                child: const Text('Select')),
           ],
         );
       }),
@@ -5163,7 +5202,8 @@ class _VoterFormState extends State<VoterForm> {
         onTap: () async {
           final picked = await pickMonthDay(key, voterFieldLabel(key));
           if (picked != null) {
-            setState(() => ctrls[key]!.text = DateFormat('MM-dd').format(picked));
+            setState(
+                () => ctrls[key]!.text = DateFormat('MM-dd').format(picked));
           }
         },
       );
@@ -5493,6 +5533,7 @@ String formatMonthDay(dynamic value) {
   if (parsed == null) return '-';
   return DateFormat('dd MMMM').format(parsed.toLocal());
 }
+
 String voterFieldLabel(String key) =>
     {
       'name': 'नाम',

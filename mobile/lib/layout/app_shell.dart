@@ -39,43 +39,56 @@ class _AppShellState extends State<AppShell> {
     if (mounted) setState(() => refreshVersion = api.dataVersion.value);
   }
 
-  List<NavItem> get items => [
+  List<NavItem> get items {
+    if (widget.role == 'booth') {
+      return [
         NavItem(
-          'होम',
-          Icons.home_outlined,
-          DashboardPage(
-            key: ValueKey('dashboard-$refreshVersion'),
-            onNavigate: select,
-          ),
-        ),
-        NavItem(
-          'मतदाता',
-          Icons.groups_outlined,
-          VoterManagementPage(key: ValueKey('voters-$refreshVersion')),
-        ),
-        NavItem(
-          'परिवार',
-          Icons.family_restroom,
-          FamilyPage(key: ValueKey('families-$refreshVersion')),
-        ),
-        NavItem(
-          'रिपोर्ट',
-          Icons.bar_chart_outlined,
-          ReportsPage(key: ValueKey('reports-$refreshVersion')),
-        ),
-        NavItem(
-          'अधिक',
-          Icons.grid_view_rounded,
-          MorePage(key: ValueKey('more-$refreshVersion'), role: widget.role),
-        ),
+            'संपर्क',
+            Icons.people_alt_rounded,
+            VoterManagementPage(
+                key: ValueKey('booth-contacts-$refreshVersion'))),
       ];
+    }
+    return [
+      NavItem(
+        'होम',
+        Icons.home_outlined,
+        DashboardPage(
+          key: ValueKey('dashboard-$refreshVersion'),
+          onNavigate: select,
+        ),
+      ),
+      NavItem(
+        'मतदाता',
+        Icons.groups_outlined,
+        VoterManagementPage(key: ValueKey('voters-$refreshVersion')),
+      ),
+      NavItem(
+        'परिवार',
+        Icons.family_restroom,
+        FamilyPage(key: ValueKey('families-$refreshVersion')),
+      ),
+      NavItem(
+        'रिपोर्ट',
+        Icons.bar_chart_outlined,
+        ReportsPage(key: ValueKey('reports-$refreshVersion')),
+      ),
+      NavItem(
+        'अधिक',
+        Icons.grid_view_rounded,
+        MorePage(key: ValueKey('more-$refreshVersion'), role: widget.role),
+      ),
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
     final wide = MediaQuery.sizeOf(context).width >= 900;
     final currentItems = items;
     return Scaffold(
-      drawer: wide ? null : AppDrawer(role: widget.role, openPage: (_, __) {}),
+      drawer: wide || widget.role == 'booth'
+          ? null
+          : AppDrawer(role: widget.role, openPage: (_, __) {}),
       body: Row(children: [
         if (wide)
           DesktopSidebar(
@@ -84,7 +97,7 @@ class _AppShellState extends State<AppShell> {
           child: Column(children: [
             MobileHeader(
               title: currentItems[selected].label,
-              onSearch: () => select(1),
+              onSearch: () => select(widget.role == 'booth' ? 0 : 1),
             ),
             Expanded(
               child: IndexedStack(
@@ -95,7 +108,9 @@ class _AppShellState extends State<AppShell> {
           ]),
         ),
       ]),
-      floatingActionButton: wide
+      floatingActionButton: wide ||
+              (widget.role == 'booth' &&
+                  api.user?['permissions']?['canCreateVoters'] == false)
           ? null
           : FloatingActionButton(
               tooltip: 'नया मतदाता जोड़ें',
@@ -115,8 +130,9 @@ class _AppShellState extends State<AppShell> {
             ),
       floatingActionButtonLocation:
           wide ? null : FloatingActionButtonLocation.centerDocked,
-      bottomNavigationBar:
-          wide ? null : _PhoneBottomBar(selected: selected, onSelect: select),
+      bottomNavigationBar: wide || widget.role == 'booth'
+          ? null
+          : _PhoneBottomBar(selected: selected, onSelect: select),
     );
   }
 }

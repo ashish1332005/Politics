@@ -1,4 +1,4 @@
-﻿const mongoose = require('mongoose');
+const mongoose = require('mongoose');
 
 const UserSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
@@ -14,6 +14,12 @@ const UserSchema = new mongoose.Schema({
     canExportData: { type: Boolean, default: false },
     canViewFullMobile: { type: Boolean, default: false },
     canBackup: { type: Boolean, default: false },
+    canViewReports: { type: Boolean, default: false },
+    canImportData: { type: Boolean, default: false },
+    canCreateVoters: { type: Boolean, default: true },
+    canEditVoters: { type: Boolean, default: true },
+    canEditPhoto: { type: Boolean, default: true },
+    canDeleteVoters: { type: Boolean, default: false },
   },
 }, { timestamps: true });
 

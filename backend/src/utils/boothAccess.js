@@ -24,3 +24,15 @@ exports.assertWardAccess = (user, wardId) => {
     throw err;
   }
 };
+
+
+exports.requirePermission = (user, permission) => {
+  if (user.role === 'admin' || user.permissions?.[permission] === true) return;
+  // Managers created before granular permissions were added retain the
+  // original create/edit/photo behaviour until admin explicitly changes it.
+  if (user.permissions?.[permission] === undefined &&
+      ['canCreateVoters', 'canEditVoters', 'canEditPhoto'].includes(permission)) return;
+  const err = new Error(`Permission denied: ${permission}`);
+  err.status = 403;
+  throw err;
+};

@@ -418,8 +418,10 @@ class _BoothWorkspace extends StatelessWidget {
           ),
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('Selected booth ke voter me se kisi voter ko manager banane ke liye Make manager dabayein.',
-              style: TextStyle(color: muted, fontSize: 12, fontWeight: FontWeight.w700)),
+          const Text(
+              'Selected booth ke voter me se kisi voter ko manager banane ke liye Make manager dabayein.',
+              style: TextStyle(
+                  color: muted, fontSize: 12, fontWeight: FontWeight.w700)),
           const SizedBox(height: 10),
           _AlphabetBar(selected: letter, onSelected: onLetter),
           const SizedBox(height: 10),
@@ -436,7 +438,8 @@ class _BoothWorkspace extends StatelessWidget {
 }
 
 class _ManagerChoicePanel extends StatelessWidget {
-  const _ManagerChoicePanel({required this.onManualAdd, required this.onPickVoter});
+  const _ManagerChoicePanel(
+      {required this.onManualAdd, required this.onPickVoter});
 
   final VoidCallback onManualAdd;
   final VoidCallback onPickVoter;
@@ -453,7 +456,8 @@ class _ManagerChoicePanel extends StatelessWidget {
           const Text('1. Manager add karne ka tarika chune',
               style: TextStyle(color: navy, fontWeight: FontWeight.w900)),
           const SizedBox(height: 4),
-          const Text('Admin confuse na ho - manager do tareeke se ban sakta hai.',
+          const Text(
+              'Admin confuse na ho - manager do tareeke se ban sakta hai.',
               style: TextStyle(color: muted, fontSize: 12)),
           const SizedBox(height: 10),
           LayoutBuilder(builder: (context, box) {
@@ -462,7 +466,8 @@ class _ManagerChoicePanel extends StatelessWidget {
               _ManagerCreateCard(
                 icon: Icons.person_add_alt_1_rounded,
                 title: 'Manual manager add karein',
-                subtitle: 'Kisi bhi person ka name, mobile, email aur password daal kar manager banayein.',
+                subtitle:
+                    'Kisi bhi person ka name, mobile, email aur password daal kar manager banayein.',
                 action: 'Manual add',
                 color: blue,
                 onTap: onManualAdd,
@@ -470,16 +475,22 @@ class _ManagerChoicePanel extends StatelessWidget {
               _ManagerCreateCard(
                 icon: Icons.how_to_vote_rounded,
                 title: 'Booth voter se chune',
-                subtitle: 'Is booth ke voter me se person chune - name/mobile auto fill hoga.',
+                subtitle:
+                    'Is booth ke voter me se person chune - name/mobile auto fill hoga.',
                 action: 'Neeche voter list dekhein',
                 color: green,
                 onTap: onPickVoter,
               ),
             ];
             if (!wide) {
-              return Column(children: [cards[0], const SizedBox(height: 10), cards[1]]);
+              return Column(
+                  children: [cards[0], const SizedBox(height: 10), cards[1]]);
             }
-            return Row(children: [Expanded(child: cards[0]), const SizedBox(width: 10), Expanded(child: cards[1])]);
+            return Row(children: [
+              Expanded(child: cards[0]),
+              const SizedBox(width: 10),
+              Expanded(child: cards[1])
+            ]);
           }),
         ]),
       );
@@ -519,13 +530,24 @@ class _ManagerCreateCard extends StatelessWidget {
               child: Icon(icon, color: color),
             ),
             const SizedBox(width: 10),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(title, style: const TextStyle(color: navy, fontWeight: FontWeight.w900)),
-              const SizedBox(height: 3),
-              Text(subtitle, style: const TextStyle(color: muted, fontSize: 11, height: 1.25)),
-              const SizedBox(height: 8),
-              Text(action, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w900)),
-            ])),
+            Expanded(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                  Text(title,
+                      style: const TextStyle(
+                          color: navy, fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 3),
+                  Text(subtitle,
+                      style: const TextStyle(
+                          color: muted, fontSize: 11, height: 1.25)),
+                  const SizedBox(height: 8),
+                  Text(action,
+                      style: TextStyle(
+                          color: color,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w900)),
+                ])),
             Icon(Icons.chevron_right_rounded, color: color),
           ]),
         ),
@@ -1109,6 +1131,12 @@ class _BoothUserFormState extends State<BoothUserForm> {
   bool canExport = false;
   bool canViewMobile = false;
   bool canBackup = false;
+  bool canReports = false;
+  bool canImportData = false;
+  bool canCreateVoters = true;
+  bool canEditVoters = true;
+  bool canEditPhoto = true;
+  bool canDeleteVoters = false;
   bool showPassword = false;
   bool saving = false;
   String error = '';
@@ -1122,6 +1150,12 @@ class _BoothUserFormState extends State<BoothUserForm> {
     canExport = permissions?['canExportData'] == true;
     canViewMobile = permissions?['canViewFullMobile'] == true;
     canBackup = permissions?['canBackup'] == true;
+    canReports = permissions?['canViewReports'] == true;
+    canImportData = permissions?['canImportData'] == true;
+    canCreateVoters = permissions?['canCreateVoters'] != false;
+    canEditVoters = permissions?['canEditVoters'] != false;
+    canEditPhoto = permissions?['canEditPhoto'] != false;
+    canDeleteVoters = permissions?['canDeleteVoters'] == true;
   }
 
   @override
@@ -1170,6 +1204,12 @@ class _BoothUserFormState extends State<BoothUserForm> {
           'canPrintProfiles': canPrint,
           'canExportData': canExport,
           'canViewFullMobile': canViewMobile,
+          'canViewReports': canReports,
+          'canImportData': canImportData,
+          'canCreateVoters': canCreateVoters,
+          'canEditVoters': canEditVoters,
+          'canEditPhoto': canEditPhoto,
+          'canDeleteVoters': canDeleteVoters,
         },
       };
       if (password.text.isNotEmpty) body['password'] = password.text;
@@ -1191,7 +1231,9 @@ class _BoothUserFormState extends State<BoothUserForm> {
   Widget build(BuildContext context) {
     final mobile = MediaQuery.sizeOf(context).width < 700;
     final title = widget.user == null
-        ? (widget.candidate == null ? 'Manual booth manager add karein' : 'Voter se manager banayein')
+        ? (widget.candidate == null
+            ? 'Manual booth manager add karein'
+            : 'Voter se manager banayein')
         : 'Manager access edit karein';
     final form = ListView(
       padding: const EdgeInsets.fromLTRB(18, 14, 18, 24),
@@ -1499,6 +1541,42 @@ class _BoothUserFormState extends State<BoothUserForm> {
               'Data backup/download jaise sensitive kaam ki permission',
               canBackup,
               (value) => setState(() => canBackup = value)),
+          _permissionCard(
+              Icons.upload_file_rounded,
+              'PDF/Excel upload करें',
+              'Import और OCR upload की अनुमति',
+              canImportData,
+              (value) => setState(() => canImportData = value)),
+          _permissionCard(
+              Icons.bar_chart_rounded,
+              'Reports देखें',
+              'Dashboard और reports',
+              canReports,
+              (value) => setState(() => canReports = value)),
+          _permissionCard(
+              Icons.person_add_alt_1_rounded,
+              'Voter जोड़ें',
+              'नया contact जोड़ें',
+              canCreateVoters,
+              (value) => setState(() => canCreateVoters = value)),
+          _permissionCard(
+              Icons.edit_rounded,
+              'Voter edit करें',
+              'Details बदलें',
+              canEditVoters,
+              (value) => setState(() => canEditVoters = value)),
+          _permissionCard(
+              Icons.photo_camera_rounded,
+              'Photo बदलें',
+              'Photo update करें',
+              canEditPhoto,
+              (value) => setState(() => canEditPhoto = value)),
+          _permissionCard(
+              Icons.delete_outline_rounded,
+              'Voter delete करें',
+              'Single और bulk delete',
+              canDeleteVoters,
+              (value) => setState(() => canDeleteVoters = value)),
         ]),
       );
 
@@ -1515,11 +1593,16 @@ class _BoothUserFormState extends State<BoothUserForm> {
             Icon(Icons.verified_user_rounded, color: green),
             SizedBox(width: 10),
             Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('Basic booth work', style: TextStyle(color: navy, fontWeight: FontWeight.w900)),
-                Text('Assigned booth ke voters dekhna/add/edit karna always allowed rahega.',
-                    style: TextStyle(color: muted, fontSize: 11)),
-              ]),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Basic booth work',
+                        style: TextStyle(
+                            color: navy, fontWeight: FontWeight.w900)),
+                    Text(
+                        'Assigned booth ke contacts hi dikhेंगे; add/edit/delete access neeche admin set kare.',
+                        style: TextStyle(color: muted, fontSize: 11)),
+                  ]),
             ),
             Icon(Icons.lock_open_rounded, color: green),
           ]),
