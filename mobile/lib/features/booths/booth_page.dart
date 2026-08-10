@@ -117,7 +117,8 @@ class _BoothPageState extends State<BoothPage> {
                     final boothIndex = entry.key;
                     final groupLabel = _boothGroupLabel(booth);
                     final showGroup = boothIndex == 0 ||
-                        _boothGroupLabel(filtered[boothIndex - 1]) != groupLabel;
+                        _boothGroupLabel(filtered[boothIndex - 1]) !=
+                            groupLabel;
                     final ward =
                         booth['ward'] is Map ? booth['ward'] as Map : const {};
                     final assigned = managers
@@ -127,112 +128,141 @@ class _BoothPageState extends State<BoothPage> {
                     final active =
                         assigned.where((u) => u['active'] != false).length;
                     final rawBoothName = '${booth['name'] ?? ''}'.trim();
-                    final boothName = rawBoothName.isEmpty || rawBoothName == '-'
-                        ? ('${booth['area'] ?? booth['address'] ?? ''}'.trim().isEmpty
-                            ? 'Booth ${booth['number'] ?? '-'}'
-                            : '${booth['area'] ?? booth['address']}')
-                        : rawBoothName;
+                    final boothName =
+                        rawBoothName.isEmpty || rawBoothName == '-'
+                            ? ('${booth['area'] ?? booth['address'] ?? ''}'
+                                    .trim()
+                                    .isEmpty
+                                ? 'Booth ${booth['number'] ?? '-'}'
+                                : '${booth['area'] ?? booth['address']}')
+                            : rawBoothName;
                     final voters = assigned.fold<int>(
                         0,
                         (sum, user) =>
                             sum + _boothStat(user, 'boothVoterCount'));
-                    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      if (showGroup) _BoothGroupHeader(label: groupLabel),
-                      InkWell(
-                      onTap: () => _openForm(booth),
-                      borderRadius: BorderRadius.circular(22),
-                      child: Container(
-                        width: 360,
-                        padding: const EdgeInsets.all(15),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(22),
-                          border: Border.all(color: border),
-                          boxShadow: const [
-                            BoxShadow(
-                                color: Color(0x0c071b4b),
-                                blurRadius: 16,
-                                offset: Offset(0, 8)),
-                          ],
-                        ),
-                        child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(children: [
-                                Container(
-                                  width: 52,
-                                  height: 52,
-                                  decoration: BoxDecoration(
-                                      color: softBlue,
-                                      borderRadius: BorderRadius.circular(18)),
-                                  child: const Icon(Icons.how_to_vote_rounded,
-                                      color: blue),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text('बूथ ${booth['number'] ?? '-'}',
-                                            style: const TextStyle(
-                                                color: navy,
-                                                fontSize: 17,
-                                                fontWeight: FontWeight.w900)),
-                                        Text(boothName,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(
-                                                color: muted,
-                                                fontWeight: FontWeight.w700)),
-                                      ]),
-                                ),
-                                Chip(
-                                  avatar: Icon(
-                                      assigned.isEmpty
-                                          ? Icons.warning_amber_rounded
-                                          : Icons.verified_rounded,
-                                      color: assigned.isEmpty ? orange : green,
-                                      size: 16),
-                                  label: Text(assigned.isEmpty
-                                      ? 'Manager नहीं'
-                                      : '$active active'),
-                                ),
-                              ]),
-                              const SizedBox(height: 12),
-                              Text(
-                                [
-                                  if ('${ward['number'] ?? ''}'.isNotEmpty)
-                                    'वार्ड ${ward['number']}',
-                                  '${booth['area'] ?? ''}',
-                                  '${booth['address'] ?? ''}',
-                                ]
-                                    .where((value) => value.trim().isNotEmpty)
-                                    .join(' · '),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style:
-                                    const TextStyle(color: muted, fontSize: 12),
+                    return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (showGroup) _BoothGroupHeader(label: groupLabel),
+                          InkWell(
+                            onTap: () => _openForm(booth),
+                            borderRadius: BorderRadius.circular(22),
+                            child: Container(
+                              width: 360,
+                              padding: const EdgeInsets.all(15),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(22),
+                                border: Border.all(color: border),
+                                boxShadow: const [
+                                  BoxShadow(
+                                      color: Color(0x0c071b4b),
+                                      blurRadius: 16,
+                                      offset: Offset(0, 8)),
+                                ],
                               ),
-                              const SizedBox(height: 12),
-                              Wrap(spacing: 8, runSpacing: 8, children: [
-                                _BoothPill(Icons.supervisor_account_rounded,
-                                    '${assigned.length} manager'),
-                                _BoothPill(
-                                    Icons.groups_rounded, '$voters voters'),
-                                _BoothPill(Icons.edit_rounded, 'Edit'),
-                                if (api.user?['role'] == 'admin')
-                                  OutlinedButton.icon(
-                                    onPressed: () => _deleteBooth(booth),
-                                    icon: const Icon(Icons.delete_outline_rounded, size: 16, color: Colors.red),
-                                    label: const Text('Delete', style: TextStyle(color: Colors.red)),
-                                    style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact, side: const BorderSide(color: Color(0x33ef4444)), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))),
-                                  ),
-                              ]),
-                            ]),
-                      ),
-                      ),
-                    ]);
+                              child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(children: [
+                                      Container(
+                                        width: 52,
+                                        height: 52,
+                                        decoration: BoxDecoration(
+                                            color: softBlue,
+                                            borderRadius:
+                                                BorderRadius.circular(18)),
+                                        child: const Icon(
+                                            Icons.how_to_vote_rounded,
+                                            color: blue),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                  'बूथ ${booth['number'] ?? '-'}',
+                                                  style: const TextStyle(
+                                                      color: navy,
+                                                      fontSize: 17,
+                                                      fontWeight:
+                                                          FontWeight.w900)),
+                                              Text(boothName,
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: const TextStyle(
+                                                      color: muted,
+                                                      fontWeight:
+                                                          FontWeight.w700)),
+                                            ]),
+                                      ),
+                                      Chip(
+                                        avatar: Icon(
+                                            assigned.isEmpty
+                                                ? Icons.warning_amber_rounded
+                                                : Icons.verified_rounded,
+                                            color: assigned.isEmpty
+                                                ? orange
+                                                : green,
+                                            size: 16),
+                                        label: Text(assigned.isEmpty
+                                            ? 'Manager नहीं'
+                                            : '$active active'),
+                                      ),
+                                    ]),
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      [
+                                        if ('${ward['number'] ?? ''}'
+                                            .isNotEmpty)
+                                          'वार्ड ${ward['number']}',
+                                        '${booth['area'] ?? ''}',
+                                        '${booth['address'] ?? ''}',
+                                      ]
+                                          .where((value) =>
+                                              value.trim().isNotEmpty)
+                                          .join(' · '),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                          color: muted, fontSize: 12),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Wrap(spacing: 8, runSpacing: 8, children: [
+                                      _BoothPill(
+                                          Icons.supervisor_account_rounded,
+                                          '${assigned.length} manager'),
+                                      _BoothPill(Icons.groups_rounded,
+                                          '$voters voters'),
+                                      _BoothPill(Icons.edit_rounded, 'Edit'),
+                                      if (api.user?['role'] == 'admin')
+                                        OutlinedButton.icon(
+                                          onPressed: () => _deleteBooth(booth),
+                                          icon: const Icon(
+                                              Icons.delete_outline_rounded,
+                                              size: 16,
+                                              color: Colors.red),
+                                          label: const Text('Delete',
+                                              style:
+                                                  TextStyle(color: Colors.red)),
+                                          style: OutlinedButton.styleFrom(
+                                              visualDensity:
+                                                  VisualDensity.compact,
+                                              side: const BorderSide(
+                                                  color: Color(0x33ef4444)),
+                                              shape: RoundedRectangleBorder(
+                                                  borderRadius:
+                                                      BorderRadius.circular(
+                                                          20))),
+                                        ),
+                                    ]),
+                                  ]),
+                            ),
+                          ),
+                        ]);
                   }).toList(),
                 ),
             ]);
@@ -243,21 +273,37 @@ class _BoothPageState extends State<BoothPage> {
   Future<void> _deleteBooth(Map<String, dynamic> booth) async {
     final id = '${booth['_id'] ?? ''}';
     if (id.isEmpty) return;
-    final label = '${booth['name'] ?? ''}'.trim().isNotEmpty ? '${booth['name']}' : 'Booth ${booth['number'] ?? '-'}';
-    final confirmed = await showDialog<bool>(context: context, builder: (dialogContext) => AlertDialog(
-      title: const Text('Delete booth?'),
-      content: Text('Delete "$label"? Assigned managers and voters will no longer be linked to this booth.'),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
-        FilledButton(style: FilledButton.styleFrom(backgroundColor: Colors.red), onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Delete')),
-      ],
-    ));
+    final label = '${booth['name'] ?? ''}'.trim().isNotEmpty
+        ? '${booth['name']}'
+        : 'Booth ${booth['number'] ?? '-'}';
+    final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+              title: const Text('Delete booth?'),
+              content: Text(
+                  'Delete "$label"? Assigned managers and voters will no longer be linked to this booth.'),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(dialogContext, false),
+                    child: const Text('Cancel')),
+                FilledButton(
+                    style: FilledButton.styleFrom(backgroundColor: Colors.red),
+                    onPressed: () => Navigator.pop(dialogContext, true),
+                    child: const Text('Delete')),
+              ],
+            ));
     if (confirmed != true || !mounted) return;
     try {
       await api.delete('/api/booths/$id');
-      if (mounted) { setState(() {}); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Booth deleted'))); }
+      if (mounted) {
+        setState(() {});
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Booth deleted')));
+      }
     } catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))));
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(error.toString().replaceFirst('Exception: ', ''))));
     }
   }
 
@@ -288,16 +334,16 @@ class _BoothPageState extends State<BoothPage> {
                 controller: number,
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
-                    labelText: 'बूथ / भाग संख्या *',
+                    labelText: 'बूथ संख्या *',
                     prefixIcon: Icon(Icons.confirmation_number_rounded),
                     helperText: 'जैसे 79, 80, 81')),
             const SizedBox(height: 10),
             TextField(
                 controller: name,
                 decoration: const InputDecoration(
-                    labelText: 'बूथ नाम *',
+                    labelText: 'अनुभाग / गाँव नाम *',
                     prefixIcon: Icon(Icons.home_work_rounded),
-                    helperText: 'स्कूल/भवन/क्षेत्र का नाम')),
+                    helperText: 'PDF में आया अनुभाग या गाँव नाम')),
             const SizedBox(height: 10),
             TextField(
                 controller: ward,
@@ -308,7 +354,7 @@ class _BoothPageState extends State<BoothPage> {
             TextField(
                 controller: area,
                 decoration: const InputDecoration(
-                    labelText: 'क्षेत्र / गाँव',
+                    labelText: 'गाँव / क्षेत्र',
                     prefixIcon: Icon(Icons.location_city_rounded))),
             const SizedBox(height: 10),
             TextField(
@@ -320,6 +366,47 @@ class _BoothPageState extends State<BoothPage> {
           ]),
         ),
         actions: [
+          if (booth != null)
+            TextButton.icon(
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              onPressed: () async {
+                final ok = await showDialog<bool>(
+                  context: context,
+                  builder: (dialogContext) => AlertDialog(
+                    title: const Text('बूथ हटाएँ?'),
+                    content: const Text(
+                        'इस बूथ की mapping हट जाएगी। जुड़े voters को पहले दूसरे बूथ में assign करें।'),
+                    actions: [
+                      TextButton(
+                          onPressed: () => Navigator.pop(dialogContext, false),
+                          child: const Text('रद्द करें')),
+                      FilledButton(
+                        style:
+                            FilledButton.styleFrom(backgroundColor: Colors.red),
+                        onPressed: () => Navigator.pop(dialogContext, true),
+                        child: const Text('हटाएँ'),
+                      ),
+                    ],
+                  ),
+                );
+                if (ok != true) return;
+                try {
+                  await api.delete('/api/booths/${booth['_id']}');
+                  if (context.mounted) Navigator.pop(context, true);
+                } catch (error) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                          content: Text(error
+                              .toString()
+                              .replaceFirst('Exception: ', ''))),
+                    );
+                  }
+                }
+              },
+              icon: const Icon(Icons.delete_outline_rounded),
+              label: const Text('बूथ हटाएँ'),
+            ),
           TextButton(
               onPressed: () => Navigator.pop(context, false),
               child: const Text('रद्द करें')),
@@ -363,22 +450,95 @@ class _BoothHierarchyDirectory extends StatefulWidget {
   const _BoothHierarchyDirectory({required this.booths, required this.onOpen});
   final List<Map<String, dynamic>> booths;
   final Future<void> Function([Map<String, dynamic>? booth]) onOpen;
-  @override State<_BoothHierarchyDirectory> createState() => _BoothHierarchyDirectoryState();
+  @override
+  State<_BoothHierarchyDirectory> createState() =>
+      _BoothHierarchyDirectoryState();
 }
+
 class _BoothHierarchyDirectoryState extends State<_BoothHierarchyDirectory> {
-  String? assembly; String? village;
-  String _assemblyOf(Map<String, dynamic> booth) { final ward = booth['ward'] is Map ? booth['ward'] as Map : const {}; return (ward['name'] ?? ward['number'] ?? 'Unmapped assembly').toString().trim(); }
-  List<String> _locations(Map<String, dynamic> booth) { final values = List<String>.from((booth['locationNames'] as List? ?? const []).map((v) => v.toString())); if (values.isEmpty && (booth['area'] ?? '').toString().trim().isNotEmpty) values.add(booth['area'].toString()); if (values.isEmpty) values.add('Unmapped village'); return values.toSet().toList(); }
-  @override Widget build(BuildContext context) {
-    if (assembly == null) return _level('Choose assembly / ward', Icons.account_balance_rounded, _assemblies(), (value) => setState(() => assembly = value));
-    final assemblyBooths = widget.booths.where((b) => _assemblyOf(b) == assembly).toList();
-    if (village == null) { final villages = <String>{}; for (final booth in assemblyBooths) villages.addAll(_locations(booth)); return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [_back('Assembly: ' + assembly!, () => setState(() => assembly = null)), _level('Choose village / location', Icons.location_city_rounded, villages.toList(), (value) => setState(() => village = value))]); }
-    final matches = assemblyBooths.where((b) => _locations(b).contains(village)).toList();
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [_back(assembly! + ' - ' + village!, () => setState(() => village = null)), ...matches.map((booth) => Card(margin: const EdgeInsets.only(bottom: 10), child: ListTile(leading: const CircleAvatar(backgroundColor: softBlue, child: Icon(Icons.how_to_vote_rounded, color: blue)), title: Text('Booth ' + (booth['number'] ?? '-').toString(), style: const TextStyle(color: navy, fontWeight: FontWeight.w900)), subtitle: Text((booth['name'] ?? village).toString(), maxLines: 2, overflow: TextOverflow.ellipsis), trailing: const Icon(Icons.chevron_right_rounded, color: blue), onTap: () => widget.onOpen(booth)))), if (matches.isEmpty) const Padding(padding: EdgeInsets.all(18), child: Text('No booth found for this village.'))]);
+  String? assembly;
+  String? village;
+  String _assemblyOf(Map<String, dynamic> booth) {
+    final ward = booth['ward'] is Map ? booth['ward'] as Map : const {};
+    return (ward['name'] ?? ward['number'] ?? 'Unmapped assembly')
+        .toString()
+        .trim();
   }
+
+  List<String> _locations(Map<String, dynamic> booth) {
+    final values = List<String>.from(
+        (booth['locationNames'] as List? ?? const []).map((v) => v.toString()));
+    if (values.isEmpty && (booth['area'] ?? '').toString().trim().isNotEmpty)
+      values.add(booth['area'].toString());
+    if (values.isEmpty) values.add('Unmapped village');
+    return values.toSet().toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (assembly == null)
+      return _level('Choose assembly / ward', Icons.account_balance_rounded,
+          _assemblies(), (value) => setState(() => assembly = value));
+    final assemblyBooths =
+        widget.booths.where((b) => _assemblyOf(b) == assembly).toList();
+    if (village == null) {
+      final villages = <String>{};
+      for (final booth in assemblyBooths) villages.addAll(_locations(booth));
+      return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _back('Assembly: ' + assembly!, () => setState(() => assembly = null)),
+        _level('Choose village / अनुभाग', Icons.location_city_rounded,
+            villages.toList(), (value) => setState(() => village = value))
+      ]);
+    }
+    final matches =
+        assemblyBooths.where((b) => _locations(b).contains(village)).toList();
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      _back(assembly! + ' - ' + village!, () => setState(() => village = null)),
+      ...matches.map((booth) => Card(
+          margin: const EdgeInsets.only(bottom: 10),
+          child: ListTile(
+              leading: const CircleAvatar(
+                  backgroundColor: softBlue,
+                  child: Icon(Icons.how_to_vote_rounded, color: blue)),
+              title: Text('Booth ' + (booth['number'] ?? '-').toString(),
+                  style: const TextStyle(
+                      color: navy, fontWeight: FontWeight.w900)),
+              subtitle: Text((booth['name'] ?? village).toString(),
+                  maxLines: 2, overflow: TextOverflow.ellipsis),
+              trailing: const Icon(Icons.chevron_right_rounded, color: blue),
+              onTap: () => widget.onOpen(booth)))),
+      if (matches.isEmpty)
+        const Padding(
+            padding: EdgeInsets.all(18),
+            child: Text('No booth found for this village.'))
+    ]);
+  }
+
   List<String> _assemblies() => widget.booths.map(_assemblyOf).toSet().toList();
-  Widget _back(String label, VoidCallback onTap) => Align(alignment: Alignment.centerLeft, child: TextButton.icon(onPressed: onTap, icon: const Icon(Icons.arrow_back_rounded), label: Text(label)));
-  Widget _level(String title, IconData icon, List<String> values, ValueChanged<String> onTap) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Padding(padding: const EdgeInsets.only(bottom: 8), child: Text(title, style: const TextStyle(color: navy, fontSize: 16, fontWeight: FontWeight.w900))), ...values.map((value) => Card(margin: const EdgeInsets.only(bottom: 10), child: ListTile(leading: Icon(icon, color: blue), title: Text(value, style: const TextStyle(color: navy, fontWeight: FontWeight.w800)), trailing: const Icon(Icons.chevron_right_rounded, color: blue), onTap: () => onTap(value))))]);
+  Widget _back(String label, VoidCallback onTap) => Align(
+      alignment: Alignment.centerLeft,
+      child: TextButton.icon(
+          onPressed: onTap,
+          icon: const Icon(Icons.arrow_back_rounded),
+          label: Text(label)));
+  Widget _level(String title, IconData icon, List<String> values,
+          ValueChanged<String> onTap) =>
+      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(title,
+                style: const TextStyle(
+                    color: navy, fontSize: 16, fontWeight: FontWeight.w900))),
+        ...values.map((value) => Card(
+            margin: const EdgeInsets.only(bottom: 10),
+            child: ListTile(
+                leading: Icon(icon, color: blue),
+                title: Text(value,
+                    style: const TextStyle(
+                        color: navy, fontWeight: FontWeight.w800)),
+                trailing: const Icon(Icons.chevron_right_rounded, color: blue),
+                onTap: () => onTap(value))))
+      ]);
 }
 
 class _BoothMetric extends StatelessWidget {
@@ -451,13 +611,16 @@ class _BoothGroupHeader extends StatelessWidget {
   final String label;
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(top: 8, bottom: 2),
-    child: Row(children: [
-      const Icon(Icons.folder_rounded, color: blue, size: 20),
-      const SizedBox(width: 8),
-      Expanded(child: Text(label.isEmpty ? 'Unmapped location' : label, style: const TextStyle(color: navy, fontSize: 15, fontWeight: FontWeight.w900))),
-    ]),
-  );
+        padding: const EdgeInsets.only(top: 8, bottom: 2),
+        child: Row(children: [
+          const Icon(Icons.folder_rounded, color: blue, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+              child: Text(label.isEmpty ? 'Unmapped location' : label,
+                  style: const TextStyle(
+                      color: navy, fontSize: 15, fontWeight: FontWeight.w900))),
+        ]),
+      );
 }
 
 String _assignedBoothId(Map<String, dynamic> user) {
