@@ -22,21 +22,52 @@ exports.list = async (req, res, next) => {
     const booths = await Booth.find(filter).populate('ward').sort({ number: 1 }).lean();
     const ids = booths.map((booth) => booth._id);
     const members = ids.length
-      ? await Member.find({ booth: { $in: ids } }).select('booth sectionName village gramPanchayat').lean()
+      ? await Member.find({ booth: { $in: ids } }).select('booth assemblyNumber assemblyName partNumber sectionNumber sectionName village gramPanchayat').lean()
       : [];
     const byBooth = new Map();
     for (const member of members) {
       const key = String(member.booth || '');
-      if (!byBooth.has(key)) byBooth.set(key, new Set());
-      [member.sectionName, member.village].forEach((value) => {
-        const text = String(value || '').trim();
-        if (text) byBooth.get(key).add(text);
+      if (!byBooth.has(key)) byBooth.set(key, {
+        memberCount: 0,
+        villages: new Set(),
+        sectionNames: new Set(),
+        hierarchy: new Map(),
       });
+      const summary = byBooth.get(key);
+      summary.memberCount += 1;
+      const village = String(member.village || member.gramPanchayat || '').trim();
+      const sectionName = String(member.sectionName || '').trim();
+      if (village) summary.villages.add(village);
+      if (sectionName) summary.sectionNames.add(sectionName);
+      const assemblyName = String(member.assemblyName || '').trim();
+      if (assemblyName && village && sectionName) {
+        const hierarchyKey = [assemblyName, village, sectionName].join('\u0000');
+        const existing = summary.hierarchy.get(hierarchyKey);
+        if (existing) existing.count += 1;
+        else summary.hierarchy.set(hierarchyKey, {
+          assemblyNumber: String(member.assemblyNumber || '').trim(),
+          assemblyName,
+          partNumber: String(member.partNumber || '').trim(),
+          village,
+          sectionNumber: String(member.sectionNumber || '').trim(),
+          sectionName,
+          count: 1,
+        });
+      }
     }
-    res.json(booths.map((booth) => ({
-      ...booth,
-      locationNames: [...(byBooth.get(String(booth._id)) || new Set())],
-    })));
+    res.json(booths.map((booth) => {
+      const summary = byBooth.get(String(booth._id));
+      const villages = [...(summary?.villages || [])];
+      const sectionNames = [...(summary?.sectionNames || [])];
+      return {
+        ...booth,
+        memberCount: summary?.memberCount || 0,
+        villages,
+        sectionNames,
+        voterHierarchy: [...(summary?.hierarchy?.values() || [])],
+        locationNames: [...villages, ...sectionNames],
+      };
+    }));
   } catch (e) { next(e); }
 };
 exports.create = async (req, res, next) => {

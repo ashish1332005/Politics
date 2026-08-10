@@ -13,6 +13,13 @@ class BoothPage extends StatefulWidget {
   State<BoothPage> createState() => _BoothPageState();
 }
 
+bool _isMappedBooth(Map<String, dynamic> booth) {
+  final memberCount = (booth['memberCount'] as num?)?.toInt() ?? 0;
+  final hierarchy = booth['voterHierarchy'] as List? ?? const [];
+  final locations = booth['locationNames'] as List? ?? const [];
+  return memberCount > 0 || hierarchy.isNotEmpty || locations.isNotEmpty;
+}
+
 class _BoothPageState extends State<BoothPage> {
   final search = TextEditingController();
 
@@ -31,11 +38,15 @@ class _BoothPageState extends State<BoothPage> {
             final booths = items
                 .whereType<Map>()
                 .map((item) => Map<String, dynamic>.from(item))
+                .where(_isMappedBooth)
                 .toList();
+            final boothIds = booths.map((booth) => '${booth['_id']}').toSet();
             final managers = usersRaw
                 .whereType<Map>()
-                .where((user) => user['role'] == 'booth')
                 .map((item) => Map<String, dynamic>.from(item))
+                .where((user) =>
+                    user['role'] == 'booth' &&
+                    boothIds.contains(_assignedBoothId(user)))
                 .toList();
             final query = search.text.toLowerCase().trim();
             final filtered = booths.where((booth) {
@@ -107,7 +118,8 @@ class _BoothPageState extends State<BoothPage> {
                   ),
                 )
               else if (query.isEmpty)
-                _BoothHierarchyDirectory(booths: booths, onOpen: _openForm)
+                _BoothHierarchyDirectory(
+                    booths: booths, onOpen: _openHierarchyVoters)
               else
                 Wrap(
                   spacing: 12,
@@ -268,6 +280,78 @@ class _BoothPageState extends State<BoothPage> {
           },
         ),
       );
+
+  Future<void> _openHierarchyVoters(Map<String, dynamic> node) async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(
+              '${node['village'] ?? '-'} · अनुभाग ${node['sectionNumber'] ?? ''}'),
+          const SizedBox(height: 3),
+          Text('${node['sectionName'] ?? '-'}',
+              style: const TextStyle(color: muted, fontSize: 14)),
+        ]),
+        content: SizedBox(
+          width: 620,
+          height: MediaQuery.sizeOf(dialogContext).height * .68,
+          child: FutureBuilder<Map<String, dynamic>>(
+            future: api.getQuery('/api/members', {
+              'assemblyName': '${node['assemblyName'] ?? ''}',
+              'village': '${node['village'] ?? ''}',
+              'sectionName': '${node['sectionName'] ?? ''}',
+              'limit': '200',
+            }),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState != ConnectionState.done) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (snapshot.hasError) {
+                return Center(
+                    child: Text('${snapshot.error}',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.red)));
+              }
+              final voters = List<Map<String, dynamic>>.from(
+                (snapshot.data?['items'] as List? ?? const [])
+                    .whereType<Map>()
+                    .map((item) => Map<String, dynamic>.from(item)),
+              );
+              if (voters.isEmpty) {
+                return const Center(
+                    child: Text('इस अनुभाग में मतदाता नहीं मिले।'));
+              }
+              return ListView.separated(
+                itemCount: voters.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (_, index) {
+                  final voter = voters[index];
+                  return ListTile(
+                    leading: CircleAvatar(child: Text('${index + 1}')),
+                    title: Text('${voter['name'] ?? '-'}',
+                        style: const TextStyle(fontWeight: FontWeight.w800)),
+                    subtitle: Text([
+                      if ('${voter['guardianName'] ?? ''}'.trim().isNotEmpty)
+                        'पिता/पति: ${voter['guardianName']}',
+                      if ('${voter['voterId'] ?? ''}'.trim().isNotEmpty)
+                        'EPIC: ${voter['voterId']}',
+                    ].join(' · ')),
+                    trailing: Text('${voter['houseNumber'] ?? ''}'),
+                  );
+                },
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('बंद करें'),
+          ),
+        ],
+      ),
+    );
+  }
 
   Future<void> _deleteBooth(Map<String, dynamic> booth) async {
     final id = '${booth['_id'] ?? ''}';
@@ -448,7 +532,8 @@ class _BoothPageState extends State<BoothPage> {
 class _BoothHierarchyDirectory extends StatefulWidget {
   const _BoothHierarchyDirectory({required this.booths, required this.onOpen});
   final List<Map<String, dynamic>> booths;
-  final Future<void> Function([Map<String, dynamic>? booth]) onOpen;
+  final Future<void> Function(Map<String, dynamic> node) onOpen;
+
   @override
   State<_BoothHierarchyDirectory> createState() =>
       _BoothHierarchyDirectoryState();
@@ -457,87 +542,100 @@ class _BoothHierarchyDirectory extends StatefulWidget {
 class _BoothHierarchyDirectoryState extends State<_BoothHierarchyDirectory> {
   String? assembly;
   String? village;
-  String _assemblyOf(Map<String, dynamic> booth) {
-    final ward = booth['ward'] is Map ? booth['ward'] as Map : const {};
-    return (ward['name'] ?? ward['number'] ?? 'Unmapped assembly')
-        .toString()
-        .trim();
-  }
 
-  List<String> _locations(Map<String, dynamic> booth) {
-    final raw = List<String>.from(
-        (booth['locationNames'] as List? ?? const []).map((v) => v.toString()));
-    final values = raw
-        .map((value) {
-          final parts = value.split(',').map((e) => e.trim()).toList();
-          return parts.isEmpty ? value.trim() : parts.last;
-        })
-        .where((value) => value.isNotEmpty)
-        .toList();
-    if (values.isEmpty && (booth['area'] ?? '').toString().trim().isNotEmpty) {
-      values.add(booth['area'].toString());
-    }
-    if (values.isEmpty) values.add('Unmapped village');
-    return values.toSet().toList();
-  }
-
-  List<String> _sectionsForVillage(Map<String, dynamic> booth, String village) {
-    final raw = List<String>.from(
-        (booth['locationNames'] as List? ?? const []).map((v) => v.toString()));
-    return raw.where((value) {
-      final parts = value.split(',').map((e) => e.trim()).toList();
-      return (parts.isEmpty ? value.trim() : parts.last) == village;
-    }).toList();
-  }
+  List<Map<String, dynamic>> get nodes => widget.booths
+      .expand((booth) => (booth['voterHierarchy'] as List? ?? const []))
+      .whereType<Map>()
+      .map((item) => Map<String, dynamic>.from(item))
+      .where((item) =>
+          '${item['assemblyName'] ?? ''}'.trim().isNotEmpty &&
+          '${item['village'] ?? ''}'.trim().isNotEmpty &&
+          '${item['sectionName'] ?? ''}'.trim().isNotEmpty)
+      .toList();
 
   @override
   Widget build(BuildContext context) {
-    if (assembly == null)
-      return _level('Choose assembly / ward', Icons.account_balance_rounded,
-          _assemblies(), (value) => setState(() => assembly = value));
-    final assemblyBooths =
-        widget.booths.where((b) => _assemblyOf(b) == assembly).toList();
+    if (assembly == null) {
+      final assemblies = nodes
+          .map((item) => '${item['assemblyName']}')
+          .toSet()
+          .toList()
+        ..sort();
+      return _level(
+        'विधानसभा चुनें',
+        Icons.account_balance_rounded,
+        assemblies.map((value) => _DirectoryOption(value, '')).toList(),
+        (value) => setState(() => assembly = value),
+      );
+    }
+
+    final assemblyNodes =
+        nodes.where((item) => '${item['assemblyName']}' == assembly).toList();
     if (village == null) {
-      final villages = <String>{};
-      for (final booth in assemblyBooths) villages.addAll(_locations(booth));
+      final villages = assemblyNodes
+          .map((item) => '${item['village']}')
+          .toSet()
+          .toList()
+        ..sort();
       return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        _back('Assembly: ' + assembly!, () => setState(() => assembly = null)),
-        _level('Choose village / section', Icons.location_city_rounded,
-            villages.toList(), (value) => setState(() => village = value))
+        _back('विधानसभा: $assembly', () => setState(() => assembly = null)),
+        _level(
+          'गाँव चुनें',
+          Icons.location_city_rounded,
+          villages.map((value) {
+            final count = assemblyNodes
+                .where((item) => '${item['village']}' == value)
+                .fold<int>(
+                    0,
+                    (sum, item) =>
+                        sum + ((item['count'] as num?)?.toInt() ?? 0));
+            return _DirectoryOption(value, '$count मतदाता');
+          }).toList(),
+          (value) => setState(() => village = value),
+        ),
       ]);
     }
-    final matches =
-        assemblyBooths.where((b) => _locations(b).contains(village)).toList();
-    final sections = <String, Map<String, dynamic>>{};
-    for (final booth in matches) {
-      for (final section in _sectionsForVillage(booth, village!)) {
-        sections.putIfAbsent(section, () => booth);
+
+    final sectionMap = <String, Map<String, dynamic>>{};
+    for (final item
+        in assemblyNodes.where((item) => '${item['village']}' == village)) {
+      final name = '${item['sectionName']}';
+      final existing = sectionMap[name];
+      if (existing == null) {
+        sectionMap[name] = {...item};
+      } else {
+        existing['count'] = ((existing['count'] as num?)?.toInt() ?? 0) +
+            ((item['count'] as num?)?.toInt() ?? 0);
       }
     }
+    final sections = sectionMap.values.toList()
+      ..sort((a, b) => '${a['sectionName']}'.compareTo('${b['sectionName']}'));
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      _back('Assembly: ' + assembly! + '  गाँव: ' + village!,
+      _back('विधानसभा: $assembly · गाँव: $village',
           () => setState(() => village = null)),
       _level(
-        'Choose section',
+        'अनुभाग / मोहल्ला चुनें',
         Icons.view_list_rounded,
-        sections.keys.toList(),
-        (section) => widget.onOpen(sections[section]),
+        sections
+            .map((item) => _DirectoryOption(
+                  '${item['sectionName']}',
+                  '${item['count'] ?? 0} मतदाता',
+                  data: item,
+                ))
+            .toList(),
+        (value) => widget.onOpen(sectionMap[value]!),
       ),
-      if (sections.isEmpty)
-        const Padding(
-            padding: EdgeInsets.all(18),
-            child: Text('No section found for this village.'))
     ]);
   }
 
-  List<String> _assemblies() => widget.booths.map(_assemblyOf).toSet().toList();
   Widget _back(String label, VoidCallback onTap) => Align(
       alignment: Alignment.centerLeft,
       child: TextButton.icon(
           onPressed: onTap,
           icon: const Icon(Icons.arrow_back_rounded),
           label: Text(label)));
-  Widget _level(String title, IconData icon, List<String> values,
+
+  Widget _level(String title, IconData icon, List<_DirectoryOption> values,
           ValueChanged<String> onTap) =>
       Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Padding(
@@ -545,16 +643,30 @@ class _BoothHierarchyDirectoryState extends State<_BoothHierarchyDirectory> {
             child: Text(title,
                 style: const TextStyle(
                     color: navy, fontSize: 16, fontWeight: FontWeight.w900))),
-        ...values.map((value) => Card(
+        if (values.isEmpty)
+          const Padding(
+            padding: EdgeInsets.all(18),
+            child: Text('इस स्तर पर कोई mapped data नहीं मिला।'),
+          ),
+        ...values.map((option) => Card(
             margin: const EdgeInsets.only(bottom: 10),
             child: ListTile(
                 leading: Icon(icon, color: blue),
-                title: Text(value,
+                title: Text(option.label,
                     style: const TextStyle(
                         color: navy, fontWeight: FontWeight.w800)),
+                subtitle:
+                    option.subtitle.isEmpty ? null : Text(option.subtitle),
                 trailing: const Icon(Icons.chevron_right_rounded, color: blue),
-                onTap: () => onTap(value))))
+                onTap: () => onTap(option.label))))
       ]);
+}
+
+class _DirectoryOption {
+  const _DirectoryOption(this.label, this.subtitle, {this.data});
+  final String label;
+  final String subtitle;
+  final Map<String, dynamic>? data;
 }
 
 class _BoothMetric extends StatelessWidget {

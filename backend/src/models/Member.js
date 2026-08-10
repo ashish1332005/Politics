@@ -1,4 +1,4 @@
-﻿const mongoose = require('mongoose');
+const mongoose = require('mongoose');
 
 const { buildMemberSearchData } = require('../utils/memberSearch');
 
@@ -144,6 +144,11 @@ const MemberSchema = new mongoose.Schema({
   searchText: { type: String, default: '', select: false },
   searchKeys: { type: [String], default: [], select: false },
   searchExact: { type: [String], default: [], select: false },
+  searchNameKeys: { type: [String], default: [], select: false },
+  searchGuardianKeys: { type: [String], default: [], select: false },
+  searchEpicKeys: { type: [String], default: [], select: false },
+  searchHouseKeys: { type: [String], default: [], select: false },
+  searchMobileKeys: { type: [String], default: [], select: false },
 }, { timestamps: true });
 
 MemberSchema.pre('validate', function updateSearchData(next) {
@@ -162,6 +167,11 @@ MemberSchema.index({ assemblyNumber: 1, partNumber: 1, sectionName: 1 });
 MemberSchema.index({ area: 1, organizationPost: 1, caste: 1 });
 MemberSchema.index({ searchKeys: 1 });
 MemberSchema.index({ searchExact: 1 });
+MemberSchema.index({ searchNameKeys: 1 });
+MemberSchema.index({ searchGuardianKeys: 1 });
+MemberSchema.index({ searchEpicKeys: 1 });
+MemberSchema.index({ searchHouseKeys: 1 });
+MemberSchema.index({ searchMobileKeys: 1 });
 
 module.exports = mongoose.model('Member', MemberSchema);
 

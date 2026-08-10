@@ -1,4 +1,4 @@
-const SEARCH_VERSION = 1;
+const SEARCH_VERSION = 2;
 const SEARCH_SOURCE_FIELDS = [
   'name',
   'surname',
@@ -98,6 +98,46 @@ const addPersonSubstrings = (keys, value) => {
   }
 };
 
+const deletionKeys = (value, { digitsOnly = false } = {}) => {
+  const normalized = digitsOnly
+    ? compactDigits(value)
+    : normalizeSearchValue(value);
+  if (!normalized) return [];
+  const variants = new Set();
+  if (digitsOnly) variants.add(normalized);
+  else {
+    variants.add(normalized.replace(/\s+/g, ''));
+    normalized.split(' ').forEach((token) => variants.add(token));
+    const loose = looseHindiToken(normalized);
+    if (loose) variants.add('~' + loose);
+  }
+  const keys = new Set();
+  for (const variant of variants) {
+    if (variant.length < 3) continue;
+    keys.add(variant);
+    if (variant.length < 4 || variant.length > 40) continue;
+    for (let index = 0; index < variant.length; index += 1) {
+      keys.add(variant.slice(0, index) + variant.slice(index + 1));
+    }
+  }
+  return [...keys];
+};
+
+const fieldSearchData = (member) => ({
+  searchNameKeys: [...new Set([
+    ...deletionKeys([member?.name, member?.surname].filter(Boolean).join(' ')),
+    ...deletionKeys(member?.name),
+    ...deletionKeys(member?.surname),
+  ])],
+  searchGuardianKeys: deletionKeys(member?.guardianName),
+  searchEpicKeys: deletionKeys(canonicalEpic(member?.voterId)),
+  searchHouseKeys: deletionKeys(member?.houseNumber),
+  searchMobileKeys: [...new Set([
+    ...deletionKeys(member?.mobile, { digitsOnly: true }),
+    ...deletionKeys(member?.altMobile, { digitsOnly: true }),
+  ])],
+});
+
 const buildMemberSearchData = (member) => {
   const values = sourceValues(member);
   const normalizedValues = values.map(normalizeSearchValue).filter(Boolean);
@@ -108,9 +148,12 @@ const buildMemberSearchData = (member) => {
       addLoosePrefixes(keys, token);
     });
   }
-  [member?.name, member?.surname, member?.guardianName].forEach(
-    (value) => addPersonSubstrings(keys, value),
-  );
+  [member?.name, member?.surname, member?.guardianName].forEach((value) => {
+    addPersonSubstrings(keys, value);
+    deletionKeys(value).forEach((key) => keys.add(key));
+  });
+  deletionKeys([member?.name, member?.surname].filter(Boolean).join(' '))
+    .forEach((key) => keys.add(key));
 
   for (const field of ['mobile', 'altMobile']) {
     const digits = compactDigits(member?.[field]);
@@ -136,6 +179,7 @@ const buildMemberSearchData = (member) => {
     searchText: normalizedValues.join(' '),
     searchKeys: [...keys].slice(0, 600),
     searchExact: [...exact].slice(0, 200),
+    ...fieldSearchData(member),
   };
 };
 
@@ -146,7 +190,7 @@ const searchTokens = (query) => {
     const digits = compactDigits(token);
     if (digits && digits.length === token.length) return digits;
     const epic = canonicalEpic(token);
-    if (/^[a-z]{3}[a-z0-9]{3,}$/i.test(token) && epic) return epic.toLowerCase();
+    if (/^(?=[a-z0-9]*[0-9])[a-z]{3}[a-z0-9]{3,}$/i.test(token) && epic) return epic.toLowerCase();
     return token;
   });
 };
@@ -200,6 +244,14 @@ const FIELD_SEARCH_FIELDS = {
   mobile: ['mobile', 'altMobile'],
 };
 
+const FIELD_SEARCH_KEY_FIELDS = {
+  name: 'searchNameKeys',
+  guardian: 'searchGuardianKeys',
+  epic: 'searchEpicKeys',
+  house: 'searchHouseKeys',
+  mobile: 'searchMobileKeys',
+};
+
 const fieldRegexConditions = (mode, token) => {
   const fields = FIELD_SEARCH_FIELDS[mode];
   if (!fields) return null;
@@ -222,14 +274,32 @@ const fieldRegexConditions = (mode, token) => {
 const buildFieldSearchConditions = (query, mode) => {
   const cleanMode = String(mode || '').trim();
   if (!FIELD_SEARCH_FIELDS[cleanMode]) return buildSearchConditions(query);
-  return searchTokens(query).map((token) => ({ $or: fieldRegexConditions(cleanMode, token) || [] }));
+  return searchTokens(query).map((token) => {
+    const digitsOnly = cleanMode === 'mobile';
+    const fuzzyKeys = deletionKeys(
+      cleanMode === 'epic' ? canonicalEpic(token) : token,
+      { digitsOnly },
+    );
+    return {
+      $or: [
+        ...(fuzzyKeys.length
+          ? [{ [FIELD_SEARCH_KEY_FIELDS[cleanMode]]: { $in: fuzzyKeys } }]
+          : []),
+        ...(fieldRegexConditions(cleanMode, token) || []),
+      ],
+    };
+  });
 };
 const buildSearchConditions = (query) => searchTokens(query)
   .map((token) => {
     const loose = looseHindiToken(token);
-    const searchKeyConditions = loose && loose !== token && /[\u0900-\u097f]/.test(token)
-      ? [{ searchKeys: token }, { searchKeys: '~' + loose }]
-      : [{ searchKeys: token }];
+    const fuzzyKeys = deletionKeys(token);
+    const searchKeyConditions = [
+      ...(fuzzyKeys.length ? [{ searchKeys: { $in: fuzzyKeys } }] : []),
+      ...(loose && loose !== token && /[\u0900-\u097f]/.test(token)
+        ? [{ searchKeys: token }, { searchKeys: '~' + loose }]
+        : [{ searchKeys: token }]),
+    ];
     return { $or: [...searchKeyConditions, ...fallbackRegexConditions(token)] };
   });
 const searchExactCandidates = (query) => {

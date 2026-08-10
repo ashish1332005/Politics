@@ -41,6 +41,7 @@ class _BoothUserPageState extends State<BoothUserPage> {
             final booths = boothsRaw
                 .whereType<Map>()
                 .map((item) => Map<String, dynamic>.from(item))
+                .where(_hasMappedVoters)
                 .toList();
             final heads = usersRaw
                 .whereType<Map>()
@@ -155,6 +156,33 @@ class _BoothUserPageState extends State<BoothUserPage> {
   }
 }
 
+List<String> _stringList(dynamic value) => value is List
+    ? value
+        .map((item) => item.toString().trim())
+        .where((item) => item.isNotEmpty)
+        .toList()
+    : const [];
+
+bool _hasMappedVoters(Map<String, dynamic> booth) {
+  final count = (booth['memberCount'] as num?)?.toInt() ?? 0;
+  return count > 0 || _stringList(booth['locationNames']).isNotEmpty;
+}
+
+String _boothDisplayName(Map<String, dynamic> booth) {
+  final villages = _stringList(booth['villages']);
+  final locations = _stringList(booth['locationNames']);
+  final village = villages.isNotEmpty
+      ? villages.first
+      : locations.firstWhere(
+          (value) => !value.contains(','),
+          orElse: () => locations.isEmpty ? '' : locations.last,
+        );
+  final part = (booth['number'] ?? '').toString().trim();
+  if (village.isNotEmpty && part.isNotEmpty) return '$village · भाग $part';
+  if (part.isNotEmpty) return 'भाग $part';
+  return village.isNotEmpty ? village : 'बूथ';
+}
+
 class _SummaryStrip extends StatelessWidget {
   const _SummaryStrip({
     required this.booths,
@@ -236,7 +264,7 @@ class _BoothFinder extends StatelessWidget {
     final query = controller.text.trim().toLowerCase();
     final filtered = booths.where((booth) {
       final text =
-          '${booth['number'] ?? ''} ${booth['name'] ?? ''} ${booth['area'] ?? ''} ${booth['ward']?['number'] ?? ''}'
+          '${booth['number'] ?? ''} ${booth['name'] ?? ''} ${booth['area'] ?? ''} ${booth['ward']?['number'] ?? ''} ${_stringList(booth['villages']).join(' ')} ${_stringList(booth['locationNames']).join(' ')}'
               .toLowerCase();
       return query.isEmpty || text.contains(query);
     }).toList();
@@ -274,8 +302,6 @@ class _BoothFinder extends StatelessWidget {
               final booth = filtered[index];
               final id = '${booth['_id']}';
               final selected = id == selectedBoothId;
-              final boothHeads =
-                  heads.where((u) => _idOf(u['assignedBooth']) == id).length;
               final voters = heads
                   .where((u) => _idOf(u['assignedBooth']) == id)
                   .fold<int>(
@@ -305,13 +331,12 @@ class _BoothFinder extends StatelessWidget {
                       child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('${booth['name'] ?? 'Unnamed booth'}',
+                            Text(_boothDisplayName(booth),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
                                     color: navy, fontWeight: FontWeight.w800)),
-                            Text(
-                                'Ward ${booth['ward']?['number'] ?? '-'}  $boothHeads manager  $voters voters',
+                            Text('$voters मतदाता',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
@@ -597,8 +622,7 @@ class _HeadGrid extends StatelessWidget {
           Text('अभी कोई manager assigned नहीं है',
               style: TextStyle(color: navy, fontWeight: FontWeight.w900)),
           SizedBox(height: 4),
-          Text(
-              'नीचे voter list से “Make manager” करें या Add manager दबाएँ।',
+          Text('नीचे voter list से “Make manager” करें या Add manager दबाएँ।',
               textAlign: TextAlign.center,
               style: TextStyle(color: muted, fontSize: 12)),
         ]),
@@ -714,10 +738,7 @@ class _ManagerCard extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(color: muted, fontSize: 12)),
               const SizedBox(height: 3),
-              Text(
-                  phone.isEmpty
-                      ? '   '
-                      : phone,
+              Text(phone.isEmpty ? '   ' : phone,
                   style: const TextStyle(
                       color: navy, fontSize: 12, fontWeight: FontWeight.w700)),
             ]),
@@ -1261,25 +1282,17 @@ class _BoothUserFormState extends State<BoothUserForm> {
         const SizedBox(height: 18),
         _managerField(name, 'नाम *', Icons.person_outline_rounded),
         const SizedBox(height: 12),
-        _managerField(
-            phone, 'मोबाइल नंबर', Icons.phone_outlined,
+        _managerField(phone, 'मोबाइल नंबर', Icons.phone_outlined,
             keyboard: TextInputType.phone),
         const SizedBox(height: 12),
-        _managerField(
-            email, 'लॉगिन ईमेल *', Icons.email_outlined,
+        _managerField(email, 'लॉगिन ईमेल *', Icons.email_outlined,
             keyboard: TextInputType.emailAddress),
         const SizedBox(height: 12),
-        _managerField(
-            password,
-            widget.user == null
-                ? ' *'
-                : 'नया पासवर्ड',
+        _managerField(password, widget.user == null ? ' *' : 'नया पासवर्ड',
             Icons.lock_outline_rounded,
             obscure: !showPassword,
             suffix: IconButton(
-              tooltip: showPassword
-                  ? 'Password '
-                  : 'Password दिखाएँ',
+              tooltip: showPassword ? 'Password ' : 'Password दिखाएँ',
               onPressed: () => setState(() => showPassword = !showPassword),
               icon: Icon(showPassword
                   ? Icons.visibility_off_rounded
@@ -1361,8 +1374,7 @@ class _BoothUserFormState extends State<BoothUserForm> {
                 style: const TextStyle(
                     color: navy, fontSize: 19, fontWeight: FontWeight.w900)),
             const SizedBox(height: 3),
-            const Text(
-                'नाम, login, बूथ और permissions साफ-साफ सेट करें',
+            const Text('नाम, login, बूथ और permissions साफ-साफ सेट करें',
                 style: TextStyle(color: muted, fontSize: 12)),
           ]),
         ),
@@ -1469,8 +1481,7 @@ class _BoothUserFormState extends State<BoothUserForm> {
             return query.isEmpty || haystack.contains(query);
           }).toList();
           return AlertDialog(
-            title:
-                const Text('बूथ खोजें और चुनें'),
+            title: const Text('बूथ खोजें और चुनें'),
             content: SizedBox(
               width: 520,
               height: 520,
@@ -1480,8 +1491,7 @@ class _BoothUserFormState extends State<BoothUserForm> {
                   onChanged: (_) => setDialogState(() {}),
                   decoration: const InputDecoration(
                     prefixIcon: Icon(Icons.search_rounded),
-                    hintText:
-                        'बूथ नंबर, नाम, वार्ड या क्षेत्र लिखें...',
+                    hintText: 'बूथ नंबर, नाम, वार्ड या क्षेत्र लिखें...',
                   ),
                 ),
                 const SizedBox(height: 10),

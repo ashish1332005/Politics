@@ -31,20 +31,41 @@ test('supports loose Hindi matra matching and multi-field query tokens', () => {
   assert.equal(conditions.length, 2);
   assert.ok(conditions[0].$or);
   assert.ok(conditions[1].$or);
-  assert.deepEqual(conditions[1].$or[0], { searchKeys: 'सहाडा' });
+  assert.ok(conditions[1].$or[0].searchKeys.$in.includes('सहाडा'));
 });
 
 test('scopes quick search to voter name, guardian name or EPIC', () => {
   const name = buildFieldSearchConditions('राम', 'name');
-  assert.deepEqual(Object.keys(name[0].$or[0]), ['name']);
-  assert.deepEqual(Object.keys(name[0].$or[1]), ['surname']);
+  assert.deepEqual(Object.keys(name[0].$or[0]), ['searchNameKeys']);
+  assert.ok(name[0].$or.some((condition) => condition.name));
+  assert.ok(name[0].$or.some((condition) => condition.surname));
 
   const guardian = buildFieldSearchConditions('मोहनलाल', 'guardian');
-  assert.equal(guardian[0].$or.length, 1);
-  assert.deepEqual(Object.keys(guardian[0].$or[0]), ['guardianName']);
+  assert.deepEqual(Object.keys(guardian[0].$or[0]), ['searchGuardianKeys']);
+  assert.ok(guardian[0].$or.some((condition) => condition.guardianName));
 
   const epic = buildFieldSearchConditions('ABC1234567', 'epic');
-  assert.ok(epic[0].$or.every((condition) => Object.keys(condition)[0] === 'voterId'));
+  assert.deepEqual(Object.keys(epic[0].$or[0]), ['searchEpicKeys']);
+  assert.ok(epic[0].$or.some((condition) => condition.voterId));
+});
+
+test('matches joined names and one-character typing mistakes within selected fields', () => {
+  const data = buildMemberSearchData({
+    name: 'Arjun Lal',
+    guardianName: 'Mohan Lal',
+    voterId: 'ABC1234567',
+    mobile: '9876543210',
+    houseNumber: '1234',
+  });
+  assert.ok(data.searchNameKeys.includes('arjunlal'));
+  assert.ok(data.searchNameKeys.includes('arjnlal'));
+
+  const typoName = buildFieldSearchConditions('arjnlal', 'name');
+  assert.ok(typoName[0].$or[0].searchNameKeys.$in.includes('arjnlal'));
+  const typoGuardian = buildFieldSearchConditions('mohnlal', 'guardian');
+  assert.ok(typoGuardian[0].$or[0].searchGuardianKeys.$in.length > 0);
+  const typoEpic = buildFieldSearchConditions('ABC1234568', 'epic');
+  assert.ok(typoEpic[0].$or[0].searchEpicKeys.$in.length > 0);
 });
 test('canonicalizes common OCR mistakes in EPIC numbers', () => {
   assert.equal(canonicalEpic('SNEO5736O6'), 'SNE0573606');
@@ -59,7 +80,7 @@ test('member validation automatically refreshes search data', async () => {
     booth: new mongoose.Types.ObjectId(),
   });
   await member.validate();
-  assert.equal(member.searchVersion, 1);
+  assert.equal(member.searchVersion, 2);
   assert.ok(member.searchKeys.includes('राम'));
   assert.ok(member.searchKeys.includes('लाल'));
 });
