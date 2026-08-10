@@ -444,8 +444,12 @@ def parse_header_numbers(text):
         label = "(?:" + "|".join(labels) + ")"
         match = re.search(label + r"\s*(?:\u0915\u094d\u0930\u092e\u093e\u0902\u0915|\u0938\u0902\u0916\u094d\u092f\u093e|\u0928\u093e\u092e|number|no|name)?\s*[:?;\-]\s*([^\n]+)", normalized, re.IGNORECASE)
         if not match:
-            return ""
-        value = clean(match.group(1)).strip(" -,:;|\t")
+            label_match = re.search(label + r"\s*(?:[:?;\-])?\s*\n\s*([^\n]+)", normalized, re.IGNORECASE)
+            if not label_match:
+                return ""
+            value = clean(label_match.group(1)).strip(" -,:;|\t")
+        else:
+            value = clean(match.group(1)).strip(" -,:;|\t")
         if numeric:
             return normalize_digits(value)
         return tidy_name(value)
@@ -491,6 +495,20 @@ def parse_header_numbers(text):
             m for m in raw_candidates
             if not re.search(r"(?:विधान\s*सभा|assembly|constituency|AC|furs|Seat)", m.group(0), re.IGNORECASE)
         ]
+
+    # OCR commonly reads the first section marker (?/?) as a danda.
+    # Recover numbered section names line-by-line so all sections from the
+    # master page are preserved instead of keeping only the first match.
+    for line in normalized.splitlines():
+        line = clean(line)
+        match = re.match(r"^(?:([0-9\u0966-\u096f]{1,3})|[??Il])\s*[-?.)?:]\s*(.+)$", line)
+        if not match:
+            continue
+        raw_number = match.group(1)
+        number = normalize_section_number(raw_number) if raw_number else "1"
+        name = tidy_name(match.group(2))
+        if number and name and has_devanagari(name) >= 2 and len(name) >= len(section_map.get(number, "")):
+            section_map[number] = name
 
     section_number = ""
     section_name = ""
