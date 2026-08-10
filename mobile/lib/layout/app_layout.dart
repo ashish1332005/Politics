@@ -47,11 +47,14 @@ class CongressMark extends StatelessWidget {
 class MobileHeader extends StatelessWidget {
   const MobileHeader({
     super.key,
-    this.title = 'मतदाता फोन बुक',
+    this.title =
+        'Ã Â¤Â®Ã Â¤Â¤Ã Â¤Â¦Ã Â¤Â¾Ã Â¤Â¤Ã Â¤Â¾ Ã Â¤Â«Ã Â¥â€¹Ã Â¤Â¨ Ã Â¤Â¬Ã Â¥ÂÃ Â¤â€¢',
     this.onSearch,
+    this.onLogout,
   });
   final String title;
   final VoidCallback? onSearch;
+  final VoidCallback? onLogout;
 
   @override
   Widget build(BuildContext context) {
@@ -67,7 +70,8 @@ class MobileHeader extends StatelessWidget {
         child: Row(children: [
           if (Scaffold.maybeOf(context)?.hasDrawer ?? false)
             IconButton(
-              tooltip: 'मेनू खोलें',
+              tooltip:
+                  'Ã Â¤Â®Ã Â¥â€¡Ã Â¤Â¨Ã Â¥â€š Ã Â¤â€“Ã Â¥â€¹Ã Â¤Â²Ã Â¥â€¡Ã Â¤â€š',
               onPressed: () => Scaffold.of(context).openDrawer(),
               icon: const Icon(Icons.menu_rounded, color: navy, size: 26),
             ),
@@ -83,14 +87,16 @@ class MobileHeader extends StatelessWidget {
                         color: navy,
                         fontSize: 18,
                         fontWeight: FontWeight.w900)),
-                const Text('आसान मतदाता संपर्क और प्रबंधन',
+                const Text(
+                    'Ã Â¤â€ Ã Â¤Â¸Ã Â¤Â¾Ã Â¤Â¨ Ã Â¤Â®Ã Â¤Â¤Ã Â¤Â¦Ã Â¤Â¾Ã Â¤Â¤Ã Â¤Â¾ Ã Â¤Â¸Ã Â¤â€šÃ Â¤ÂªÃ Â¤Â°Ã Â¥ÂÃ Â¤â€¢ Ã Â¤â€Ã Â¤Â° Ã Â¤ÂªÃ Â¥ÂÃ Â¤Â°Ã Â¤Â¬Ã Â¤â€šÃ Â¤Â§Ã Â¤Â¨',
                     style: TextStyle(color: muted, fontSize: 10)),
               ],
             ),
           ),
           if (onSearch != null)
             IconButton(
-              tooltip: 'मतदाता खोजें',
+              tooltip:
+                  'Ã Â¤Â®Ã Â¤Â¤Ã Â¤Â¦Ã Â¤Â¾Ã Â¤Â¤Ã Â¤Â¾ Ã Â¤â€“Ã Â¥â€¹Ã Â¤Å“Ã Â¥â€¡Ã Â¤â€š',
               onPressed: onSearch,
               icon: const Icon(Icons.search_rounded, color: navy),
             ),
@@ -100,7 +106,8 @@ class MobileHeader extends StatelessWidget {
               final count = snapshot.data?['count'] ?? 0;
               return Stack(clipBehavior: Clip.none, children: [
                 IconButton.filledTonal(
-                  tooltip: 'आज की सूचनाएँ',
+                  tooltip:
+                      'Ã Â¤â€ Ã Â¤Å“ Ã Â¤â€¢Ã Â¥â‚¬ Ã Â¤Â¸Ã Â¥â€šÃ Â¤Å¡Ã Â¤Â¨Ã Â¤Â¾Ã Â¤ÂÃ Â¤Â',
                   style: IconButton.styleFrom(
                     backgroundColor: softBlue,
                   ),
@@ -162,7 +169,8 @@ class DesktopSidebar extends StatelessWidget {
                   CongressMark(size: 42),
                   SizedBox(width: 10),
                   Expanded(
-                      child: Text('कांग्रेस संगठन\nप्रबंधन प्रणाली',
+                      child: Text(
+                          'Ã Â¤â€¢Ã Â¤Â¾Ã Â¤â€šÃ Â¤â€”Ã Â¥ÂÃ Â¤Â°Ã Â¥â€¡Ã Â¤Â¸ Ã Â¤Â¸Ã Â¤â€šÃ Â¤â€”Ã Â¤Â Ã Â¤Â¨\nÃ Â¤ÂªÃ Â¥ÂÃ Â¤Â°Ã Â¤Â¬Ã Â¤â€šÃ Â¤Â§Ã Â¤Â¨ Ã Â¤ÂªÃ Â¥ÂÃ Â¤Â°Ã Â¤Â£Ã Â¤Â¾Ã Â¤Â²Ã Â¥â‚¬',
                           style: TextStyle(
                               color: Colors.white,
                               height: 1.25,
@@ -269,7 +277,8 @@ class AppDrawer extends StatelessWidget {
                 CongressMark(),
                 SizedBox(width: 12),
                 Expanded(
-                    child: Text('कांग्रेस संगठन',
+                    child: Text(
+                        'Ã Â¤â€¢Ã Â¤Â¾Ã Â¤â€šÃ Â¤â€”Ã Â¥ÂÃ Â¤Â°Ã Â¥â€¡Ã Â¤Â¸ Ã Â¤Â¸Ã Â¤â€šÃ Â¤â€”Ã Â¤Â Ã Â¤Â¨',
                         style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w900,
@@ -287,7 +296,8 @@ class AppDrawer extends StatelessWidget {
             const Spacer(),
             const Padding(
               padding: EdgeInsets.all(20),
-              child: Text('सुरक्षित मतदाता प्रबंधन प्रणाली',
+              child: Text(
+                  'Ã Â¤Â¸Ã Â¥ÂÃ Â¤Â°Ã Â¤â€¢Ã Â¥ÂÃ Â¤Â·Ã Â¤Â¿Ã Â¤Â¤ Ã Â¤Â®Ã Â¤Â¤Ã Â¤Â¦Ã Â¤Â¾Ã Â¤Â¤Ã Â¤Â¾ Ã Â¤ÂªÃ Â¥ÂÃ Â¤Â°Ã Â¤Â¬Ã Â¤â€šÃ Â¤Â§Ã Â¤Â¨ Ã Â¤ÂªÃ Â¥ÂÃ Â¤Â°Ã Â¤Â£Ã Â¤Â¾Ã Â¤Â²Ã Â¥â‚¬',
                   style: TextStyle(color: muted)),
             ),
           ]),

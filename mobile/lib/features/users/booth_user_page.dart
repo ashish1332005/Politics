@@ -48,7 +48,16 @@ class _BoothUserPageState extends State<BoothUserPage> {
                 .map((item) => Map<String, dynamic>.from(item))
                 .toList();
             if (selectedBoothId == null && booths.isNotEmpty) {
-              selectedBoothId = '${booths.first['_id']}';
+              final mapped = booths.where((booth) {
+                final id = booth['_id']?.toString() ?? '';
+                return heads.any((user) =>
+                    _idOf(user['assignedBooth']) == id &&
+                    _stat(user, 'boothVoterCount') > 0);
+              }).toList();
+              selectedBoothId =
+                  ((mapped.isNotEmpty ? mapped.first : booths.first)['_id'] ??
+                          '')
+                      .toString();
             }
             final selectedBooth =
                 booths.cast<Map<String, dynamic>?>().firstWhere(
@@ -59,9 +68,9 @@ class _BoothUserPageState extends State<BoothUserPage> {
                 0, (sum, user) => sum + _stat(user, 'boothVoterCount'));
             return AppPage(children: [
               PremiumFeatureHero(
-                title: 'बूथ मैनेजर',
+                title: 'à¤¬à¥‚à¤¥ à¤®à¥ˆà¤¨à¥‡à¤œà¤°',
                 subtitle:
-                    'बूथ खोजें, मतदाता देखें और सही manager को सुरक्षित access दें।',
+                    'à¤¬à¥‚à¤¥ à¤–à¥‹à¤œà¥‡à¤‚, à¤®à¤¤à¤¦à¤¾à¤¤à¤¾ à¤¦à¥‡à¤–à¥‡à¤‚ à¤”à¤° à¤¸à¤¹à¥€ manager à¤•à¥‹ à¤¸à¥à¤°à¤•à¥à¤·à¤¿à¤¤ access à¤¦à¥‡à¤‚à¥¤',
                 icon: Icons.manage_accounts_rounded,
                 badges: const ['Role access', 'Booth wise', 'Secure'],
               ),
@@ -302,7 +311,7 @@ class _BoothFinder extends StatelessWidget {
                                 style: const TextStyle(
                                     color: navy, fontWeight: FontWeight.w800)),
                             Text(
-                                'Ward ${booth['ward']?['number'] ?? '-'} · $boothHeads manager · $voters voters',
+                                'Ward ${booth['ward']?['number'] ?? '-'} Â· $boothHeads manager Â· $voters voters',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
@@ -585,10 +594,11 @@ class _HeadGrid extends StatelessWidget {
             child: Icon(Icons.supervisor_account_outlined, color: blue),
           ),
           SizedBox(height: 10),
-          Text('अभी कोई manager assigned नहीं है',
+          Text('à¤…à¤­à¥€ à¤•à¥‹à¤ˆ manager assigned à¤¨à¤¹à¥€à¤‚ à¤¹à¥ˆ',
               style: TextStyle(color: navy, fontWeight: FontWeight.w900)),
           SizedBox(height: 4),
-          Text('नीचे voter list से “Make manager” करें या Add manager दबाएँ।',
+          Text(
+              'à¤¨à¥€à¤šà¥‡ voter list à¤¸à¥‡ â€œMake managerâ€ à¤•à¤°à¥‡à¤‚ à¤¯à¤¾ Add manager à¤¦à¤¬à¤¾à¤à¤à¥¤',
               textAlign: TextAlign.center,
               style: TextStyle(color: muted, fontSize: 12)),
         ]),
@@ -597,7 +607,7 @@ class _HeadGrid extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('${heads.length} manager इस booth में',
+        Text('${heads.length} manager à¤‡à¤¸ booth à¤®à¥‡à¤‚',
             style: const TextStyle(color: muted, fontWeight: FontWeight.w800)),
         const SizedBox(height: 8),
         ...heads.map((user) => _ManagerCard(
@@ -704,7 +714,10 @@ class _ManagerCard extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(color: muted, fontSize: 12)),
               const SizedBox(height: 3),
-              Text(phone.isEmpty ? 'मोबाइल नंबर नहीं है' : phone,
+              Text(
+                  phone.isEmpty
+                      ? 'à¤®à¥‹à¤¬à¤¾à¤‡à¤² à¤¨à¤‚à¤¬à¤° à¤¨à¤¹à¥€à¤‚ à¤¹à¥ˆ'
+                      : phone,
                   style: const TextStyle(
                       color: navy, fontSize: 12, fontWeight: FontWeight.w700)),
             ]),
@@ -944,7 +957,7 @@ class _VoterManagerRow extends StatelessWidget {
                   style: const TextStyle(
                       color: navy, fontWeight: FontWeight.w900)),
               Text(
-                  'EPIC ${voter['voterId'] ?? '-'} · ${voter['mobile'] ?? '-'} · House ${voter['houseNumber'] ?? '-'}',
+                  'EPIC ${voter['voterId'] ?? '-'} Â· ${voter['mobile'] ?? '-'} Â· House ${voter['houseNumber'] ?? '-'}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(color: muted, fontSize: 12)),
@@ -994,28 +1007,28 @@ class _AlphabetBar extends StatelessWidget {
     'X',
     'Y',
     'Z',
-    'अ',
-    'आ',
-    'इ',
-    'क',
-    'ख',
-    'ग',
-    'च',
-    'ज',
-    'ट',
-    'ड',
-    'त',
-    'द',
-    'न',
-    'प',
-    'ब',
-    'म',
-    'य',
-    'र',
-    'ल',
-    'व',
-    'स',
-    'ह',
+    'à¤…',
+    'à¤†',
+    'à¤‡',
+    'à¤•',
+    'à¤–',
+    'à¤—',
+    'à¤š',
+    'à¤œ',
+    'à¤Ÿ',
+    'à¤¡',
+    'à¤¤',
+    'à¤¦',
+    'à¤¨',
+    'à¤ª',
+    'à¤¬',
+    'à¤®',
+    'à¤¯',
+    'à¤°',
+    'à¤²',
+    'à¤µ',
+    'à¤¸',
+    'à¤¹',
   ];
 
   @override
@@ -1246,21 +1259,27 @@ class _BoothUserFormState extends State<BoothUserForm> {
           _candidatePreview(),
         ],
         const SizedBox(height: 18),
-        _managerField(name, 'नाम *', Icons.person_outline_rounded),
+        _managerField(name, 'à¤¨à¤¾à¤® *', Icons.person_outline_rounded),
         const SizedBox(height: 12),
-        _managerField(phone, 'मोबाइल नंबर', Icons.phone_outlined,
+        _managerField(
+            phone, 'à¤®à¥‹à¤¬à¤¾à¤‡à¤² à¤¨à¤‚à¤¬à¤°', Icons.phone_outlined,
             keyboard: TextInputType.phone),
         const SizedBox(height: 12),
-        _managerField(email, 'लॉगिन ईमेल *', Icons.email_outlined,
+        _managerField(
+            email, 'à¤²à¥‰à¤—à¤¿à¤¨ à¤ˆà¤®à¥‡à¤² *', Icons.email_outlined,
             keyboard: TextInputType.emailAddress),
         const SizedBox(height: 12),
         _managerField(
             password,
-            widget.user == null ? 'पासवर्ड *' : 'नया पासवर्ड',
+            widget.user == null
+                ? 'à¤ªà¤¾à¤¸à¤µà¤°à¥à¤¡ *'
+                : 'à¤¨à¤¯à¤¾ à¤ªà¤¾à¤¸à¤µà¤°à¥à¤¡',
             Icons.lock_outline_rounded,
             obscure: !showPassword,
             suffix: IconButton(
-              tooltip: showPassword ? 'Password छुपाएँ' : 'Password दिखाएँ',
+              tooltip: showPassword
+                  ? 'Password à¤›à¥à¤ªà¤¾à¤à¤'
+                  : 'Password à¤¦à¤¿à¤–à¤¾à¤à¤',
               onPressed: () => setState(() => showPassword = !showPassword),
               icon: Icon(showPassword
                   ? Icons.visibility_off_rounded
@@ -1342,7 +1361,8 @@ class _BoothUserFormState extends State<BoothUserForm> {
                 style: const TextStyle(
                     color: navy, fontSize: 19, fontWeight: FontWeight.w900)),
             const SizedBox(height: 3),
-            const Text('नाम, login, बूथ और permissions साफ-साफ सेट करें',
+            const Text(
+                'à¤¨à¤¾à¤®, login, à¤¬à¥‚à¤¥ à¤”à¤° permissions à¤¸à¤¾à¤«-à¤¸à¤¾à¤« à¤¸à¥‡à¤Ÿ à¤•à¤°à¥‡à¤‚',
                 style: TextStyle(color: muted, fontSize: 12)),
           ]),
         ),
@@ -1375,7 +1395,7 @@ class _BoothUserFormState extends State<BoothUserForm> {
             const Text('Create from voter',
                 style: TextStyle(color: blue, fontWeight: FontWeight.w900)),
             Text(
-              '${candidate['name'] ?? '-'} · EPIC ${candidate['voterId'] ?? '-'} · ${candidate['mobile'] ?? 'मोबाइल नहीं'}',
+              '${candidate['name'] ?? '-'} Â· EPIC ${candidate['voterId'] ?? '-'} Â· ${candidate['mobile'] ?? 'à¤®à¥‹à¤¬à¤¾à¤‡à¤² à¤¨à¤¹à¥€à¤‚'}',
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(color: navy, fontWeight: FontWeight.w800),
@@ -1389,15 +1409,15 @@ class _BoothUserFormState extends State<BoothUserForm> {
   Widget _boothPickerCard() {
     final booth = selectedBooth;
     final label = booth == null
-        ? 'बूथ चुनें *'
-        : 'भाग ${booth['number'] ?? '-'} · ${booth['name'] ?? '-'}';
+        ? 'à¤¬à¥‚à¤¥ à¤šà¥à¤¨à¥‡à¤‚ *'
+        : 'à¤­à¤¾à¤— ${booth['number'] ?? '-'} Â· ${booth['name'] ?? '-'}';
     final sub = booth == null
-        ? 'Search करके booth assign करें'
+        ? 'Search à¤•à¤°à¤•à¥‡ booth assign à¤•à¤°à¥‡à¤‚'
         : [
             if ('${booth['ward']?['number'] ?? ''}'.isNotEmpty)
-              'वार्ड ${booth['ward']?['number']}',
+              'à¤µà¤¾à¤°à¥à¤¡ ${booth['ward']?['number']}',
             '${booth['area'] ?? ''}',
-          ].where((v) => v.trim().isNotEmpty).join(' · ');
+          ].where((v) => v.trim().isNotEmpty).join(' Â· ');
     return InkWell(
       onTap: _pickBooth,
       borderRadius: BorderRadius.circular(18),
@@ -1449,7 +1469,8 @@ class _BoothUserFormState extends State<BoothUserForm> {
             return query.isEmpty || haystack.contains(query);
           }).toList();
           return AlertDialog(
-            title: const Text('बूथ खोजें और चुनें'),
+            title:
+                const Text('à¤¬à¥‚à¤¥ à¤–à¥‹à¤œà¥‡à¤‚ à¤”à¤° à¤šà¥à¤¨à¥‡à¤‚'),
             content: SizedBox(
               width: 520,
               height: 520,
@@ -1459,7 +1480,8 @@ class _BoothUserFormState extends State<BoothUserForm> {
                   onChanged: (_) => setDialogState(() {}),
                   decoration: const InputDecoration(
                     prefixIcon: Icon(Icons.search_rounded),
-                    hintText: 'बूथ नंबर, नाम, वार्ड या क्षेत्र लिखें...',
+                    hintText:
+                        'à¤¬à¥‚à¤¥ à¤¨à¤‚à¤¬à¤°, à¤¨à¤¾à¤®, à¤µà¤¾à¤°à¥à¤¡ à¤¯à¤¾ à¤•à¥à¤·à¥‡à¤¤à¥à¤° à¤²à¤¿à¤–à¥‡à¤‚...',
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -1478,9 +1500,9 @@ class _BoothUserFormState extends State<BoothUserForm> {
                           child: Icon(Icons.how_to_vote_rounded, color: blue),
                         ),
                         title: Text(
-                            'भाग ${booth['number'] ?? '-'} · ${booth['name'] ?? '-'}'),
+                            'à¤­à¤¾à¤— ${booth['number'] ?? '-'} Â· ${booth['name'] ?? '-'}'),
                         subtitle: Text(
-                            'वार्ड ${booth['ward']?['number'] ?? '-'} · ${booth['area'] ?? '-'}'),
+                            'à¤µà¤¾à¤°à¥à¤¡ ${booth['ward']?['number'] ?? '-'} Â· ${booth['area'] ?? '-'}'),
                         trailing: const Icon(Icons.chevron_right_rounded),
                         onTap: () => Navigator.pop(context, '${booth['_id']}'),
                       );
@@ -1515,19 +1537,19 @@ class _BoothUserFormState extends State<BoothUserForm> {
           _permissionCard(
               Icons.login_rounded,
               'Active login',
-              'मैनेजर app में login कर सकता है',
+              'à¤®à¥ˆà¤¨à¥‡à¤œà¤° app à¤®à¥‡à¤‚ login à¤•à¤° à¤¸à¤•à¤¤à¤¾ à¤¹à¥ˆ',
               active,
               (value) => setState(() => active = value)),
           _permissionCard(
               Icons.phone_android_rounded,
-              'पूरे मोबाइल नंबर देखें',
-              'Masked नंबर की जगह full mobile दिखेगा',
+              'à¤ªà¥‚à¤°à¥‡ à¤®à¥‹à¤¬à¤¾à¤‡à¤² à¤¨à¤‚à¤¬à¤° à¤¦à¥‡à¤–à¥‡à¤‚',
+              'Masked à¤¨à¤‚à¤¬à¤° à¤•à¥€ à¤œà¤—à¤¹ full mobile à¤¦à¤¿à¤–à¥‡à¤—à¤¾',
               canViewMobile,
               (value) => setState(() => canViewMobile = value)),
           _permissionCard(
               Icons.print_rounded,
-              'मतदाता profile print करें',
-              'PDF profile print/download की अनुमति',
+              'à¤®à¤¤à¤¦à¤¾à¤¤à¤¾ profile print à¤•à¤°à¥‡à¤‚',
+              'PDF profile print/download à¤•à¥€ à¤…à¤¨à¥à¤®à¤¤à¤¿',
               canPrint,
               (value) => setState(() => canPrint = value)),
           _permissionCard(
@@ -1544,38 +1566,38 @@ class _BoothUserFormState extends State<BoothUserForm> {
               (value) => setState(() => canBackup = value)),
           _permissionCard(
               Icons.upload_file_rounded,
-              'PDF/Excel upload करें',
-              'Import और OCR upload की अनुमति',
+              'PDF/Excel upload à¤•à¤°à¥‡à¤‚',
+              'Import à¤”à¤° OCR upload à¤•à¥€ à¤…à¤¨à¥à¤®à¤¤à¤¿',
               canImportData,
               (value) => setState(() => canImportData = value)),
           _permissionCard(
               Icons.bar_chart_rounded,
-              'Reports देखें',
-              'Dashboard और reports',
+              'Reports à¤¦à¥‡à¤–à¥‡à¤‚',
+              'Dashboard à¤”à¤° reports',
               canReports,
               (value) => setState(() => canReports = value)),
           _permissionCard(
               Icons.person_add_alt_1_rounded,
-              'Voter जोड़ें',
-              'नया contact जोड़ें',
+              'Voter à¤œà¥‹à¤¡à¤¼à¥‡à¤‚',
+              'à¤¨à¤¯à¤¾ contact à¤œà¥‹à¤¡à¤¼à¥‡à¤‚',
               canCreateVoters,
               (value) => setState(() => canCreateVoters = value)),
           _permissionCard(
               Icons.edit_rounded,
-              'Voter edit करें',
-              'Details बदलें',
+              'Voter edit à¤•à¤°à¥‡à¤‚',
+              'Details à¤¬à¤¦à¤²à¥‡à¤‚',
               canEditVoters,
               (value) => setState(() => canEditVoters = value)),
           _permissionCard(
               Icons.photo_camera_rounded,
-              'Photo बदलें',
-              'Photo update करें',
+              'Photo à¤¬à¤¦à¤²à¥‡à¤‚',
+              'Photo update à¤•à¤°à¥‡à¤‚',
               canEditPhoto,
               (value) => setState(() => canEditPhoto = value)),
           _permissionCard(
               Icons.delete_outline_rounded,
-              'Voter delete करें',
-              'Single और bulk delete',
+              'Voter delete à¤•à¤°à¥‡à¤‚',
+              'Single à¤”à¤° bulk delete',
               canDeleteVoters,
               (value) => setState(() => canDeleteVoters = value)),
         ]),
@@ -1601,7 +1623,7 @@ class _BoothUserFormState extends State<BoothUserForm> {
                         style: TextStyle(
                             color: navy, fontWeight: FontWeight.w900)),
                     Text(
-                        'Assigned booth ke contacts hi dikhेंगे; add/edit/delete access neeche admin set kare.',
+                        'Assigned booth ke contacts hi dikhà¥‡à¤‚à¤—à¥‡; add/edit/delete access neeche admin set kare.',
                         style: TextStyle(color: muted, fontSize: 11)),
                   ]),
             ),

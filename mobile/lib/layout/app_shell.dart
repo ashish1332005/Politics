@@ -7,6 +7,7 @@ import '../features/families/family_page.dart';
 import '../features/more/more_page.dart';
 import '../features/reports/reports_page.dart';
 import '../features/voters/voter_management_page.dart';
+import '../features/auth/login_page.dart';
 import 'app_layout.dart';
 
 class AppShell extends StatefulWidget {
@@ -98,6 +99,15 @@ class _AppShellState extends State<AppShell> {
             MobileHeader(
               title: currentItems[selected].label,
               onSearch: () => select(widget.role == 'booth' ? 0 : 1),
+              onLogout: widget.role == 'booth'
+                  ? () {
+                      api.logout();
+                      Navigator.of(context).pushAndRemoveUntil(
+                        MaterialPageRoute(builder: (_) => const LoginPage()),
+                        (_) => false,
+                      );
+                    }
+                  : null,
             ),
             Expanded(
               child: IndexedStack(
