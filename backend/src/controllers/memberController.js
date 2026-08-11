@@ -159,7 +159,7 @@ exports.create = async (req, res, next) => {
 
 exports.list = async (req, res, next) => {
   try {
-    const { q, qMode, party, supportLevel, gender, booth, ward, area, verificationStatus, location, village, gramPanchayat, tehsil, municipality, caste, organizationPost, occupation, contactType, sectionNumber, sectionName, assemblyNumber, assemblyName, partNumber, letter } = req.query;
+    const { q, qMode, party, supportLevel, gender, booth, ward, area, verificationStatus, location, village, gramPanchayat, tehsil, municipality, caste, organizationPost, occupation, contactType, sectionNumber, sectionName, sectionNames, assemblyNumber, assemblyName, partNumber, letter } = req.query;
     const limit = Math.min(Number(req.query.limit) || 100, 500);
     const page = Math.max(Number(req.query.page) || 1, 1);
     const paged = String(req.query.paged || '').toLowerCase() === 'true' || req.query.page !== undefined;
@@ -187,8 +187,15 @@ exports.list = async (req, res, next) => {
     if (contactType === 'personal') filter.contactType = 'personal';
     if (contactType === 'voter') filter.contactType = { $ne: 'personal' };
     if (sectionNumber) filter.sectionNumber = new RegExp(`^${String(sectionNumber).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
-    if (sectionName) filter.sectionName = searchRegex(sectionName);
-    if (assemblyNumber) filter.assemblyNumber = assemblyNumber;
+    if (sectionNames) {
+      try {
+        const values = JSON.parse(String(sectionNames));
+        if (Array.isArray(values) && values.length) {
+          filter.sectionName = { $in: values.map((value) => String(value).trim()).filter(Boolean) };
+        }
+      } catch (_) {}
+    }
+    if (sectionName && !filter.sectionName) filter.sectionName = searchRegex(sectionName);    if (assemblyNumber) filter.assemblyNumber = assemblyNumber;
     if (assemblyName) filter.assemblyName = searchRegex(assemblyName);
     if (partNumber) filter.partNumber = partNumber;
     if (verificationStatus) filter.verificationStatus = verificationStatus;

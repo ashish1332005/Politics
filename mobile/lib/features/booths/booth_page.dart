@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import '../../core/api_client.dart';
@@ -282,6 +284,11 @@ class _BoothPageState extends State<BoothPage> {
       );
 
   Future<void> _openHierarchyVoters(Map<String, dynamic> node) async {
+    final sectionNames =
+        (node['sectionNames'] as List? ?? [node['sectionName']])
+            .map((value) => '$value'.trim())
+            .where((value) => value.isNotEmpty)
+            .toList();
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -299,7 +306,7 @@ class _BoothPageState extends State<BoothPage> {
             future: api.getQuery('/api/members', {
               'assemblyName': '${node['assemblyName'] ?? ''}',
               'village': '${node['village'] ?? ''}',
-              'sectionName': '${node['sectionName'] ?? ''}',
+              'sectionNames': jsonEncode(sectionNames),
               'limit': '200',
             }),
             builder: (context, snapshot) {

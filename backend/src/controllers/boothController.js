@@ -59,6 +59,9 @@ exports.list = async (req, res, next) => {
           existing.count += 1;
           existing.village = cleanerLocationName(existing.village, village);
           existing.sectionName = cleanerLocationName(existing.sectionName, sectionName);
+          if (!existing.sectionNames.includes(sectionName)) {
+            existing.sectionNames.push(sectionName);
+          }
         } else summary.hierarchy.set(hierarchyKey, {
           assemblyNumber: String(member.assemblyNumber || '').trim(),
           assemblyName,
@@ -66,6 +69,7 @@ exports.list = async (req, res, next) => {
           village,
           sectionNumber: String(member.sectionNumber || '').trim(),
           sectionName,
+          sectionNames: [sectionName],
           count: 1,
         });
       }
