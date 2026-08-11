@@ -1137,19 +1137,6 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
                 onChanged: (_) => filtersChanged(),
                 onPick: () => openSmartFilter('section', 'अनुभाग'),
               ),
-            if (api.user?['role'] != 'booth')
-              _LocationFilterCard(
-                assembly: _filterValue('assembly', assemblyNumber),
-                partVillage: partVillageValue,
-                section: _filterValue('section', sectionName),
-                onPickAssembly: () => openSmartFilter('assembly', 'विधानसभा'),
-                onPickPartVillage: () =>
-                    openSmartFilter('partVillage', 'भाग / गाँव'),
-                onPickSection: () =>
-                    openSmartFilter('section', 'अनुभाग / मोहल्ला'),
-                onClear: _clearLocationFilters,
-                compact: true,
-              ),
             _RecentFilterStrip(
               items: recentFilters,
               onTap: _applyRecentFilter,
@@ -1363,16 +1350,6 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
           icon: Icons.segment_rounded,
           onChanged: (_) => filtersChanged(),
           onPick: () => openSmartFilter('section', 'अनुभाग'),
-        ),
-      if (api.user?['role'] != 'booth')
-        _LocationFilterCard(
-          assembly: _filterValue('assembly', assemblyNumber),
-          partVillage: partVillageValue,
-          section: _filterValue('section', sectionName),
-          onPickAssembly: () => openSmartFilter('assembly', 'विधानसभा'),
-          onPickPartVillage: () => openSmartFilter('partVillage', 'भाग / गाँव'),
-          onPickSection: () => openSmartFilter('section', 'अनुभाग / मोहल्ला'),
-          onClear: _clearLocationFilters,
         ),
       _RecentFilterStrip(
         items: recentFilters,
@@ -2195,7 +2172,7 @@ class _EasyVoterSearchCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(22),
@@ -2209,30 +2186,6 @@ class _EasyVoterSearchCard extends StatelessWidget {
           ],
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Row(children: [
-            CircleAvatar(
-              radius: 18,
-              backgroundColor: softBlue,
-              child: Icon(Icons.manage_search_rounded, color: blue, size: 20),
-            ),
-            SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('आसान खोज',
-                      style: TextStyle(
-                          color: navy,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w900)),
-                  SizedBox(height: 2),
-                  Text('नाम, पिता/पति, EPIC, मोबाइल या घर संख्या लिखें',
-                      style: TextStyle(color: muted, fontSize: 12)),
-                ],
-              ),
-            ),
-          ]),
-          const SizedBox(height: 12),
           _EasyVoterSearchField(
             controller: controller,
             focusNode: focusNode,
@@ -2355,46 +2308,42 @@ class _SearchHelpStrip extends StatelessWidget {
   final String selectedMode;
   final ValueChanged<String>? onPick;
 
+  List<Widget> get chips => [
+        _SearchHintChip(Icons.person_search_rounded, 'नाम',
+            selected: selectedMode == 'name', onTap: onPick),
+        _SearchHintChip(Icons.family_restroom_rounded, 'पिता/पति',
+            selected: selectedMode == 'guardian', onTap: onPick),
+        _SearchHintChip(Icons.badge_outlined, 'EPIC',
+            selected: selectedMode == 'epic', onTap: onPick),
+        _SearchHintChip(Icons.home_rounded, 'घर',
+            selected: selectedMode == 'house', onTap: onPick),
+        _SearchHintChip(Icons.phone_rounded, 'मोबाइल',
+            selected: selectedMode == 'mobile', onTap: onPick),
+      ];
+
   @override
-  Widget build(BuildContext context) => Wrap(
-        spacing: 7,
-        runSpacing: 7,
-        children: [
-          _SearchHintChip(
-            Icons.person_search_rounded,
-            'नाम',
-            selected: selectedMode == 'name',
-            onTap: onPick,
-          ),
-          _SearchHintChip(
-            Icons.family_restroom_rounded,
-            'पिता/पति',
-            selected: selectedMode == 'guardian',
-            onTap: onPick,
-          ),
-          _SearchHintChip(
-            Icons.badge_outlined,
-            'EPIC',
-            selected: selectedMode == 'epic',
-            onTap: onPick,
-          ),
-          _SearchHintChip(
-            Icons.home_rounded,
-            'घर',
-            selected: selectedMode == 'house',
-            onTap: onPick,
-          ),
-          _SearchHintChip(
-            Icons.phone_rounded,
-            'मोबाइल',
-            selected: selectedMode == 'mobile',
-            onTap: onPick,
-          ),
-          if (!compact)
-            _SearchHintChip(Icons.lightbulb_outline_rounded, 'जैसे: राम मोहन',
-                onTap: onPick),
-        ],
+  Widget build(BuildContext context) {
+    if (compact) {
+      return SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(children: [
+          for (var index = 0; index < chips.length; index++) ...[
+            if (index > 0) const SizedBox(width: 7),
+            chips[index],
+          ],
+        ]),
       );
+    }
+    return Wrap(
+      spacing: 7,
+      runSpacing: 7,
+      children: [
+        ...chips,
+        _SearchHintChip(Icons.lightbulb_outline_rounded, 'जैसे: राम मोहन',
+            onTap: onPick),
+      ],
+    );
+  }
 }
 
 class _SearchHintChip extends StatelessWidget {
@@ -3058,32 +3007,64 @@ class _FilterOptionDialogState extends State<_FilterOptionDialog> {
   }
 
   Future<void> mergeSectionOption(_FilterOption option) async {
-    final target = TextEditingController(text: option.label);
+    final targetFilters = Map<String, String?>.from(widget.currentFilters)
+      ..remove('q')
+      ..remove('qMode');
+    List<_FilterOption> available;
+    try {
+      final response = await api.getQuery('/api/members/filter-options', {
+        ...targetFilters,
+        'field': 'section',
+        'q': '',
+        'limit': '160',
+      });
+      available = List<Map<String, dynamic>>.from(
+        (response['items'] as List? ?? const [])
+            .map((item) => Map<String, dynamic>.from(item)),
+      ).map(_FilterOption.fromMap).toList();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString())),
+      );
+      return;
+    }
+    if (!mounted) return;
+    final targets = available
+        .where((item) => item.label.trim() != option.label.trim())
+        .toList();
+    if (targets.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Merge करने के लिए दूसरा अनुभाग नहीं मिला।')),
+      );
+      return;
+    }
     final next = await showDialog<String>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('अनुभाग / मोहल्ला merge करें'),
-        content: TextField(
-          controller: target,
-          autofocus: true,
-          decoration: InputDecoration(
-            labelText: 'सही अनुभाग नाम',
-            helperText: '“${option.label}” वाले voters इस नाम में merge होंगे।',
-          ),
-        ),
-        actions: [
-          TextButton(
+      builder: (dialogContext) => SimpleDialog(
+        title: Text('“' + option.label + '” को किसमें merge करें?'),
+        children: [
+          for (final target in targets)
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(dialogContext, target.label),
+              child: ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.merge_rounded, color: green),
+                title: Text(target.label,
+                    style: const TextStyle(
+                        color: navy, fontWeight: FontWeight.w900)),
+                subtitle: Text(target.count.toString() + ' मतदाता'),
+              ),
+            ),
+          const Divider(height: 1),
+          SimpleDialogOption(
             onPressed: () => Navigator.pop(dialogContext),
             child: const Text('रद्द करें'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, target.text.trim()),
-            child: const Text('Preview'),
           ),
         ],
       ),
     );
-    target.dispose();
     if (next == null || next.isEmpty || next == option.label || !mounted)
       return;
     const allowed = {
