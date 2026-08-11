@@ -8,7 +8,12 @@ const { writeActivity } = require('../middleware/activityLogger');
 const { requireValidEpic } = require('../utils/epic');
 const { syncMemberFamily, removeMemberFromFamilies } = require('../utils/familySync');
 const { persistLocalImage } = require('../utils/persistentMedia');
-const { buildSearchConditions, buildFieldSearchConditions, searchExactCandidates } = require('../utils/memberSearch');
+const {
+  buildSearchConditions,
+  buildFieldSearchConditions,
+  buildStrictFieldSearchConditions,
+  searchExactCandidates,
+} = require('../utils/memberSearch');
 
 const populate = 'party ward booth area createdBy updatedBy';
 const maskMobile = (value) => {
@@ -164,13 +169,6 @@ exports.list = async (req, res, next) => {
     const page = Math.max(Number(req.query.page) || 1, 1);
     const paged = String(req.query.paged || '').toLowerCase() === 'true' || req.query.page !== undefined;
     const filter = applyMemberScope(req.currentUser, {});
-    if (q) {
-      // Keep quick-search modes scoped to the selected field.
-      const conditions = qMode
-        ? buildFieldSearchConditions(q, String(qMode).trim().toLowerCase())
-        : buildSearchConditions(q);
-      filter.$and = [...(filter.$and || []), ...conditions];
-    }
     if (party) filter.party = party;
     if (supportLevel) filter.supportLevel = supportLevel;
     if (gender) filter.gender = gender;
@@ -206,6 +204,21 @@ exports.list = async (req, res, next) => {
     if (req.query.missingMobile === 'true') filter.$and = [...(filter.$and || []), { $or: [{ mobile: '' }, { mobile: null }, { mobile: { $exists: false } }] }];
     if (req.query.missingHouse === 'true') filter.$and = [...(filter.$and || []), { $or: [{ houseNumber: '' }, { houseNumber: null }, { houseNumber: { $exists: false } }] }];
     if (booth && req.currentUser.role === 'admin') filter.booth = booth;
+    if (q) {
+      const cleanMode = qMode ? String(qMode).trim().toLowerCase() : '';
+      let conditions = cleanMode
+        ? buildFieldSearchConditions(q, cleanMode)
+        : buildSearchConditions(q);
+      if (cleanMode) {
+        const strictConditions = buildStrictFieldSearchConditions(q, cleanMode);
+        const strictFilter = {
+          ...filter,
+          $and: [...(filter.$and || []), ...strictConditions],
+        };
+        if (await Member.exists(strictFilter)) conditions = strictConditions;
+      }
+      filter.$and = [...(filter.$and || []), ...conditions];
+    }
     const listQuery = (query) => Member.find(query)
       .select('contactType photo name surname mobile altMobile dob estimatedDob anniversary voterId voterSerial guardianName houseNumber address location area tehsil gramPanchayat village municipality caste subCaste organizationPost organizationLevel influenceLevel occupation education extraDetails supportLevel ward booth updatedAt age gender sectionNumber sectionName assemblyNumber assemblyName partNumber partName postOffice policeStation district pinCode')
       .populate(populate)
@@ -351,7 +364,7 @@ const escapeRegExp = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\
 
 const exactLocationFilter = (source = {}) => {
   const filter = {};
-  for (const field of ['assemblyNumber', 'assemblyName', 'gramPanchayat', 'village', 'partNumber']) {
+  for (const field of ['assemblyNumber', 'assemblyName', 'gramPanchayat', 'village', 'partNumber', 'sectionNumber', 'sectionName']) {
     if (Object.prototype.hasOwnProperty.call(source, field)) {
       filter[field] = cleanText(source[field]);
     }
@@ -399,7 +412,7 @@ const addSmartLocationSearch = (filter, query) => {
 exports.locationGroups = async (req, res, next) => {
   try {
     const filter = applyMemberScope(req.currentUser, {});
-    for (const key of ['assemblyNumber', 'assemblyName', 'gramPanchayat', 'village', 'partNumber']) {
+    for (const key of ['assemblyNumber', 'assemblyName', 'gramPanchayat', 'village', 'partNumber', 'sectionNumber', 'sectionName']) {
       addOptionFilter(filter, key, req.query[key]);
     }
     const q = cleanText(req.query.q).toLocaleLowerCase('hi-IN');
@@ -413,6 +426,8 @@ exports.locationGroups = async (req, res, next) => {
             gramPanchayat: { $ifNull: ['$gramPanchayat', ''] },
             village: { $ifNull: ['$village', ''] },
             partNumber: { $ifNull: ['$partNumber', ''] },
+            sectionNumber: { $ifNull: ['$sectionNumber', ''] },
+            sectionName: { $ifNull: ['$sectionName', ''] },
           },
           count: { $sum: 1 },
           sampleNames: { $push: '$name' },
@@ -428,6 +443,9 @@ exports.locationGroups = async (req, res, next) => {
         key.gramPanchayat ? `पंचायत ${key.gramPanchayat}` : '',
         key.village ? `गाँव ${key.village}` : '',
         key.partNumber ? `भाग ${key.partNumber}` : '',
+        key.sectionNumber || key.sectionName
+          ? `अनुभाग ${[key.sectionNumber, key.sectionName].filter(Boolean).join(' - ')}`
+          : '',
       ].filter(Boolean).join(' • ') || 'Location खाली';
       return {
         key,
@@ -450,9 +468,11 @@ exports.bulkLocationCorrection = async (req, res, next) => {
     const updates = cleanLocationUpdates(req.body?.updates || {});
     const dryRun = req.body?.dryRun !== false;
     const sourceKeyCount = Object.values(source).filter((value) => value !== '').length;
-    if (!smartQuery && (!source.village || sourceKeyCount < 2)) {
+    const safeVillageSource = source.village && sourceKeyCount >= 2;
+    const safeSectionSource = source.sectionName && sourceKeyCount >= 2;
+    if (!smartQuery && !safeVillageSource && !safeSectionSource) {
       return res.status(400).json({
-        message: 'गाँव अकेला unique नहीं माना जाएगा। Source में कम से कम गाँव + विधानसभा/पंचायत/भाग में से एक value दें।',
+        message: 'Source में गाँव या अनुभाग के साथ विधानसभा/पंचायत/भाग/अनुभाग में से कम से कम एक और value दें।',
       });
     }
     if (!dryRun && !Object.keys(updates).length) {
@@ -475,7 +495,7 @@ exports.bulkLocationCorrection = async (req, res, next) => {
     }
     const count = await Member.countDocuments(filter);
     const sample = await Member.find(filter)
-      .select('name voterId guardianName houseNumber assemblyNumber assemblyName gramPanchayat village partNumber location address')
+      .select('name voterId guardianName houseNumber assemblyNumber assemblyName gramPanchayat village partNumber sectionNumber sectionName location address')
       .limit(20)
       .lean();
     if (dryRun) {
@@ -489,6 +509,7 @@ exports.bulkLocationCorrection = async (req, res, next) => {
     let changedFields = 0;
     for (const member of members) {
       let changed = false;
+      const oldSectionName = cleanText(member.sectionName);
       for (const [field, value] of Object.entries(updates)) {
         if (cleanText(member[field]) === cleanText(value)) continue;
         member[field] = value;
@@ -496,8 +517,18 @@ exports.bulkLocationCorrection = async (req, res, next) => {
         changedFields += 1;
       }
       if (!changed) continue;
+      if (updates.sectionName && oldSectionName) {
+        const escaped = new RegExp(escapeRegExp(oldSectionName), 'gi');
+        if (cleanText(member.location)) {
+          member.location = String(member.location).replace(escaped, updates.sectionName);
+        }
+        if (cleanText(member.address)) {
+          member.address = String(member.address).replace(escaped, updates.sectionName);
+        }
+      }
       member.updatedBy = req.currentUser._id;
       await member.save();
+      await syncMemberFamily(member, req.currentUser._id);
       updated += 1;
     }
     await writeActivity({
@@ -771,5 +802,4 @@ exports.duplicates = async (req, res, next) => {
     next(error);
   }
 };
-
 

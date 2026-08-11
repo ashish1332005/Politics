@@ -307,6 +307,8 @@ class _BoothPageState extends State<BoothPage> {
               'assemblyName': '${node['assemblyName'] ?? ''}',
               'village': '${node['village'] ?? ''}',
               'sectionNames': jsonEncode(sectionNames),
+              'paged': 'true',
+              'page': '1',
               'limit': '200',
             }),
             builder: (context, snapshot) {

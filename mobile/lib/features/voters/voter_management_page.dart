@@ -3057,6 +3057,99 @@ class _FilterOptionDialogState extends State<_FilterOptionDialog> {
     super.dispose();
   }
 
+  Future<void> mergeSectionOption(_FilterOption option) async {
+    final target = TextEditingController(text: option.label);
+    final next = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('अनुभाग / मोहल्ला merge करें'),
+        content: TextField(
+          controller: target,
+          autofocus: true,
+          decoration: InputDecoration(
+            labelText: 'सही अनुभाग नाम',
+            helperText: '“${option.label}” वाले voters इस नाम में merge होंगे।',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('रद्द करें'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, target.text.trim()),
+            child: const Text('Preview'),
+          ),
+        ],
+      ),
+    );
+    target.dispose();
+    if (next == null || next.isEmpty || next == option.label || !mounted)
+      return;
+    const allowed = {
+      'assemblyNumber',
+      'assemblyName',
+      'gramPanchayat',
+      'village',
+      'partNumber',
+      'sectionNumber',
+      'sectionName'
+    };
+    final source = <String, String>{};
+    for (final entry in widget.currentFilters.entries) {
+      final value = entry.value?.trim() ?? '';
+      if (allowed.contains(entry.key) && value.isNotEmpty) {
+        source[entry.key] = value;
+      }
+    }
+    source.addAll(option.filters);
+    try {
+      final preview = await api.post('/api/members/bulk-location-correction', {
+        'dryRun': true,
+        'source': source,
+        'updates': {'sectionName': next},
+      });
+      if (!mounted) return;
+      final count = (preview['matched'] as num?)?.toInt() ?? 0;
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Merge confirm करें?'),
+          content: Text(
+              '$count voters में “${option.label}” को “$next” किया जाएगा। यह बदलाव filters, booth hierarchy और family pages में भी लागू होगा।'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('रद्द करें'),
+            ),
+            FilledButton(
+              onPressed:
+                  count == 0 ? null : () => Navigator.pop(dialogContext, true),
+              child: const Text('Merge करें'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+      final result = await api.post('/api/members/bulk-location-correction', {
+        'dryRun': false,
+        'source': source,
+        'updates': {'sectionName': next},
+      });
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content:
+            Text('${result['updated'] ?? 0} voters का अनुभाग merge हो गया।'),
+      ));
+      setState(() {});
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(error.toString().replaceFirst('Exception: ', '')),
+      ));
+    }
+  }
+
   @override
   Widget build(BuildContext context) => AlertDialog(
         titlePadding: const EdgeInsets.fromLTRB(20, 18, 12, 8),
@@ -3144,7 +3237,18 @@ class _FilterOptionDialogState extends State<_FilterOptionDialog> {
                             style: const TextStyle(
                                 color: navy, fontWeight: FontWeight.w900)),
                         subtitle: Text('${option.count} मतदाता'),
-                        trailing: const Icon(Icons.chevron_right_rounded),
+                        trailing:
+                            Row(mainAxisSize: MainAxisSize.min, children: [
+                          if (widget.field == 'section' &&
+                              api.user?['role'] == 'admin')
+                            IconButton(
+                              tooltip: 'Duplicate अनुभाग merge करें',
+                              onPressed: () => mergeSectionOption(option),
+                              icon:
+                                  const Icon(Icons.merge_rounded, color: green),
+                            ),
+                          const Icon(Icons.chevron_right_rounded),
+                        ]),
                         onTap: () => Navigator.pop(context, option),
                       );
                     },
@@ -3261,6 +3365,8 @@ class _LocationCorrectionDialogState extends State<_LocationCorrectionDialog> {
   final sourceGramPanchayat = TextEditingController();
   final sourceVillage = TextEditingController();
   final sourcePartNumber = TextEditingController();
+  final sourceSectionNumber = TextEditingController();
+  final sourceSectionName = TextEditingController();
 
   final newAssemblyNumber = TextEditingController();
   final newAssemblyName = TextEditingController();
@@ -3268,6 +3374,8 @@ class _LocationCorrectionDialogState extends State<_LocationCorrectionDialog> {
   final newVillage = TextEditingController();
   final newPartNumber = TextEditingController();
   final newTehsil = TextEditingController();
+  final newSectionNumber = TextEditingController();
+  final newSectionName = TextEditingController();
 
   bool loading = false;
   bool advancedMode = false;
@@ -3283,6 +3391,8 @@ class _LocationCorrectionDialogState extends State<_LocationCorrectionDialog> {
         'gramPanchayat': sourceGramPanchayat.text.trim(),
         'village': sourceVillage.text.trim(),
         'partNumber': sourcePartNumber.text.trim(),
+        'sectionNumber': sourceSectionNumber.text.trim(),
+        'sectionName': sourceSectionName.text.trim(),
       }..removeWhere((_, value) => value.isEmpty);
 
   Map<String, String> get updates => {
@@ -3292,12 +3402,18 @@ class _LocationCorrectionDialogState extends State<_LocationCorrectionDialog> {
         'village': newVillage.text.trim(),
         'partNumber': newPartNumber.text.trim(),
         'tehsil': newTehsil.text.trim(),
+        'sectionNumber': newSectionNumber.text.trim(),
+        'sectionName': newSectionName.text.trim(),
       }..removeWhere((_, value) => value.isEmpty);
 
-  bool get validSource => advancedMode
-      ? sourceVillage.text.trim().isNotEmpty && source.length >= 2
-      : smartQuery.text.trim().length >= 2 ||
-          (sourceVillage.text.trim().isNotEmpty && source.length >= 2);
+  bool get validSource {
+    final hasLocationKey = sourceVillage.text.trim().isNotEmpty ||
+        sourceSectionName.text.trim().isNotEmpty;
+    return advancedMode
+        ? hasLocationKey && source.length >= 2
+        : smartQuery.text.trim().length >= 2 ||
+            (hasLocationKey && source.length >= 2);
+  }
 
   int get step {
     if (matched != null) return 3;
@@ -3347,11 +3463,15 @@ class _LocationCorrectionDialogState extends State<_LocationCorrectionDialog> {
         sourceGramPanchayat.text = "${key['gramPanchayat'] ?? ''}";
         sourceVillage.text = "${key['village'] ?? ''}";
         sourcePartNumber.text = "${key['partNumber'] ?? ''}";
+        sourceSectionNumber.text = "${key['sectionNumber'] ?? ''}";
+        sourceSectionName.text = "${key['sectionName'] ?? ''}";
         newAssemblyNumber.text = sourceAssemblyNumber.text;
         newAssemblyName.text = sourceAssemblyName.text;
         newGramPanchayat.text = sourceGramPanchayat.text;
         newVillage.text = sourceVillage.text;
         newPartNumber.text = sourcePartNumber.text;
+        newSectionNumber.text = sourceSectionNumber.text;
+        newSectionName.text = sourceSectionName.text;
         clearPreview();
       });
     } catch (e) {
@@ -3365,7 +3485,7 @@ class _LocationCorrectionDialogState extends State<_LocationCorrectionDialog> {
     if (!validSource) {
       if (!silent) {
         setState(() => error = advancedMode
-            ? 'Source me village + panchayat/part/assembly me se ek aur value bharein.'
+            ? 'Source में गाँव या अनुभाग के साथ विधानसभा/पंचायत/भाग में से एक और value भरें।'
             : 'Old/wrong info me kam se kam 2 letters likhein, jaise sahara bheeta ya Hier.');
       }
       return;
@@ -3454,12 +3574,16 @@ class _LocationCorrectionDialogState extends State<_LocationCorrectionDialog> {
       sourceGramPanchayat,
       sourceVillage,
       sourcePartNumber,
+      sourceSectionNumber,
+      sourceSectionName,
       newAssemblyNumber,
       newAssemblyName,
       newGramPanchayat,
       newVillage,
       newPartNumber,
       newTehsil,
+      newSectionNumber,
+      newSectionName,
     ]) {
       controller.dispose();
     }
@@ -3566,6 +3690,8 @@ class _LocationCorrectionDialogState extends State<_LocationCorrectionDialog> {
       'gramPanchayat': 'Gram panchayat',
       'village': 'Village',
       'partNumber': 'Part / Booth',
+      'sectionNumber': 'Section number',
+      'sectionName': 'Section / Mohalla',
       'tehsil': 'Tehsil',
     };
     String oldValue(String key) => source[key] ?? 'Blank';
@@ -3637,6 +3763,12 @@ class _LocationCorrectionDialogState extends State<_LocationCorrectionDialog> {
         .toSet()
         .take(4)
         .join(', ');
+    final currentSections = sample
+        .map((v) => "${v['sectionName'] ?? ''}".trim())
+        .where((v) => v.isNotEmpty)
+        .toSet()
+        .take(4)
+        .join(', ');
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Container(
         width: double.infinity,
@@ -3661,6 +3793,9 @@ class _LocationCorrectionDialogState extends State<_LocationCorrectionDialog> {
           Chip(
               label: Text(
                   "Part: ${currentParts.isEmpty ? 'Blank' : currentParts}")),
+          Chip(
+              label: Text(
+                  "Section: ${currentSections.isEmpty ? 'Blank' : currentSections}")),
         ]),
         const SizedBox(height: 10),
         ...sample.take(5).map((voter) => Container(
@@ -3750,7 +3885,7 @@ class _LocationCorrectionDialogState extends State<_LocationCorrectionDialog> {
                                     fontWeight: FontWeight.w900)),
                             SizedBox(height: 6),
                             Text(
-                                'Best key = Assembly + Panchayat + Village + Part/Booth',
+                                'Best key = Assembly + Village + Part + Section/Mohalla',
                                 style: TextStyle(
                                     color: Colors.white70,
                                     fontWeight: FontWeight.w700)),
@@ -3823,6 +3958,14 @@ class _LocationCorrectionDialogState extends State<_LocationCorrectionDialog> {
                                   Icons.how_to_vote_rounded,
                                   sourceField: true),
                               const SizedBox(height: 10),
+                              input(sourceSectionNumber, 'Section number',
+                                  Icons.format_list_numbered_rounded,
+                                  sourceField: true),
+                              const SizedBox(height: 10),
+                              input(sourceSectionName, 'Section / Mohalla name',
+                                  Icons.location_on_outlined,
+                                  sourceField: true),
+                              const SizedBox(height: 10),
                               input(sourceAssemblyName, 'Assembly name',
                                   Icons.account_balance_rounded,
                                   sourceField: true),
@@ -3844,6 +3987,12 @@ class _LocationCorrectionDialogState extends State<_LocationCorrectionDialog> {
                         const SizedBox(height: 10),
                         input(newPartNumber, 'New part / booth',
                             Icons.how_to_vote_rounded),
+                        const SizedBox(height: 10),
+                        input(newSectionNumber, 'New section number',
+                            Icons.format_list_numbered_rounded),
+                        const SizedBox(height: 10),
+                        input(newSectionName, 'New section / Mohalla name',
+                            Icons.location_on_outlined),
                         const SizedBox(height: 10),
                         input(newTehsil, 'New tehsil / block',
                             Icons.apartment_rounded),

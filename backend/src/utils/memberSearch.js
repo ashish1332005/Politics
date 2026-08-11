@@ -1,4 +1,4 @@
-const SEARCH_VERSION = 3;
+const SEARCH_VERSION = 7;
 const SEARCH_SOURCE_FIELDS = [
   'name',
   'surname',
@@ -117,7 +117,10 @@ const phoneticSkeleton = (value) => {
   return text.replace(/[^a-z]/g, '').replace(/[aeiou]/g, '');
 };
 
-const deletionKeys = (value, { digitsOnly = false } = {}) => {
+const deletionKeys = (
+  value,
+  { digitsOnly = false, phoneticPrefixes = false, includePhonetic = true } = {},
+) => {
   const normalized = digitsOnly
     ? compactDigits(value)
     : normalizeSearchValue(value);
@@ -128,16 +131,46 @@ const deletionKeys = (value, { digitsOnly = false } = {}) => {
     variants.add(normalized.replace(/\s+/g, ''));
     normalized.split(' ').forEach((token) => variants.add(token));
     const loose = looseHindiToken(normalized);
-    if (loose) variants.add('~' + loose);
-    const phonetic = phoneticSkeleton(normalized);
+    if (/[\u0900-\u097f]/.test(normalized) && loose && loose !== normalized) {
+      variants.add('~' + loose);
+    }
+    const phonetic = includePhonetic ? phoneticSkeleton(normalized) : '';
     if (phonetic.length >= 3) variants.add('#' + phonetic);
   }
   const keys = new Set();
   for (const variant of variants) {
-    if (variant.length < 3) continue;
+    const phonetic = variant.startsWith('#');
+    const prefixLength = phonetic || variant.startsWith('~') ? 1 : 0;
+    const searchableLength = variant.length - prefixLength;
+    if (searchableLength < 3) continue;
     keys.add(variant);
-    if (variant.length < 4 || variant.length > 40) continue;
-    for (let index = 0; index < variant.length; index += 1) {
+    if (phonetic) {
+      // Safe cross-script prefix search: arjun matches arjunlal without
+      // deleting consonants and colliding with unrelated names like ratanlal.
+      const phoneticVariants = new Set([variant.slice(1)]);
+      const skeleton = variant.slice(1);
+      if (skeleton.length >= 5) {
+        for (let index = 0; index < skeleton.length - 1; index += 1) {
+          if (skeleton[index] === skeleton[index + 1]) continue;
+          phoneticVariants.add(
+            skeleton.slice(0, index)
+            + skeleton[index + 1]
+            + skeleton[index]
+            + skeleton.slice(index + 2),
+          );
+        }
+      }
+      for (const phoneticVariant of phoneticVariants) {
+        const firstLength = phoneticPrefixes ? 3 : phoneticVariant.length;
+        for (let length = firstLength; length <= phoneticVariant.length; length += 1) {
+          keys.add('#' + phoneticVariant.slice(0, length));
+        }
+      }
+      continue;
+    }
+    const minimumFuzzyLength = 4;
+    if (searchableLength < minimumFuzzyLength || searchableLength > 40) continue;
+    for (let index = prefixLength; index < variant.length; index += 1) {
       keys.add(variant.slice(0, index) + variant.slice(index + 1));
     }
   }
@@ -146,13 +179,16 @@ const deletionKeys = (value, { digitsOnly = false } = {}) => {
 
 const fieldSearchData = (member) => ({
   searchNameKeys: [...new Set([
-    ...deletionKeys([member?.name, member?.surname].filter(Boolean).join(' ')),
-    ...deletionKeys(member?.name),
-    ...deletionKeys(member?.surname),
+    ...deletionKeys([member?.name, member?.surname].filter(Boolean).join(' '), { phoneticPrefixes: true }),
+    ...deletionKeys(member?.name, { phoneticPrefixes: true }),
+    ...deletionKeys(member?.surname, { phoneticPrefixes: true }),
   ])],
-  searchGuardianKeys: deletionKeys(member?.guardianName),
-  searchEpicKeys: deletionKeys(canonicalEpic(member?.voterId)),
-  searchHouseKeys: deletionKeys(member?.houseNumber),
+  searchGuardianKeys: deletionKeys(member?.guardianName, { phoneticPrefixes: true }),
+  searchEpicKeys: deletionKeys(canonicalEpic(member?.voterId), { includePhonetic: false }),
+  searchHouseKeys: [...new Set([
+    normalizeSearchValue(member?.houseNumber),
+    ...deletionKeys(member?.houseNumber),
+  ].filter(Boolean))],
   searchMobileKeys: [...new Set([
     ...deletionKeys(member?.mobile, { digitsOnly: true }),
     ...deletionKeys(member?.altMobile, { digitsOnly: true }),
@@ -276,6 +312,14 @@ const FIELD_SEARCH_KEY_FIELDS = {
 const fieldRegexConditions = (mode, token) => {
   const fields = FIELD_SEARCH_FIELDS[mode];
   if (!fields) return null;
+  if (mode === 'house') {
+    const house = normalizeSearchValue(token);
+    return house ? [{ houseNumber: new RegExp('^' + escapeRegex(house) + '$', 'i') }] : [];
+  }
+  if (mode === 'epic') {
+    const epic = canonicalEpic(token);
+    return epic ? [{ voterId: new RegExp('^' + escapeRegex(epic) + '$', 'i') }] : [];
+  }
   const escaped = escapeRegex(token);
   const conditions = fields.map((field) => ({ [field]: new RegExp(escaped, 'i') }));
   if (mode === 'mobile') {
@@ -285,21 +329,55 @@ const fieldRegexConditions = (mode, token) => {
       { altMobile: new RegExp(escapeRegex(digits), 'i') },
     );
   }
-  if (mode === 'epic') {
-    const epic = canonicalEpic(token);
-    if (epic) conditions.push({ voterId: new RegExp(escapeRegex(epic), 'i') });
-  }
   return conditions;
+};
+
+const buildStrictFieldSearchConditions = (query, mode) => {
+  const cleanMode = String(mode || '').trim();
+  if (!FIELD_SEARCH_FIELDS[cleanMode]) return buildSearchConditions(query);
+  const tokens = ['epic', 'house', 'mobile'].includes(cleanMode)
+    ? [String(query || '').trim()].filter(Boolean)
+    : searchTokens(query);
+  return tokens.map((token) => {
+    const digitsOnly = cleanMode === 'mobile';
+    const value = cleanMode === 'epic' ? canonicalEpic(token) : token;
+    const normalized = digitsOnly ? compactDigits(value) : normalizeSearchValue(value);
+    const compact = digitsOnly ? normalized : compactIdentifier(value).toLowerCase();
+    const phoneticLength = cleanMode === 'name' || cleanMode === 'guardian'
+      ? phoneticSkeleton(value).length
+      : 0;
+    const loose = /[ऀ-ॿ]/.test(String(value || '')) ? looseHindiToken(value) : '';
+    const strictKeys = [...new Set([normalized, compact, ...deletionKeys(value, {
+      digitsOnly,
+      includePhonetic: cleanMode !== 'epic',
+    })].filter(Boolean))].filter((key) => (
+      key === normalized
+      || key === compact
+      || (loose && key === '~' + loose)
+      || (key.startsWith('#') && key.length === phoneticLength + 1)
+    ));
+    return {
+      $or: [
+        ...(strictKeys.length
+          ? [{ [FIELD_SEARCH_KEY_FIELDS[cleanMode]]: { $in: strictKeys } }]
+          : []),
+        ...(fieldRegexConditions(cleanMode, token) || []),
+      ],
+    };
+  });
 };
 
 const buildFieldSearchConditions = (query, mode) => {
   const cleanMode = String(mode || '').trim();
   if (!FIELD_SEARCH_FIELDS[cleanMode]) return buildSearchConditions(query);
-  return searchTokens(query).map((token) => {
+  const tokens = ['epic', 'house', 'mobile'].includes(cleanMode)
+    ? [String(query || '').trim()].filter(Boolean)
+    : searchTokens(query);
+  return tokens.map((token) => {
     const digitsOnly = cleanMode === 'mobile';
     const fuzzyKeys = deletionKeys(
       cleanMode === 'epic' ? canonicalEpic(token) : token,
-      { digitsOnly },
+      { digitsOnly, includePhonetic: cleanMode !== 'epic' },
     );
     return {
       $or: [
@@ -371,6 +449,7 @@ module.exports = {
   buildMemberSearchData,
   buildSearchConditions,
   buildFieldSearchConditions,
+  buildStrictFieldSearchConditions,
   searchExactCandidates,
   ensureMemberSearchData,
 };
