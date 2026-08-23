@@ -972,6 +972,26 @@ def process_page(page_path, output_dir, page_no):
         else:
             index += 1
 
+    # Recover a dropped leading digit only when both adjacent cards provide the
+    # same anchor and the OCR value is its exact suffix (34, 4, 34 -> 34).
+    for index in range(1, len(ordered_records) - 1):
+        previous = str(ordered_records[index - 1].get("houseNumber") or "")
+        current = str(ordered_records[index].get("houseNumber") or "")
+        following = str(ordered_records[index + 1].get("houseNumber") or "")
+        missing_prefix = len(previous) - len(current)
+        if (
+            previous.isdigit()
+            and current.isdigit()
+            and following == previous
+            and 1 <= missing_prefix <= 2
+            and previous.endswith(current)
+        ):
+            target = ordered_records[index]
+            target["rawHouseNumber"] = target.get("rawHouseNumber") or current
+            target["houseNumber"] = previous
+            target["houseNumberConfidence"] = 90
+            target["houseOcrDisagreement"] = True
+
     # Correct a single prefixed value at a real house transition, for example
     # 37, 538, 38. The suffix must exactly equal the following anchor and that
     # anchor must be a plausible monotonic step from the previous house.
