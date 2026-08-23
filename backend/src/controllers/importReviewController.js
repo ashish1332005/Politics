@@ -35,7 +35,27 @@ exports.resolve = async (req, res, next) => {
         verificationStatus: 'needs_review',
       });
     }
+    const verifiedSnapshot = {
+      name: String(member.name || '').trim(),
+      guardianName: String(member.guardianName || '').trim(),
+      houseNumber: String(member.houseNumber || '').trim(),
+      age: member.age ?? null,
+      gender: member.gender || '',
+      voterId: member.voterId || '',
+      voterSerial: String(member.voterSerial || '').trim(),
+    };
+    member.ocrValues = {
+      raw: review.rawData || member.ocrValues?.raw || {},
+      suggested: member.ocrValues?.suggested || {},
+      verified: verifiedSnapshot,
+      status: 'verified',
+      verifiedBy: req.currentUser._id,
+      verifiedAt: new Date(),
+    };
+    member.verificationStatus = 'verified';
+    await member.save();
     Object.assign(review, {
+      verifiedData: verifiedSnapshot,
       status: 'resolved',
       resolvedMember: member._id,
       resolvedBy: req.currentUser._id,

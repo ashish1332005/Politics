@@ -235,7 +235,7 @@ exports.list = async (req, res, next) => {
       filter.$and = [...(filter.$and || []), ...conditions];
     }
     const listQuery = (query) => Member.find(query)
-      .select('contactType photo name surname mobile altMobile dob estimatedDob anniversary voterId voterSerial guardianName houseNumber address location area tehsil gramPanchayat village municipality caste subCaste organizationPost organizationLevel influenceLevel occupation workplaceState workplaceCity workplaceVillage spouseName marriageState marriageCity marriageVillage education extraDetails supportLevel partyPreference isFavorite ward booth updatedAt age gender sectionNumber sectionName assemblyNumber assemblyName partNumber partName postOffice policeStation district pinCode verificationStatus profileCompletionStatus profileCompletedBy profileCompletedAt ocrConfidence houseNumberConfidence locationMatchConfidence locationResolution ocrReviewReasons ocrValidationPassed ocrFieldConfidence sourceDocument')
+      .select('contactType photo name surname mobile altMobile dob estimatedDob anniversary voterId voterSerial guardianName houseNumber address location area tehsil gramPanchayat village municipality caste subCaste organizationPost organizationLevel influenceLevel occupation workplaceState workplaceCity workplaceVillage spouseName marriageState marriageCity marriageVillage education extraDetails supportLevel partyPreference isFavorite ward booth updatedAt age gender sectionNumber sectionName assemblyNumber assemblyName partNumber partName postOffice policeStation district pinCode verificationStatus profileCompletionStatus profileCompletedBy profileCompletedAt ocrConfidence houseNumberConfidence locationMatchConfidence locationResolution ocrReviewReasons ocrValidationPassed ocrFieldConfidence ocrValues sourceDocument')
       .populate(populate)
       .sort(req.query.sort === 'recent' ? { updatedAt: -1 } : { name: 1, surname: 1, houseNumber: 1 })
       .collation({ locale: 'en', numericOrdering: true, strength: 1 });
@@ -745,6 +745,7 @@ exports.update = async (req, res, next) => {
     }
     // OCR provenance is server-owned; admins verify through the normal status field.
     delete updates.locationResolution;
+    delete updates.ocrValues;
     if (updates.contactType && updates.contactType !== member.contactType) {
       return res.status(400).json({ message: 'Contact type cannot be changed after creation.' });
     }
@@ -780,6 +781,22 @@ exports.update = async (req, res, next) => {
         gramPanchayat: String(member.gramPanchayat || '').trim(),
         village: String(member.village || '').trim(),
         pinCode: String(member.pinCode || '').trim(),
+      };
+      member.ocrValues = {
+        raw: member.ocrValues?.raw || {},
+        suggested: member.ocrValues?.suggested || {},
+        verified: {
+          name: String(member.name || '').trim(),
+          guardianName: String(member.guardianName || '').trim(),
+          houseNumber: String(member.houseNumber || '').trim(),
+          age: member.age ?? null,
+          gender: member.gender || '',
+          voterId: member.voterId || '',
+          voterSerial: String(member.voterSerial || '').trim(),
+        },
+        status: Object.keys(member.ocrValues?.suggested || {}).length ? 'verified' : 'manual',
+        verifiedBy: req.currentUser._id,
+        verifiedAt: new Date(),
       };
       member.locationResolution = {
         ...currentResolution,

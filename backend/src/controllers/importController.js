@@ -1004,6 +1004,12 @@ const parsePdfMembers = async (filePath, importFileName, onOcrProgress) => {
         ocrReviewReasons: Array.isArray(record.reviewReasons) ? record.reviewReasons : [],
         ocrValidationPassed: Boolean(record.validationPassed),
         ocrFieldConfidence: record.fieldConfidence || {},
+        ocrValues: {
+          raw: record.rawFields || {},
+          suggested: record.suggestedFields || {},
+          verified: {},
+          status: 'suggested',
+        },
       };
     });
     const merged = new Map();
@@ -1045,7 +1051,6 @@ const parsePdfMembers = async (filePath, importFileName, onOcrProgress) => {
           location: header.sectionName || header.assemblyName || '',
           photo: record.photo,
           cardImage: record.cardImage || '',
-        cardImage: record.cardImage || '',
           rawText: record.rawText || record.text,
           ocrConfidence: record.confidence,
         houseNumberConfidence: record.houseNumberConfidence,
@@ -1055,6 +1060,12 @@ const parsePdfMembers = async (filePath, importFileName, onOcrProgress) => {
         ocrReviewReasons: Array.isArray(record.reviewReasons) ? record.reviewReasons : [],
         ocrValidationPassed: Boolean(record.validationPassed),
         ocrFieldConfidence: record.fieldConfidence || {},
+        ocrValues: {
+          raw: record.rawFields || {},
+          suggested: record.suggestedFields || {},
+          verified: {},
+          status: 'suggested',
+        },
         }]
         : parseHindiVoterRoll(record.text || record.rawText || '', header)
           .map((member) => ({ ...member, ...header, photo: record.photo }))
@@ -1389,6 +1400,7 @@ const runPdfImport = async ({ file, body, currentUser }, uploadId) => {
           sourceType: 'pdf',
           sourceFile: file.filename,
           reason: 'Name missing or unreadable',
+          rawData: item.ocrValues?.raw || {},
           suggestedData: item,
           ward,
           booth,
@@ -1404,6 +1416,7 @@ const runPdfImport = async ({ file, body, currentUser }, uploadId) => {
           sourceType: 'pdf',
           sourceFile: file.filename,
           reason: 'EPIC missing or invalid',
+          rawData: item.ocrValues?.raw || {},
           suggestedData: { ...item, voterId: item.voterId || '' },
           ward,
           booth,
@@ -1439,12 +1452,13 @@ const runPdfImport = async ({ file, body, currentUser }, uploadId) => {
       }
       const existing = await Member.findOne({ voterId: item.voterId });
       if (existing) {
+        const currentOcrValues = existing.ocrValues?.toObject?.() || existing.ocrValues || {};
+        const hasVerifiedOcr = ['verified', 'manual'].includes(currentOcrValues.status);
         // PDF/OCR is authoritative for roll-specific fields, but it must not
         // erase structured Excel enrichment such as mobile and village data.
         assignNonEmptyFields(existing, item, [
           'photo',
-          'voterSerial',
-          'houseNumber',
+          ...(!hasVerifiedOcr ? ['voterSerial', 'houseNumber'] : []),
           'assemblyNumber',
           'assemblyName',
           'partNumber',
@@ -1476,6 +1490,16 @@ const runPdfImport = async ({ file, body, currentUser }, uploadId) => {
         assignNonEmptyFields(existing, item, ['tehsil', 'gramPanchayat', 'village', 'postOffice', 'policeStation', 'district', 'pinCode']);
         if (!existing.party && party?._id) existing.party = party._id;
         existing.ocrConfidence = item.ocrConfidence;
+        existing.ocrValues = {
+          raw: item.ocrValues?.raw || currentOcrValues.raw || {},
+          suggested: item.ocrValues?.suggested || currentOcrValues.suggested || {},
+          verified: currentOcrValues.verified || {},
+          status: ['verified', 'manual'].includes(currentOcrValues.status)
+            ? currentOcrValues.status
+            : (item.ocrValues?.status || 'suggested'),
+          verifiedBy: currentOcrValues.verifiedBy,
+          verifiedAt: currentOcrValues.verifiedAt,
+        };
         existing.houseNumberConfidence = item.houseNumberConfidence;
         existing.locationMatchConfidence = item.locationMatchConfidence;
         if (item.locationResolution) {
@@ -1496,7 +1520,7 @@ const runPdfImport = async ({ file, body, currentUser }, uploadId) => {
         existing.ocrReviewReasons = item.ocrReviewReasons || [];
         existing.ocrValidationPassed = Boolean(item.ocrValidationPassed);
         existing.ocrFieldConfidence = item.ocrFieldConfidence || {};
-        if (item.ocrNeedsReview && existing.verificationStatus !== 'duplicate') existing.verificationStatus = 'needs_review';
+        if (item.ocrNeedsReview && !hasVerifiedOcr && existing.verificationStatus !== 'duplicate') existing.verificationStatus = 'needs_review';
         existing.updatedBy = currentUser._id;
         existing.sourceDocument = {
           type: 'pdf',
@@ -1546,6 +1570,7 @@ const runPdfImport = async ({ file, body, currentUser }, uploadId) => {
         party: party?._id,
         createdBy: currentUser._id,
         updatedBy: currentUser._id,
+        ocrValues: item.ocrValues || { raw: {}, suggested: {}, verified: {}, status: 'raw' },
         ocrConfidence: item.ocrConfidence,
         houseNumberConfidence: item.houseNumberConfidence,
         locationMatchConfidence: item.locationMatchConfidence,

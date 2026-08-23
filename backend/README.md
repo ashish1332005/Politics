@@ -70,3 +70,15 @@ USE_PYTHON_OCR=true
 ```
 
 Leave `TESSDATA_PREFIX` unset on Render.
+### VPS accuracy mode
+
+For supported 3-column electoral-roll layouts, enable fixed card crops and dual preprocessing checks:
+
+```env
+OCR_VERIFY_ALL_FIELDS=true
+OCR_MIN_CONFIDENCE=85
+OCR_PAGE_CONCURRENCY=1
+OMP_THREAD_LIMIT=1
+```
+
+Run OCR as a background job on the VPS. Critical-field disagreement is stored as `needs_review`; it is never promoted to verified automatically. Unknown PDF layouts must be reviewed before import. Use `npm run test:ocr-golden -- <ocr-result.json>` to compare a worker result with the verified Bheeta page-3 fixture.
