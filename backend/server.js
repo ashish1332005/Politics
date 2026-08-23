@@ -99,12 +99,17 @@ connectDB()
     await ensureMemberIndexes();
     const indexedMembers = await ensureMemberSearchData(Member);
     if (indexedMembers) console.log('Prepared ' + indexedMembers + ' voter record(s) for easy search.');
+    const staleImportMinutes = Math.max(5, Number(process.env.IMPORT_JOB_STALE_MINUTES || 15));
+    const staleImportCutoff = new Date(Date.now() - staleImportMinutes * 60 * 1000);
     await ImportJob.updateMany(
-      { status: { $in: ['uploading', 'processing'] } },
+      {
+        status: { $in: ['uploading', 'processing'] },
+        updatedAt: { $lt: staleImportCutoff },
+      },
       {
         $set: {
           status: 'failed',
-          stage: 'Server restarted during PDF import. Please upload the PDF again.',
+          stage: 'PDF import stopped before completion. Please upload the PDF again.',
           expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
         },
       },

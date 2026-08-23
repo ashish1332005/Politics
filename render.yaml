@@ -32,6 +32,8 @@ services:
         value: 1
       - key: OCR_DEEP_RETRY
         value: false
+      - key: IMPORT_JOB_STALE_MINUTES
+        value: 15
       - key: IMAGE_CROP_CONCURRENCY
         value: 1
       - key: OMP_THREAD_LIMIT
