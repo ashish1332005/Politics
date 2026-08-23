@@ -457,16 +457,34 @@ const getOrCreateArea = async ({ name, type, parent = null, assemblyNumber = '',
 const ensureAreaHierarchy = async (data, userId) => {
   let parent = null;
   const assemblyNumber = String(data.assemblyNumber || '').trim();
+  const assemblyName = cleanValue(data.assemblyName);
   if (assemblyNumber) {
-    const existingAssembly = await Area.findOne({ parent: null, type: 'assembly', assemblyNumber });
+    const [assemblyByName, assemblyByNumber] = await Promise.all([
+      assemblyName
+        ? Area.findOne({ parent: null, type: 'assembly', name: assemblyName })
+        : null,
+      Area.findOne({ parent: null, type: 'assembly', assemblyNumber }),
+    ]);
+    let existingAssembly = assemblyByName || assemblyByNumber;
     if (existingAssembly) {
       existingAssembly.active = true;
-      if (data.assemblyName) existingAssembly.name = cleanValue(data.assemblyName);
-      await existingAssembly.save();
+      if (assemblyName && (!assemblyByName || assemblyByName.id === existingAssembly.id)) {
+        existingAssembly.name = assemblyName;
+      }
+      if (!existingAssembly.assemblyNumber && (!assemblyByNumber || assemblyByNumber.id === existingAssembly.id)) {
+        existingAssembly.assemblyNumber = assemblyNumber;
+      }
+      try {
+        await existingAssembly.save();
+      } catch (error) {
+        if (error?.code !== 11000 || !assemblyName) throw error;
+        existingAssembly = await Area.findOne({ parent: null, type: 'assembly', name: assemblyName });
+        if (!existingAssembly) throw error;
+      }
       parent = existingAssembly._id;
     } else {
       parent = await getOrCreateArea({
-        name: data.assemblyName || `Assembly ${assemblyNumber}`,
+        name: assemblyName || `Assembly ${assemblyNumber}`,
         type: 'assembly',
         assemblyNumber,
         userId,
