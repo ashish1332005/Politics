@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fixture = require('./fixtures/bheeta-page3.golden.json');
+const page8Fixture = require('./fixtures/bheeta-page8.golden.json');
 const { compareGoldenRecords } = require('../src/utils/ocrGolden');
 
 test('Bheeta page 3 golden fixture contains 30 admin-verified voter cards', () => {
@@ -19,4 +20,9 @@ test('golden comparison reports an exact field regression', () => {
   assert.deepEqual(result.mismatches[0], {
     voterSerial: '19', field: 'guardianName', expected: 'मांगीलाल', actual: 'गलत नाम',
   });
+});
+test('Bheeta page 8 golden fixture contains serials 127 through 156', () => {
+  assert.equal(page8Fixture.records.length, 30);
+  assert.deepEqual(page8Fixture.records.map((row) => Number(row.voterSerial)), Array.from({ length: 30 }, (_, index) => index + 127));
+  assert.equal(compareGoldenRecords(page8Fixture.records, page8Fixture.records).passed, true);
 });

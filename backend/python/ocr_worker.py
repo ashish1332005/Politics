@@ -35,6 +35,8 @@ def clean_person_name(value):
     value = re.sub(r"[^\u0900-\u097F\s.-]", " ", value or "")
     value = re.sub(r"[\u0964\u0965\u0966-\u096f]", " ", value)
     value = clean(value).strip(" .-|")
+    if re.search(r"(?:पिता|पति|माता|गृह|उम्र|लिंग)\\s*(?:का)?\\s*नाम|(?:^|\\s)का\\s+नाम(?:\\s|$)", value):
+        return ""
     # OCR often turns border/adjacent-label fragments into a short final Hindi
     # token. These postpositions/noise tokens are not part of a person name.
     value = re.sub(r"(?:\s+[.]?\s*)(?:का|की|के|न|अक|नो|यु|है)$", "", value)
@@ -106,16 +108,16 @@ def coordinate_age(words, x, y, card_w, card_h):
 
 
 def ocr_house(card):
-    """Read the fixed house row twice and accept only an agreeing value."""
+    """Read only the value area of the fixed house-number row."""
     height, width = card.shape[:2]
     region = card[
-        round(height * 0.38):round(height * 0.78),
-        0:round(width * 0.72),
+        round(height * 0.45):round(height * 0.63),
+        round(width * 0.17):round(width * 0.27),
     ]
     if region.size == 0:
         return ""
     gray = cv2.cvtColor(region, cv2.COLOR_BGR2GRAY)
-    gray = cv2.resize(gray, None, fx=4, fy=4, interpolation=cv2.INTER_CUBIC)
+    gray = cv2.resize(gray, None, fx=10, fy=10, interpolation=cv2.INTER_CUBIC)
     variants = [
         cv2.createCLAHE(3.0, (8, 8)).apply(gray),
         cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1],
@@ -123,18 +125,10 @@ def ocr_house(card):
     values = []
     for variant in variants:
         text = pytesseract.image_to_string(
-            variant,
-            lang=os.getenv("OCR_LANGUAGES", "hin+eng"),
-            config="--psm 6",
+            variant, lang="eng", config="--psm 7 -c tessedit_char_whitelist=0123456789/-",
         )
-        value = clean_house(field(
-            text,
-            r"(?:गृह|मकान)\s*संख्या\s*[:：;\-]?\s*([^\n]+)",
-        ))
-        if value:
-            values.append(value)
-    return values[0] if len(values) == 2 and values[0] == values[1] else ""
-
+        values.append(clean_house(text))
+    return values[0] if values[0] and values[0] == values[1] else ""
 
 def _dual_fixed_choice(card, y1, y2, x1, x2, extractor, language="eng", whitelist=""):
     """Return a fixed-region value only when two preprocessing passes agree."""
@@ -178,8 +172,8 @@ def ocr_age(card):
     """Retry only the printed age row; never infer an age from nearby fields."""
     height, width = card.shape[:2]
     region = card[
-        round(height * 0.54):round(height * 0.74),
-        round(width * 0.075):round(width * 0.17),
+        round(height * 0.56):round(height * 0.73),
+        round(width * 0.08):round(width * 0.17),
     ]
     if region.size == 0:
         return None
@@ -250,8 +244,8 @@ def epic_from(text):
 def ocr_epic(card, reference=""):
     height, width = card.shape[:2]
     regions = [
-        card[0:round(height * 0.25), round(width * 0.18):width],
-        card[0:round(height * 0.32), round(width * 0.10):width],
+        card[round(height * 0.01):round(height * 0.20), round(width * 0.68):round(width * 0.99)],
+        card[round(height * 0.02):round(height * 0.18), round(width * 0.70):width],
     ]
     candidates = []
     for region in regions:
@@ -722,7 +716,9 @@ def process_page(page_path, output_dir, page_no):
         coordinate_serial_value = coordinate_serial(numeric_words, x, y, card_w, card_h)
         coordinate_house_value = coordinate_house(numeric_words, x, y, card_w, card_h)
         consensus_house = ocr_house(card) if verify_all_fields else ""
-        focused_house = coordinate_house_value or consensus_house
+        # In verification mode the isolated, dual-pass value crop is preferred.
+        # Disagreement still forces review and is never silently verified.
+        focused_house = consensus_house if verify_all_fields and consensus_house else coordinate_house_value
         focused_age = coordinate_age(numeric_words, x, y, card_w, card_h)
         record = parse_card(
             text, epic_text, str(photo_file), page_no, cell_no, focused_house,
@@ -756,9 +752,9 @@ def process_page(page_path, output_dir, page_no):
             record["ageOcrDisagreement"] = bool(
                 focused_age is not None and consensus_age is not None and focused_age != consensus_age
             )
-            if focused_age is None and consensus_age is not None:
+            if consensus_age is not None:
                 record["age"] = consensus_age
-                record["ageConfidence"] = 90
+                record["ageConfidence"] = 100 if focused_age == consensus_age else 90
             serial_value, serial_disagreement = ocr_serial(card)
             record["serialOcrDisagreement"] = serial_disagreement
             if serial_value:
@@ -880,6 +876,19 @@ def process_page(page_path, output_dir, page_no):
             record["rawName"] = record.get("rawName") or record.get("name")
             record["name"] = focused_name
         record["identityOcrDisagreement"] = identity_disagreement
+
+        # Retry OCR may capture an adjacent printed label as the value. Run the
+        # same conservative cleanup again before validation; rejected text stays
+        # in raw fields for admin review instead of becoming a voter identity.
+        for key, raw_key in (("name", "rawName"), ("guardianName", "rawGuardianName")):
+            current_value = record.get(key) or ""
+            cleaned_value = clean_person_name(current_value)
+            if current_value and not cleaned_value:
+                record[raw_key] = record.get(raw_key) or current_value
+                record[key] = ""
+            elif cleaned_value != current_value:
+                record[raw_key] = record.get(raw_key) or current_value
+                record[key] = cleaned_value
 
         report_card_progress(page_no, cell_no)
     # Printed electoral rolls are ordered by house number. Repair only an

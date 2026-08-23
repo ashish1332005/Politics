@@ -13,6 +13,8 @@ RUN apt-get update \
     tesseract-ocr \
     tesseract-ocr-eng \
     tesseract-ocr-hin \
+    wget \
+  && wget -q https://github.com/tesseract-ocr/tessdata_best/raw/main/hin.traineddata -O /usr/share/tesseract-ocr/5/tessdata/hin.traineddata \
   && rm -rf /var/lib/apt/lists/*
 
 RUN printf '#!/bin/sh\nif [ "$1" = "identify" ]; then shift; exec identify "$@"; fi\nexec convert "$@"\n' > /usr/local/bin/magick \
