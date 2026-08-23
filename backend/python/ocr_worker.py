@@ -35,7 +35,7 @@ def clean_person_name(value):
     value = re.sub(r"[^\u0900-\u097F\s.-]", " ", value or "")
     value = re.sub(r"[\u0964\u0965\u0966-\u096f]", " ", value)
     value = clean(value).strip(" .-|")
-    if re.search(r"(?:पिता|पति|पत्ति|पती|माता|गृह|उम्र|लिंग)\s*(?:का)?\s*नाम|(?:^|\s)का\s+नाम(?:\s|$)", value):
+    if re.search(r"(?:निर्वाचक\s*(?:का)?\s*नाम|(?:^|\s)नाम(?:\s|$))|(?:पिता|पति|पत्ति|पती|माता)\s*(?:का)?\s*नाम|गृह\s*संख्या|^(?:उम्र|लिंग)(?:\s|$)|(?:^|\s)का\s+नाम(?:\s|$)", value):
         return ""
     # OCR often turns border/adjacent-label fragments into a short final Hindi
     # token. These postpositions/noise tokens are not part of a person name.
@@ -403,7 +403,7 @@ def suspicious_person_name(value):
         "." in text
         or "् " in text
         or any(re.search(r"्[\u0900-\u097F]्", token) for token in tokens)
-        or bool(re.search(r"(?:पिता|पति|पत्ति|पती|माता|गृह|उम्र|लिंग)\s*(?:का)?\s*नाम", text))
+        or bool(re.search(r"(?:निर्वाचक\s*(?:का)?\s*नाम|(?:^|\s)नाम(?:\s|$))|(?:पिता|पति|पत्ति|पती|माता)\s*(?:का)?\s*नाम|गृह\s*संख्या|^(?:उम्र|लिंग)(?:\s|$)", text))
         or (len(tokens) > 1 and tokens[-1] in trailing_noise)
     )
 
@@ -1080,6 +1080,27 @@ def process_page(page_path, output_dir, page_no):
                 record["rawHouseNumber"] = value
                 record["houseNumber"] = consensus
                 record["houseNumberConfidence"] = 95
+    # Row consensus may repair an adjacent prefixed value after the first
+    # sequence pass. Reconcile truncated suffixes once more on the final house
+    # values so 117, 17, 117 cannot escape because of correction ordering.
+    for index in range(1, len(ordered_records) - 1):
+        previous = str(ordered_records[index - 1].get("houseNumber") or "")
+        current = str(ordered_records[index].get("houseNumber") or "")
+        following = str(ordered_records[index + 1].get("houseNumber") or "")
+        missing_prefix = len(previous) - len(current)
+        if (
+            previous.isdigit()
+            and current.isdigit()
+            and following == previous
+            and 1 <= missing_prefix <= 2
+            and previous.endswith(current)
+        ):
+            target = ordered_records[index]
+            target["rawHouseNumber"] = target.get("rawHouseNumber") or current
+            target["houseNumber"] = previous
+            target["houseNumberConfidence"] = 90
+            target["houseOcrDisagreement"] = True
+
     voter_names = [record.get("name") or "" for record in records]
     for record in records:
         guardian = record.get("guardianName") or ""
