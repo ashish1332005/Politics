@@ -972,6 +972,45 @@ def process_page(page_path, output_dir, page_no):
         else:
             index += 1
 
+    # Correct a single prefixed value at a real house transition, for example
+    # 37, 538, 38. The suffix must exactly equal the following anchor and that
+    # anchor must be a plausible monotonic step from the previous house.
+    for index in range(1, len(ordered_records) - 1):
+        previous = str(ordered_records[index - 1].get("houseNumber") or "")
+        current = str(ordered_records[index].get("houseNumber") or "")
+        following = str(ordered_records[index + 1].get("houseNumber") or "")
+        if not (previous.isdigit() and current.isdigit() and following.isdigit()):
+            continue
+        prefix_length = len(current) - len(following)
+        plausible_transition = int(previous) <= int(following) <= int(previous) + 20
+        if plausible_transition and 1 <= prefix_length <= 2 and current.endswith(following):
+            target = ordered_records[index]
+            target["rawHouseNumber"] = target.get("rawHouseNumber") or current
+            target["houseNumber"] = following
+            target["houseNumberConfidence"] = 90
+            target["houseOcrDisagreement"] = True
+
+    # A large house jump is legitimate when it forms a repeated run (for
+    # example 39, 115, 115, 115). A one-card jump has insufficient evidence:
+    # preserve its raw value but require admin review instead of guessing.
+    index = 0
+    while index < len(ordered_records):
+        value = str(ordered_records[index].get("houseNumber") or "")
+        end = index + 1
+        while end < len(ordered_records) and str(ordered_records[end].get("houseNumber") or "") == value:
+            end += 1
+        run_length = end - index
+        previous = str(ordered_records[index - 1].get("houseNumber") or "") if index > 0 else ""
+        following = str(ordered_records[end].get("houseNumber") or "") if end < len(ordered_records) else ""
+        if run_length == 1 and value.isdigit():
+            neighbour_values = [int(item) for item in (previous, following) if item.isdigit()]
+            if neighbour_values and min(abs(int(value) - item) for item in neighbour_values) > 20:
+                ordered_records[index]["houseOcrDisagreement"] = True
+                ordered_records[index]["houseNumberConfidence"] = min(
+                    int(ordered_records[index].get("houseNumberConfidence") or 70), 60
+                )
+        index = end
+
     # Recover printed serials from the dominant serial-minus-cell offset. A
     # minimum of four independent cards prevents one bad OCR token from
     # manufacturing a page sequence.
