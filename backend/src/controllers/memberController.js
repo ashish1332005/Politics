@@ -8,6 +8,7 @@ const { writeActivity } = require('../middleware/activityLogger');
 const { requireValidEpic } = require('../utils/epic');
 const { syncMemberFamily, removeMemberFromFamilies } = require('../utils/familySync');
 const { persistLocalImage } = require('../utils/persistentMedia');
+const { matchingLocationNames } = require('../utils/locationMerge');
 const {
   buildSearchConditions,
   buildFieldSearchConditions,
@@ -164,18 +165,24 @@ exports.create = async (req, res, next) => {
 
 exports.list = async (req, res, next) => {
   try {
-    const { q, qMode, party, supportLevel, gender, booth, ward, area, verificationStatus, location, village, gramPanchayat, tehsil, municipality, caste, organizationPost, occupation, contactType, sectionNumber, sectionName, sectionNames, assemblyNumber, assemblyName, partNumber, letter } = req.query;
+    const { q, qMode, party, supportLevel, gender, booth, ward, area, verificationStatus, location, village, gramPanchayat, tehsil, municipality, caste, organizationPost, occupation, contactType, sectionNumber, sectionName, sectionNames, assemblyNumber, assemblyName, partNumber, pinCode, voterSerial, profileCompletionStatus, partyPreference, favorite, letter } = req.query;
     const limit = Math.min(Number(req.query.limit) || 100, 500);
     const page = Math.max(Number(req.query.page) || 1, 1);
     const paged = String(req.query.paged || '').toLowerCase() === 'true' || req.query.page !== undefined;
     const filter = applyMemberScope(req.currentUser, {});
     if (party) filter.party = party;
     if (supportLevel) filter.supportLevel = supportLevel;
+    if (partyPreference) filter.partyPreference = partyPreference;
+    if (favorite === 'true' && req.currentUser.role === 'admin') filter.isFavorite = true;
     if (gender) filter.gender = gender;
     if (ward) filter.ward = ward;
     if (area) filter.area = area;
     if (location) filter.location = searchRegex(location);
     if (village) filter.village = searchRegex(village);
+    if (pinCode) {
+      const normalizedPin = String(pinCode).replace(/\D/g, '');
+      if (normalizedPin) filter.pinCode = new RegExp('^' + escapeRegex(normalizedPin) + '$', 'i');
+    }
     if (gramPanchayat) filter.gramPanchayat = searchRegex(gramPanchayat);
     if (tehsil) filter.tehsil = searchRegex(tehsil);
     if (municipality) filter.municipality = searchRegex(municipality);
@@ -196,7 +203,15 @@ exports.list = async (req, res, next) => {
     if (sectionName && !filter.sectionName) filter.sectionName = searchRegex(sectionName);    if (assemblyNumber) filter.assemblyNumber = assemblyNumber;
     if (assemblyName) filter.assemblyName = searchRegex(assemblyName);
     if (partNumber) filter.partNumber = partNumber;
+    if (voterSerial) {
+      if (!partNumber && !village) {
+        return res.status(400).json({ message: 'क्रम संख्या खोजने से पहले भाग / गाँव चुनें।' });
+      }
+      const serial = String(voterSerial).replace(/[०-९]/g, (digit) => String('०१२३४५६७८९'.indexOf(digit))).replace(/\D/g, '');
+      if (serial) filter.voterSerial = new RegExp(`^${escapeRegex(serial)}$`, 'i');
+    }
     if (verificationStatus) filter.verificationStatus = verificationStatus;
+    if (profileCompletionStatus) filter.profileCompletionStatus = profileCompletionStatus;
     if (letter) {
       const escapedLetter = escapeRegex(String(letter).trim());
       filter.name = new RegExp(`^${escapedLetter}`, 'i');
@@ -220,7 +235,7 @@ exports.list = async (req, res, next) => {
       filter.$and = [...(filter.$and || []), ...conditions];
     }
     const listQuery = (query) => Member.find(query)
-      .select('contactType photo name surname mobile altMobile dob estimatedDob anniversary voterId voterSerial guardianName houseNumber address location area tehsil gramPanchayat village municipality caste subCaste organizationPost organizationLevel influenceLevel occupation education extraDetails supportLevel ward booth updatedAt age gender sectionNumber sectionName assemblyNumber assemblyName partNumber partName postOffice policeStation district pinCode')
+      .select('contactType photo name surname mobile altMobile dob estimatedDob anniversary voterId voterSerial guardianName houseNumber address location area tehsil gramPanchayat village municipality caste subCaste organizationPost organizationLevel influenceLevel occupation workplaceState workplaceCity workplaceVillage spouseName marriageState marriageCity marriageVillage education extraDetails supportLevel partyPreference isFavorite ward booth updatedAt age gender sectionNumber sectionName assemblyNumber assemblyName partNumber partName postOffice policeStation district pinCode verificationStatus profileCompletionStatus profileCompletedBy profileCompletedAt ocrConfidence houseNumberConfidence locationMatchConfidence locationResolution ocrReviewReasons ocrValidationPassed ocrFieldConfidence sourceDocument')
       .populate(populate)
       .sort(req.query.sort === 'recent' ? { updatedAt: -1 } : { name: 1, surname: 1, houseNumber: 1 })
       .collation({ locale: 'en', numericOrdering: true, strength: 1 });
@@ -319,6 +334,7 @@ const optionDefinitions = {
     }),
   },
   village: { field: 'village' },
+  pinCode: { field: 'pinCode' },
   gramPanchayat: { field: 'gramPanchayat' },
   tehsil: { field: 'tehsil' },
   municipality: { field: 'municipality' },
@@ -339,7 +355,7 @@ const optionDefinitions = {
 
 function addOptionFilter(filter, key, value) {
   if (!value) return;
-  if (['assemblyNumber', 'partNumber', 'sectionNumber', 'supportLevel', 'verificationStatus', 'gender'].includes(key)) {
+  if (['assemblyNumber', 'partNumber', 'sectionNumber', 'pinCode', 'supportLevel', 'verificationStatus', 'gender'].includes(key)) {
     filter[key] = value;
   } else if (['assemblyName', 'sectionName', 'village', 'gramPanchayat', 'tehsil', 'municipality', 'caste', 'occupation', 'organizationPost'].includes(key)) {
     filter[key] = new RegExp(String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
@@ -467,6 +483,14 @@ exports.bulkLocationCorrection = async (req, res, next) => {
     const smartQuery = cleanText(rawSource.smartQuery || rawSource.q);
     const updates = cleanLocationUpdates(req.body?.updates || {});
     const dryRun = req.body?.dryRun !== false;
+    if (req.body?.mergeMatchingOnly === true) {
+      if (!source.sectionName || !updates.sectionName) {
+        return res.status(400).json({ message: 'Merge के लिए source और target अनुभाग नाम जरूरी हैं।' });
+      }
+      if (!matchingLocationNames(source.sectionName, updates.sectionName)) {
+        return res.status(400).json({ message: 'केवल मिलते-जुलते अनुभाग नाम merge किए जा सकते हैं।' });
+      }
+    }
     const sourceKeyCount = Object.values(source).filter((value) => value !== '').length;
     const safeVillageSource = source.village && sourceKeyCount >= 2;
     const safeSectionSource = source.sectionName && sourceKeyCount >= 2;
@@ -609,6 +633,73 @@ exports.suggestions = async (req, res, next) => {
   }
 };
 
+exports.locationReviews = async (req, res, next) => {
+  try {
+    const status = String(req.query.status || 'pending');
+    const statusFilter = status === 'all'
+      ? { $in: ['suggested', 'unmatched', 'rejected'] }
+      : status === 'rejected' ? 'rejected' : { $in: ['suggested', 'unmatched'] };
+    const filter = { 'locationResolution.status': statusFilter };
+    const q = String(req.query.q || '').trim();
+    if (q) {
+      const regex = searchRegex(q);
+      filter.$or = [
+        { name: regex }, { voterId: regex }, { village: regex }, { gramPanchayat: regex }, { pinCode: regex },
+        { 'locationResolution.raw.village': regex }, { 'locationResolution.raw.pinCode': regex },
+        { 'locationResolution.suggested.village': regex }, { 'locationResolution.suggested.pinCode': regex },
+      ];
+    }
+    const items = await Member.find(filter)
+      .select('name voterId guardianName houseNumber photo tehsil gramPanchayat village pinCode locationMatchConfidence locationResolution verificationStatus')
+      .sort({ locationMatchConfidence: 1, updatedAt: -1 })
+      .limit(Math.min(Number(req.query.limit) || 200, 500))
+      .lean();
+    res.json(items);
+  } catch (error) { next(error); }
+};
+
+exports.resolveLocationReview = async (req, res, next) => {
+  try {
+    const member = await Member.findById(req.params.id);
+    if (!member) return res.status(404).json({ message: 'Voter not found.' });
+    const decision = String(req.body.decision || '').toLowerCase();
+    const resolution = member.locationResolution?.toObject?.() || member.locationResolution || {};
+    if (decision === 'reject') {
+      member.locationResolution = {
+        ...resolution,
+        status: 'rejected',
+        reviewNote: String(req.body.note || '').trim(),
+        verifiedBy: req.currentUser._id,
+        verifiedAt: new Date(),
+      };
+    } else if (decision === 'verify') {
+      const suggested = resolution.suggested || {};
+      const verified = {
+        tehsil: String(req.body.tehsil ?? suggested.tehsil ?? member.tehsil ?? '').trim(),
+        gramPanchayat: String(req.body.gramPanchayat ?? suggested.gramPanchayat ?? member.gramPanchayat ?? '').trim(),
+        village: String(req.body.village ?? suggested.village ?? member.village ?? '').trim(),
+        pinCode: String(req.body.pinCode ?? suggested.pinCode ?? member.pinCode ?? '').trim(),
+      };
+      if (!verified.village && !verified.gramPanchayat) {
+        return res.status(400).json({ message: 'Village or gram panchayat is required for verification.' });
+      }
+      Object.assign(member, verified);
+      member.locationResolution = {
+        ...resolution,
+        verified,
+        status: 'verified',
+        reviewNote: String(req.body.note || '').trim(),
+        verifiedBy: req.currentUser._id,
+        verifiedAt: new Date(),
+      };
+    } else {
+      return res.status(400).json({ message: 'Decision must be verify or reject.' });
+    }
+    member.updatedBy = req.currentUser._id;
+    await member.save();
+    res.json(member);
+  } catch (error) { next(error); }
+};
 exports.get = async (req, res, next) => {
   try {
     const member = await Member.findById(req.params.id).populate(populate);
@@ -632,6 +723,28 @@ exports.update = async (req, res, next) => {
     if (req.body.ward) assertWardAccess(req.currentUser, req.body.ward);
     const before = member.toObject();
     const updates = { ...req.body };
+    if (req.currentUser.role !== 'admin') delete updates.isFavorite;
+    if (req.currentUser.role === 'booth' && member.contactType !== 'personal') {
+      const protectedVoterFields = [
+        'name', 'surname', 'guardianName', 'relationType', 'gender', 'age',
+        'voterId', 'voterSerial', 'houseNumber', 'assemblyNumber',
+        'assemblyName', 'partNumber', 'partName', 'sectionNumber',
+        'sectionName', 'tehsil', 'gramPanchayat', 'village', 'district',
+        'pinCode', 'verificationStatus',
+      ];
+      const changedField = protectedVoterFields.find((field) =>
+        Object.prototype.hasOwnProperty.call(updates, field)
+        && String(updates[field] ?? '').trim() !== String(member[field] ?? '').trim());
+      if (changedField) {
+        return res.status(403).json({
+          message: 'PDF voter-list fields केवल admin review से बदले जा सकते हैं।',
+          field: changedField,
+        });
+      }
+      for (const field of protectedVoterFields) delete updates[field];
+    }
+    // OCR provenance is server-owned; admins verify through the normal status field.
+    delete updates.locationResolution;
     if (updates.contactType && updates.contactType !== member.contactType) {
       return res.status(400).json({ message: 'Contact type cannot be changed after creation.' });
     }
@@ -651,6 +764,34 @@ exports.update = async (req, res, next) => {
     }
     delete updates.voterId;
     Object.assign(member, updates);
+    if (Object.prototype.hasOwnProperty.call(updates, 'profileCompletionStatus')) {
+      if (updates.profileCompletionStatus === 'complete') {
+        member.profileCompletedBy = req.currentUser._id;
+        member.profileCompletedAt = new Date();
+      } else {
+        member.profileCompletedBy = undefined;
+        member.profileCompletedAt = undefined;
+      }
+    }
+    if (updates.verificationStatus === 'verified' && req.currentUser.role === 'admin') {
+      const currentResolution = member.locationResolution?.toObject?.() || member.locationResolution || {};
+      const verifiedSnapshot = {
+        tehsil: String(member.tehsil || '').trim(),
+        gramPanchayat: String(member.gramPanchayat || '').trim(),
+        village: String(member.village || '').trim(),
+        pinCode: String(member.pinCode || '').trim(),
+      };
+      member.locationResolution = {
+        ...currentResolution,
+        raw: currentResolution.raw || {},
+        suggested: currentResolution.suggested || {},
+        verified: verifiedSnapshot,
+        status: currentResolution.suggested?.village ? 'verified' : 'manual',
+        confidence: currentResolution.confidence || member.locationMatchConfidence || 0,
+        verifiedBy: req.currentUser._id,
+        verifiedAt: new Date(),
+      };
+    }
     if (req.file) {
       requirePermission(req.currentUser, 'canEditPhoto');
       member.photo = await persistLocalImage(req.file.path, req.currentUser._id, true);
@@ -802,4 +943,3 @@ exports.duplicates = async (req, res, next) => {
     next(error);
   }
 };
-

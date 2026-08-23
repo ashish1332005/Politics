@@ -24,6 +24,8 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/party/
   fonts:
     - family: NotoSansDevanagari
       fonts:

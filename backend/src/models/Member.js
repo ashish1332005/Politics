@@ -50,6 +50,46 @@ const MemberSchema = new mongoose.Schema({
   gender: { type: String, enum: ['male', 'female', 'other', ''], default: '' },
   address: { type: String, trim: true },
   houseNumber: { type: String, trim: true },
+  ocrConfidence: Number,
+  houseNumberConfidence: Number,
+  locationMatchConfidence: Number,
+  locationResolution: {
+    raw: {
+      tehsil: String,
+      gramPanchayat: String,
+      village: String,
+      pinCode: String,
+      sectionName: String,
+    },
+    suggested: {
+      tehsil: String,
+      gramPanchayat: String,
+      village: String,
+      pinCode: String,
+    },
+    verified: {
+      tehsil: String,
+      gramPanchayat: String,
+      village: String,
+      pinCode: String,
+    },
+    status: { type: String, enum: ['unmatched', 'suggested', 'verified', 'manual', 'rejected'], default: 'unmatched' },
+    confidence: Number,
+    matchedAlias: String,
+    reviewNote: String,
+    verifiedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    verifiedAt: Date,
+  },
+  ocrReviewReasons: [{ type: String, trim: true }],
+  ocrValidationPassed: Boolean,
+  ocrFieldConfidence: {
+    name: Number,
+    voterId: Number,
+    houseNumber: Number,
+    age: Number,
+    gender: Number,
+    guardianName: Number,
+  },
   location: { type: String, trim: true },
   area: { type: mongoose.Schema.Types.ObjectId, ref: 'Area' },
   tehsil: { type: String, trim: true },
@@ -94,8 +134,22 @@ const MemberSchema = new mongoose.Schema({
   },
   family: [FamilyMemberSchema],
   occupation: String,
+  workplaceState: { type: String, trim: true },
+  workplaceCity: { type: String, trim: true },
+  workplaceVillage: { type: String, trim: true },
+  spouseName: { type: String, trim: true },
+  marriageState: { type: String, trim: true },
+  marriageCity: { type: String, trim: true },
+  marriageVillage: { type: String, trim: true },
   education: String,
   party: { type: mongoose.Schema.Types.ObjectId, ref: 'Party' },
+  partyPreference: {
+    type: String,
+    enum: ['congress', 'bjp', 'nota', 'other', 'undecided'],
+    default: 'undecided',
+    index: true,
+  },
+  isFavorite: { type: Boolean, default: false, index: true },
   supportLevel: {
     type: String,
     enum: ['supporter', 'neutral', 'opposite', 'undecided'],
@@ -111,6 +165,7 @@ const MemberSchema = new mongoose.Schema({
     file: String,
     rawText: String,
     imageExtractionStatus: String,
+    ocrCardImage: String,
   },
   localIssues: [{
     title: String,
@@ -131,6 +186,14 @@ const MemberSchema = new mongoose.Schema({
     enum: ['pending', 'verified', 'needs_review', 'duplicate'],
     default: 'pending',
   },
+  profileCompletionStatus: {
+    type: String,
+    enum: ['pending', 'complete'],
+    default: 'pending',
+    index: true,
+  },
+  profileCompletedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  profileCompletedAt: Date,
   duplicateWarnings: [{
     field: String,
     member: { type: mongoose.Schema.Types.ObjectId, ref: 'Member' },
@@ -149,6 +212,8 @@ const MemberSchema = new mongoose.Schema({
   searchEpicKeys: { type: [String], default: [], select: false },
   searchHouseKeys: { type: [String], default: [], select: false },
   searchMobileKeys: { type: [String], default: [], select: false },
+  searchVillageKeys: { type: [String], default: [], select: false },
+  searchPinKeys: { type: [String], default: [], select: false },
 }, { timestamps: true });
 
 MemberSchema.pre('validate', function updateSearchData(next) {
@@ -172,6 +237,8 @@ MemberSchema.index({ searchGuardianKeys: 1 });
 MemberSchema.index({ searchEpicKeys: 1 });
 MemberSchema.index({ searchHouseKeys: 1 });
 MemberSchema.index({ searchMobileKeys: 1 });
+MemberSchema.index({ searchVillageKeys: 1 });
+MemberSchema.index({ searchPinKeys: 1 });
 
 module.exports = mongoose.model('Member', MemberSchema);
 

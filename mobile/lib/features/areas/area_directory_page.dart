@@ -5,6 +5,7 @@ import '../../core/theme.dart';
 import '../../layout/app_layout.dart';
 import '../../widgets/common.dart';
 import '../voters/voter_management_page.dart';
+import 'master_data_import_page.dart';
 
 class AreaDirectoryPage extends StatefulWidget {
   const AreaDirectoryPage({super.key});
@@ -14,6 +15,31 @@ class AreaDirectoryPage extends StatefulWidget {
 }
 
 class _AreaDirectoryPageState extends State<AreaDirectoryPage> {
+  final search = TextEditingController();
+  String query = '';
+
+  @override
+  void dispose() {
+    search.dispose();
+    super.dispose();
+  }
+
+  bool _matches(Map<String, dynamic> area) {
+    if (query.isEmpty) return true;
+    final aliases = List.from(area['aliases'] ?? const []);
+    final haystack = [
+      area['name'],
+      area['pinCode'],
+      area['district'],
+      area['code'],
+      ...aliases,
+    ].map((value) => '$value'.toLowerCase()).join(' ');
+    if (haystack.contains(query.toLowerCase())) return true;
+    return List.from(area['children'] ?? const [])
+        .map((item) => Map<String, dynamic>.from(item))
+        .any(_matches);
+  }
+
   Future<void> _deleteAllAreas() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -84,6 +110,7 @@ class _AreaDirectoryPageState extends State<AreaDirectoryPage> {
   Future<void> _addArea({Map<String, dynamic>? parent}) async {
     final name = TextEditingController();
     final code = TextEditingController();
+    final aliases = TextEditingController();
     final district = TextEditingController();
     String type = parent == null ? 'assembly' : _childType('${parent['type']}');
     final saved = await showDialog<bool>(
@@ -99,6 +126,12 @@ class _AreaDirectoryPageState extends State<AreaDirectoryPage> {
               TextField(
                   controller: name,
                   decoration: const InputDecoration(labelText: 'नाम *')),
+              const SizedBox(height: 12),
+              TextField(
+                  controller: aliases,
+                  decoration: const InputDecoration(
+                      labelText: 'उपनाम / OCR spelling',
+                      hintText: 'नाम 1, नाम 2')),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 initialValue: type,
@@ -142,6 +175,11 @@ class _AreaDirectoryPageState extends State<AreaDirectoryPage> {
     if (saved != true || name.text.trim().isEmpty) return;
     await api.post('/api/areas', {
       'name': name.text.trim(),
+      'aliases': aliases.text
+          .split(',')
+          .map((value) => value.trim())
+          .where((value) => value.isNotEmpty)
+          .toList(),
       'code': code.text.trim(),
       'district': district.text.trim(),
       'type': type,
@@ -162,9 +200,20 @@ class _AreaDirectoryPageState extends State<AreaDirectoryPage> {
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(
-          title: const Text('क्षेत्र एवं मतदाता डायरेक्टरी'),
+          title: const Text('गाँव एवं पंचायत मास्टर'),
           actions: [
             if (api.user?['role'] == 'admin') ...[
+              IconButton(
+                tooltip: 'लोकेशन मास्टर आयात',
+                onPressed: () async {
+                  await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const MasterDataImportPage()));
+                  if (context.mounted) setState(() {});
+                },
+                icon: const Icon(Icons.storage_rounded),
+              ),
               IconButton(
                 tooltip: 'सभी क्षेत्र हटाएँ',
                 onPressed: _deleteAllAreas,
@@ -180,23 +229,46 @@ class _AreaDirectoryPageState extends State<AreaDirectoryPage> {
           ],
         ),
         body: AppPage(children: [
-          const PageHeading(
-            title: 'विधानसभा',
-            subtitle:
-                'विधानसभा से तहसील, पंचायत, नगरपालिका, गाँव और वार्ड तक जाएँ',
+          TextField(
+            controller: search,
+            onChanged: (value) => setState(() => query = value.trim()),
+            decoration: InputDecoration(
+              hintText: 'गाँव, पंचायत, PIN या उपनाम खोजें',
+              prefixIcon: const Icon(Icons.search_rounded),
+              suffixIcon: query.isEmpty
+                  ? null
+                  : IconButton(
+                      tooltip: 'खोज साफ करें',
+                      onPressed: () {
+                        search.clear();
+                        setState(() => query = '');
+                      },
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+            ),
           ),
+          const SizedBox(height: 12),
           FutureBlock<List<dynamic>>(
             load: () => api.list('/api/areas/tree'),
             builder: (items) {
-              if (items.isEmpty) {
-                return _EmptyAreas(onAdd: () => _addArea());
+              if (items.isEmpty) return _EmptyAreas(onAdd: () => _addArea());
+              final visible = items
+                  .map((item) => Map<String, dynamic>.from(item))
+                  .where(_matches)
+                  .toList();
+              if (visible.isEmpty) {
+                return const Padding(
+                  padding: EdgeInsets.all(32),
+                  child: Center(child: Text('कोई गाँव या पंचायत नहीं मिली')),
+                );
               }
               return Column(
-                children: items
+                children: visible
                     .map((item) => _AreaNode(
-                          area: Map<String, dynamic>.from(item),
+                          area: item,
                           onAdd: _addArea,
                           onDelete: _deleteArea,
+                          searchQuery: query,
                         ))
                     .toList(),
               );
@@ -207,64 +279,219 @@ class _AreaDirectoryPageState extends State<AreaDirectoryPage> {
 }
 
 class _AreaNode extends StatelessWidget {
-  const _AreaNode(
-      {required this.area, required this.onAdd, required this.onDelete});
+  const _AreaNode({
+    required this.area,
+    required this.onAdd,
+    required this.onDelete,
+    this.searchQuery = '',
+  });
   final Map<String, dynamic> area;
   final Future<void> Function({Map<String, dynamic>? parent}) onAdd;
   final Future<void> Function(Map<String, dynamic> area) onDelete;
+  final String searchQuery;
 
   @override
   Widget build(BuildContext context) {
+    final compact = MediaQuery.sizeOf(context).width < 700;
     final children = List.from(area['children'] ?? []);
     final type = '${area['type']}';
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       clipBehavior: Clip.antiAlias,
       child: ExpansionTile(
+        initiallyExpanded: searchQuery.isNotEmpty,
         leading: CircleAvatar(
           backgroundColor: blue.withValues(alpha: .1),
           child: Icon(_icon(type), color: blue),
         ),
         title: Text('${area['name']}',
             style: const TextStyle(fontWeight: FontWeight.w900, color: navy)),
-        subtitle: Text('${_label(type)} • ${area['voterCount'] ?? 0} मतदाता'),
-        trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-          IconButton(
-            tooltip: 'मतदाता खोलें',
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => VoterManagementPage(
-                  initialAreaId: '${area['_id']}',
-                  initialAreaName: '${area['name']}',
+        subtitle: Text([
+          _label(type),
+          if ((area['population'] ?? 0) > 0) 'जनसंख्या ${area['population']}',
+          if ((area['wardCount'] ?? 0) > 0) '${area['wardCount']} वार्ड',
+          '${area['voterCount'] ?? 0} मतदाता',
+        ].join(' • ')),
+        trailing: compact
+            ? PopupMenuButton<String>(
+                tooltip: 'विकल्प',
+                icon: const Icon(Icons.more_vert_rounded),
+                onSelected: (value) {
+                  if (value == 'info') _showDetails(context);
+                  if (value == 'voters') {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => VoterManagementPage(
+                          initialAreaId: '${area['_id']}',
+                          initialAreaName: '${area['name']}',
+                        ),
+                      ),
+                    );
+                  }
+                  if (value == 'add') onAdd(parent: area);
+                  if (value == 'delete') onDelete(area);
+                },
+                itemBuilder: (_) => [
+                  const PopupMenuItem(
+                    value: 'info',
+                    child: ListTile(
+                      leading: Icon(Icons.info_outline_rounded),
+                      title: Text('पूरी जानकारी'),
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'voters',
+                    child: ListTile(
+                      leading: Icon(Icons.groups_outlined),
+                      title: Text('मतदाता खोलें'),
+                    ),
+                  ),
+                  if (api.user?['role'] == 'admin' &&
+                      !['village', 'ward'].contains(type))
+                    const PopupMenuItem(
+                      value: 'add',
+                      child: ListTile(
+                        leading: Icon(Icons.add_circle_outline),
+                        title: Text('अंदर क्षेत्र जोड़ें'),
+                      ),
+                    ),
+                  if (api.user?['role'] == 'admin')
+                    const PopupMenuItem(
+                      value: 'delete',
+                      child: ListTile(
+                        leading: Icon(Icons.delete_outline, color: Colors.red),
+                        title: Text('क्षेत्र हटाएँ'),
+                      ),
+                    ),
+                ],
+              )
+            : Row(mainAxisSize: MainAxisSize.min, children: [
+                IconButton(
+                  tooltip: 'पूरी जानकारी',
+                  onPressed: () => _showDetails(context),
+                  icon: const Icon(Icons.info_outline_rounded, color: blue),
                 ),
-              ),
-            ),
-            icon: const Icon(Icons.groups_outlined, color: green),
-          ),
-          if (api.user?['role'] == 'admin' &&
-              !['village', 'ward'].contains(type))
-            IconButton(
-              tooltip: 'इसके अंदर क्षेत्र जोड़ें',
-              onPressed: () => onAdd(parent: area),
-              icon: const Icon(Icons.add_circle_outline, color: blue),
-            ),
-          if (api.user?['role'] == 'admin')
-            IconButton(
-              tooltip: 'क्षेत्र हटाएँ',
-              onPressed: () => onDelete(area),
-              icon: const Icon(Icons.delete_outline, color: Colors.red),
-            ),
-          const Icon(Icons.expand_more),
-        ]),
-        childrenPadding: const EdgeInsets.fromLTRB(18, 0, 8, 10),
+                IconButton(
+                  tooltip: 'मतदाता खोलें',
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => VoterManagementPage(
+                        initialAreaId: '${area['_id']}',
+                        initialAreaName: '${area['name']}',
+                      ),
+                    ),
+                  ),
+                  icon: const Icon(Icons.groups_outlined, color: green),
+                ),
+                if (api.user?['role'] == 'admin' &&
+                    !['village', 'ward'].contains(type))
+                  IconButton(
+                    tooltip: 'इसके अंदर क्षेत्र जोड़ें',
+                    onPressed: () => onAdd(parent: area),
+                    icon: const Icon(Icons.add_circle_outline, color: blue),
+                  ),
+                if (api.user?['role'] == 'admin')
+                  IconButton(
+                    tooltip: 'क्षेत्र हटाएँ',
+                    onPressed: () => onDelete(area),
+                    icon: const Icon(Icons.delete_outline, color: Colors.red),
+                  ),
+                const Icon(Icons.expand_more),
+              ]),
+        childrenPadding: compact
+            ? EdgeInsets.zero
+            : const EdgeInsets.fromLTRB(18, 0, 8, 10),
         children: children
             .map((child) => _AreaNode(
                   area: Map<String, dynamic>.from(child),
                   onAdd: onAdd,
                   onDelete: onDelete,
+                  searchQuery: searchQuery,
                 ))
             .toList(),
+      ),
+    );
+  }
+
+  void _showDetails(BuildContext context) {
+    final aliases = List.from(area['aliases'] ?? const []);
+    final rows = <MapEntry<String, dynamic>>[
+      MapEntry('प्रकार', _label('${area['type']}')),
+      MapEntry('नाम', area['name']),
+      MapEntry('PIN कोड', area['pinCode']),
+      MapEntry('जिला', area['district']),
+      MapEntry('जनसंख्या', area['population']),
+      MapEntry('वार्ड', area['wardCount']),
+      MapEntry('मतदाता', area['voterCount']),
+      MapEntry(
+          'भाग संख्या', List.from(area['partNumbers'] ?? const []).join(', ')),
+      MapEntry('संबंधित बूथ', area['boothCount']),
+      MapEntry('उपनाम / OCR नाम', aliases.join(', ')),
+      MapEntry('मास्टर स्रोत', area['masterSource']),
+      MapEntry('अंतिम आयात', area['masterImportedAt']),
+    ].where((row) {
+      final value = '${row.value ?? ''}'.trim();
+      return value.isNotEmpty && value != '0';
+    }).toList();
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => FractionallySizedBox(
+        heightFactor: .8,
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 0, 18, 20),
+            child: Column(children: [
+              Text('${area['name']}',
+                  style: const TextStyle(
+                      color: navy, fontSize: 20, fontWeight: FontWeight.w900)),
+              const SizedBox(height: 10),
+              Expanded(
+                child: ListView(
+                  children: rows
+                      .map((row) => ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(row.key,
+                                style: const TextStyle(color: muted)),
+                            trailing: SizedBox(
+                              width: 190,
+                              child: Text('${row.value}',
+                                  textAlign: TextAlign.end,
+                                  style: const TextStyle(
+                                      color: navy,
+                                      fontWeight: FontWeight.w800)),
+                            ),
+                          ))
+                      .toList(),
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () {
+                    Navigator.pop(sheetContext);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => VoterManagementPage(
+                          initialAreaId: '${area['_id']}',
+                          initialAreaName: '${area['name']}',
+                        ),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.groups_outlined),
+                  label: const Text('इस क्षेत्र के मतदाता देखें'),
+                ),
+              ),
+            ]),
+          ),
+        ),
       ),
     );
   }

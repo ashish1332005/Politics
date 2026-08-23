@@ -20,11 +20,16 @@ import 'voter_contact_actions.dart';
 import 'voter_edit_page.dart';
 
 class VoterManagementPage extends StatefulWidget {
-  const VoterManagementPage(
-      {super.key, this.initialAreaId, this.initialAreaName});
+  const VoterManagementPage({
+    super.key,
+    this.initialAreaId,
+    this.initialAreaName,
+    this.initialProfileCompletionStatus,
+  });
 
   final String? initialAreaId;
   final String? initialAreaName;
+  final String? initialProfileCompletionStatus;
 
   @override
   State<VoterManagementPage> createState() => _VoterManagementPageState();
@@ -36,6 +41,8 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
   final boothNumber = TextEditingController();
   final location = TextEditingController();
   final village = TextEditingController();
+  final pinCode = TextEditingController();
+  final voterSerial = TextEditingController();
   final gramPanchayat = TextEditingController();
   final tehsil = TextEditingController();
   final municipality = TextEditingController();
@@ -52,9 +59,13 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
   final recentFilters = <_RecentFilter>[];
   bool listening = false;
   bool showAdvancedFilters = false;
+  bool favoriteOnly = false;
+  bool searchOptionsVisible = false;
   String gender = '';
   String verificationStatus = '';
+  String profileCompletionStatus = '';
   String support = '';
+  String partyPreferenceFilter = '';
   String contactTypeFilter = '';
   String queryMode = '';
   String nameLetter = '';
@@ -88,6 +99,12 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
   @override
   void initState() {
     super.initState();
+    searchFocus.addListener(() {
+      if (mounted && searchOptionsVisible != searchFocus.hasFocus) {
+        setState(() => searchOptionsVisible = searchFocus.hasFocus);
+      }
+    });
+    profileCompletionStatus = widget.initialProfileCompletionStatus ?? '';
     dashboardFuture = api.get('/api/reports/dashboard');
     refreshVoters();
   }
@@ -100,6 +117,8 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
     boothNumber.dispose();
     location.dispose();
     village.dispose();
+    pinCode.dispose();
+    voterSerial.dispose();
     gramPanchayat.dispose();
     tehsil.dispose();
     municipality.dispose();
@@ -122,16 +141,20 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
       'assemblyNumber': assemblyNumber.text.trim(),
       'location': location.text.trim(),
       'village': village.text.trim(),
+      'pinCode': pinCode.text.trim(),
+      'voterSerial': voterSerial.text.trim(),
       'gramPanchayat': gramPanchayat.text.trim(),
       'tehsil': tehsil.text.trim(),
       'municipality': municipality.text.trim(),
       'caste': caste.text.trim(),
       'occupation': occupation.text.trim(),
       'organizationPost': organizationPost.text.trim(),
-      'contactType': contactTypeFilter,
-      'supportLevel': support,
+      'contactType': api.user?['role'] == 'booth' ? 'voter' : contactTypeFilter,
+      'partyPreference': partyPreferenceFilter,
       'gender': gender,
       'verificationStatus': verificationStatus,
+      'profileCompletionStatus': profileCompletionStatus,
+      'favorite': favoriteOnly ? 'true' : '',
       'area': widget.initialAreaId,
       'letter': nameLetter,
       if (queryMode.isNotEmpty) 'qMode': queryMode,
@@ -192,6 +215,8 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
       assemblyNumber,
       location,
       village,
+      pinCode,
+      voterSerial,
       gramPanchayat,
       tehsil,
       municipality,
@@ -203,8 +228,11 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
     }
     setState(() {
       support = '';
+      partyPreferenceFilter = '';
       gender = '';
       verificationStatus = '';
+      profileCompletionStatus = '';
+      favoriteOnly = false;
       contactTypeFilter = '';
       queryMode = '';
       nameLetter = '';
@@ -300,6 +328,7 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
         boothNumber.clear();
         sectionNumber.clear();
         sectionName.clear();
+        voterSerial.clear();
         currentPage = 1;
         selectedIds.clear();
         refreshVoters();
@@ -315,6 +344,13 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
     }
 
     add('Search', search.text, () => _clearFilterText(search));
+    if (favoriteOnly) {
+      add('सूची', 'Favorites', () => setState(() {
+            favoriteOnly = false;
+            currentPage = 1;
+            refreshVoters();
+          }));
+    }
     add(
         'Type',
         _contactTypeFilterLabel(contactTypeFilter),
@@ -334,10 +370,10 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
               refreshVoters();
             }));
     add(
-        'समर्थन',
-        _supportLabel(support),
+        'पार्टी',
+        _partyPreferenceLabel(partyPreferenceFilter),
         () => setState(() {
-              support = '';
+              partyPreferenceFilter = '';
               currentPage = 1;
               selectedIds.clear();
               refreshVoters();
@@ -351,11 +387,23 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
               selectedIds.clear();
               refreshVoters();
             }));
-    add(
+        add(
+        'सर्वे',
+        profileCompletionStatus == 'complete' ? 'पूर्ण' :
+            (profileCompletionStatus == 'pending' ? 'बाकी' : ''),
+        () => setState(() {
+              profileCompletionStatus = '';
+      favoriteOnly = false;
+              currentPage = 1;
+              selectedIds.clear();
+              refreshVoters();
+            }));add(
         'सत्यापन',
         _verificationLabel(verificationStatus),
         () => setState(() {
               verificationStatus = '';
+      profileCompletionStatus = '';
+      favoriteOnly = false;
               currentPage = 1;
               selectedIds.clear();
               refreshVoters();
@@ -370,6 +418,8 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
     add('नगर पालिका', _filterValue('municipality', municipality),
         () => _clearSmartOrText('municipality', municipality));
     add('स्थान', location.text, () => _clearFilterText(location));
+    add('PIN', pinCode.text, () => _clearFilterText(pinCode));
+    add('क्रम संख्या', voterSerial.text, () => _clearFilterText(voterSerial));
     add('जाति', _filterValue('caste', caste),
         () => _clearSmartOrText('caste', caste));
     add('पद', _filterValue('organizationPost', organizationPost),
@@ -392,11 +442,12 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
         refreshVoters();
       });
 
-  String _supportLabel(String value) => switch (value) {
-        'supporter' => 'समर्थक',
-        'neutral' => 'तटस्थ',
-        'opposite' => 'विरोधी',
-        'undecided' => 'अनिर्णीत',
+  String _partyPreferenceLabel(String value) => switch (value) {
+        'congress' => 'Congress',
+        'bjp' => 'BJP',
+        'nota' => 'NOTA',
+        'other' => 'अन्य पार्टी',
+        'undecided' => 'पार्टी तय नहीं',
         _ => '',
       };
 
@@ -419,10 +470,14 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
     final text = label.toLowerCase();
     if (text.contains('पिता') ||
         text.contains('पति') ||
-        text.contains('father')) return 'guardian';
+        text.contains('father')) {
+      return 'guardian';
+    }
     if (text.contains('epic')) return 'epic';
     if (text.contains('घर') || text.contains('house')) return 'house';
     if (text.contains('मोबाइल') || text.contains('mobile')) return 'mobile';
+    if (text.contains('pin')) return 'pin';
+    if (text.contains('गाँव') || text.contains('village')) return 'village';
     return 'name';
   }
 
@@ -443,6 +498,8 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
         'epic' => 'EPIC',
         'house' => 'घर',
         'mobile' => 'मोबाइल',
+        'pin' => 'PIN',
+        'village' => 'गाँव',
         _ => '',
       };
 
@@ -464,6 +521,7 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
     'assembly': ['assemblyNumber', 'assemblyName'],
     'partVillage': ['village', 'partNumber'],
     'village': ['village'],
+    'pinCode': ['pinCode'],
     'gramPanchayat': ['gramPanchayat'],
     'tehsil': ['tehsil'],
     'municipality': ['municipality'],
@@ -550,6 +608,7 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
         boothNumber.clear();
         sectionNumber.clear();
         sectionName.clear();
+        voterSerial.clear();
         currentPage = 1;
         selectedIds.clear();
         refreshVoters();
@@ -560,6 +619,7 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
         selectedOptionLabels.remove('section');
         sectionNumber.clear();
         sectionName.clear();
+        voterSerial.clear();
         currentPage = 1;
         selectedIds.clear();
         refreshVoters();
@@ -680,6 +740,17 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
 
     if (locallyRemoved.isNotEmpty) {
       await OfflineVoterCache.removeByIds(locallyRemoved);
+    } else if (deletedCount == 0) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'कोई मतदाता delete नहीं हुआ। Admin login या delete permission जांचें।',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
     }
 
     api.notifyDataChanged();
@@ -750,6 +821,7 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
     var nextSupport = support;
     var nextGender = gender;
     var nextVerification = verificationStatus;
+    var nextProfileCompletion = profileCompletionStatus;
     final nextVillage = TextEditingController(text: village.text);
     final nextBooth = TextEditingController(text: boothNumber.text);
     final nextPartVillage = TextEditingController(text: partVillageValue);
@@ -760,11 +832,14 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
     );
     final nextPosition = TextEditingController(text: organizationPost.text);
     final nextOccupation = TextEditingController(text: occupation.text);
+    final nextPinCode = TextEditingController(text: pinCode.text);
+    final nextVoterSerial = TextEditingController(text: voterSerial.text);
 
     void applyPhoneFilters() => setState(() {
           support = nextSupport;
           gender = nextGender;
           verificationStatus = nextVerification;
+          profileCompletionStatus = nextProfileCompletion;
           for (final field in [
             'partVillage',
             'village',
@@ -780,6 +855,11 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
           sectionName.text = nextSectionName.text.trim();
           organizationPost.text = nextPosition.text.trim();
           occupation.text = nextOccupation.text.trim();
+          pinCode.text = nextPinCode.text.trim();
+          voterSerial.text = nextVillage.text.trim().isEmpty &&
+                  nextBooth.text.trim().isEmpty
+              ? ''
+              : nextVoterSerial.text.trim();
           currentPage = 1;
           selectedIds.clear();
           refreshVoters();
@@ -885,8 +965,32 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
                     nextSection.clear();
                     nextSectionNumber.clear();
                     nextSectionName.clear();
+                    nextVoterSerial.clear();
                   });
                 },
+              ),
+              const SizedBox(height: 12),
+TextField(
+                controller: nextVoterSerial,
+                enabled: nextVillage.text.trim().isNotEmpty ||
+                    nextBooth.text.trim().isNotEmpty,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'मतदाता क्रम संख्या',
+                  hintText: 'पहले भाग / गाँव चुनें',
+                  prefixIcon: Icon(Icons.format_list_numbered_rounded),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: nextPinCode,
+                keyboardType: TextInputType.number,
+                maxLength: 6,
+                decoration: const InputDecoration(
+                  labelText: 'PIN नंबर',
+                  prefixIcon: Icon(Icons.pin_drop_outlined),
+                  counterText: '',
+                ),
               ),
               const SizedBox(height: 12),
               TextField(
@@ -1004,7 +1108,20 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
                 onChanged: (value) =>
                     setSheetState(() => nextVerification = value ?? ''),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: nextProfileCompletion,
+                decoration: const InputDecoration(
+                    labelText: 'सर्वे जानकारी',
+                    prefixIcon: Icon(Icons.fact_check_outlined)),
+                items: const [
+                  DropdownMenuItem(value: '', child: Text('सभी')),
+                  DropdownMenuItem(value: 'pending', child: Text('जानकारी बाकी')),
+                  DropdownMenuItem(value: 'complete', child: Text('जानकारी पूर्ण')),
+                ],
+                onChanged: (value) => setSheetState(
+                    () => nextProfileCompletion = value ?? ''),
+              ),              const SizedBox(height: 20),
               SizedBox(
                 width: double.infinity,
                 height: 52,
@@ -1030,6 +1147,8 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
     nextSection.dispose();
     nextPosition.dispose();
     nextOccupation.dispose();
+    nextPinCode.dispose();
+    nextVoterSerial.dispose();
   }
 
   Widget buildPhoneBookMobile(BuildContext context) => RefreshIndicator(
@@ -1038,7 +1157,7 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
           await votersFuture;
         },
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 110),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
           children: [
             _EasyVoterSearchCard(
               controller: search,
@@ -1046,6 +1165,7 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
               listening: listening,
               selectedMode: queryMode,
               selectedModeLabel: queryModeLabel,
+              showOptions: searchOptionsVisible,
               onChanged: searchChanged,
               onSubmitted: (_) => filtersChanged(),
               onClear: () {
@@ -1056,50 +1176,97 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
               onQuickPick: useQuickSearch,
             ),
             const SizedBox(height: 16),
-            _PhoneCategoryStrip(
-              selected: support,
+if (api.user?['role'] == 'booth')
+              _BoothWorkStrip(
+                incompleteSelected: profileCompletionStatus == 'pending',
+                reviewSelected: verificationStatus == 'needs_review',
+                onAll: () => setState(() {
+                  support = '';
+                  verificationStatus = '';
+                  profileCompletionStatus = '';
+      favoriteOnly = false;
+                  currentPage = 1;
+                  refreshVoters();
+                }),
+                onIncomplete: () => setState(() {
+                  support = '';
+                  verificationStatus = '';
+                  profileCompletionStatus = 'pending';
+                  currentPage = 1;
+                  refreshVoters();
+                }),
+                onReview: () => setState(() {
+                  support = '';
+                  profileCompletionStatus = '';
+      favoriteOnly = false;
+                  verificationStatus = 'needs_review';
+                  currentPage = 1;
+                  refreshVoters();
+                }),
+              )
+            else            _PhoneCombinedFilterStrip(
+              contactType: contactTypeFilter,
+              showPersonal: api.user?['role'] != 'booth',
+              partyPreference: partyPreferenceFilter,
               reviewSelected: verificationStatus == 'needs_review',
-              onChanged: (value) => setState(() {
-                support = value;
+              onAll: () => setState(() {
+                contactTypeFilter = '';
+                support = '';
+                partyPreferenceFilter = '';
                 verificationStatus = '';
+      profileCompletionStatus = '';
+      favoriteOnly = false;
+                currentPage = 1;
+                refreshVoters();
+              }),
+              onAllDoubleTap: () => _setContactTypeFilter('personal'),
+              onParty: (value) => setState(() {
+                partyPreferenceFilter = value;
+                verificationStatus = '';
+      profileCompletionStatus = '';
+      favoriteOnly = false;
                 currentPage = 1;
                 refreshVoters();
               }),
               onReview: () => setState(() {
                 support = '';
+                partyPreferenceFilter = '';
                 verificationStatus = 'needs_review';
                 currentPage = 1;
                 refreshVoters();
               }),
             ),
             const SizedBox(height: 14),
-            _ContactTypeFilterChips(
-              selected: contactTypeFilter,
-              onChanged: _setContactTypeFilter,
-            ),
-            const SizedBox(height: 18),
             Row(children: [
-              const Expanded(
-                  child: Text('सभी संपर्क',
-                      style: TextStyle(
-                          color: navy,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900))),
-              if (api.user?['role'] == 'admin') ...[
-                IconButton.outlined(
-                  tooltip: 'Location Bulk Fix',
-                  onPressed: openLocationCorrection,
-                  icon: const Icon(Icons.edit_location_alt_rounded, size: 20),
+              Expanded(
+                child: Text(
+                  api.user?['role'] == 'booth' ? 'मतदाता' : 'संपर्क',
+                  style: const TextStyle(
+                    color: navy,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
-                const SizedBox(width: 7),
-              ],
-              IconButton.outlined(
+              ),
+              if (api.user?['role'] == 'admin')
+                IconButton(
+                  tooltip: favoriteOnly ? 'सभी संपर्क' : 'Favorites',
+                  onPressed: () => setState(() {
+                    favoriteOnly = !favoriteOnly;
+                    currentPage = 1;
+                    refreshVoters();
+                  }),
+                  icon: Icon(
+                    favoriteOnly ? Icons.star_rounded : Icons.star_border_rounded,
+                    color: favoriteOnly ? orange : muted,
+                  ),
+                ),
+              IconButton(
                 tooltip: 'फ़िल्टर',
                 onPressed: openPhoneFilters,
-                icon: const Icon(Icons.tune_rounded, size: 20),
+                icon: const Icon(Icons.tune_rounded, color: navy),
               ),
-              const SizedBox(width: 7),
-              IconButton.outlined(
+              IconButton(
                 tooltip: 'नाम क्रम',
                 onPressed: () => showModalBottomSheet<void>(
                   context: context,
@@ -1121,7 +1288,7 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
                     ),
                   ),
                 ),
-                icon: const Icon(Icons.sort_by_alpha_rounded, size: 20),
+                icon: const Icon(Icons.sort_by_alpha_rounded, color: navy),
               ),
             ]),
             _ActiveFilterChips(
@@ -1130,12 +1297,12 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
               compact: true,
             ),
             if (api.user?['role'] == 'booth')
-              _SearchFilter(
-                controller: sectionName,
-                label: 'अनुभाग चुनें',
+              _DatabaseFilterPicker(
+                label: 'अपने गाँव का अनुभाग',
                 icon: Icons.segment_rounded,
-                onChanged: (_) => filtersChanged(),
-                onPick: () => openSmartFilter('section', 'अनुभाग'),
+                value: _filterValue('section', sectionName),
+                onTap: () => openSmartFilter('section', 'अपने गाँव का अनुभाग'),
+                onClear: _clearSectionFilter,
               ),
             _RecentFilterStrip(
               items: recentFilters,
@@ -1162,12 +1329,6 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
                 if (result.items.isEmpty) {
                   return Column(
                     children: [
-                      _FilterResultSummary(
-                        total: result.total,
-                        shown: result.items.length,
-                        activeFilters: activeFilterChips.length,
-                      ),
-                      const SizedBox(height: 10),
                       _PhoneMessage(
                         icon: Icons.person_search_rounded,
                         title: 'कोई मतदाता नहीं मिला',
@@ -1180,12 +1341,6 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
                 }
                 return Column(
                   children: [
-                    _FilterResultSummary(
-                      total: result.total,
-                      shown: result.items.length,
-                      activeFilters: activeFilterChips.length,
-                    ),
-                    const SizedBox(height: 10),
                     _PhoneContactList(
                       result: result,
                       selectedIds: selectedIds,
@@ -1232,22 +1387,36 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
         action: Builder(builder: (context) {
           final compact = MediaQuery.sizeOf(context).width < 520;
           return Wrap(spacing: 8, runSpacing: 8, children: [
-            OutlinedButton.icon(
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                    builder: (_) => const ConfigurablePrintPage()),
+            if (api.user?['role'] == 'admin')
+              OutlinedButton.icon(
+                onPressed: () => setState(() {
+                  favoriteOnly = !favoriteOnly;
+                  currentPage = 1;
+                  refreshVoters();
+                }),
+                icon: Icon(favoriteOnly
+                    ? Icons.star_rounded
+                    : Icons.star_border_rounded),
+                label: Text(favoriteOnly ? 'सभी मतदाता' : 'Favorites'),
               ),
-              icon: const Icon(Icons.print_rounded),
-              label: Text(compact ? 'Bulk Print' : 'Smart Bulk Print'),
-            ),
+            if (api.user?['role'] != 'booth')
+              OutlinedButton.icon(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const ConfigurablePrintPage()),
+                ),
+                icon: const Icon(Icons.print_rounded),
+                label: Text(compact ? 'Bulk Print' : 'Smart Bulk Print'),
+              ),
             if (api.user?['role'] == 'admin')
               OutlinedButton.icon(
                 onPressed: openLocationCorrection,
                 icon: const Icon(Icons.edit_location_alt_rounded),
                 label: Text(compact ? 'Location Fix' : 'Location Bulk Fix'),
               ),
-            FilledButton.icon(
+                        if (api.user?['role'] != 'booth')
+  FilledButton.icon(
               onPressed: () => showDialog(
                   context: context,
                   builder: (_) =>
@@ -1315,13 +1484,17 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
               style: TextStyle(color: Colors.red, fontWeight: FontWeight.w700)),
         ),
       const SizedBox(height: 8),
-      _SearchHelpStrip(selectedMode: queryMode, onPick: useQuickSearch),
-      _ContactTypeFilterChips(
-        selected: contactTypeFilter,
-        onChanged: _setContactTypeFilter,
-      ),
-      const SizedBox(height: 8),
-      _SmartSearchPanel(
+      if (searchOptionsVisible)
+        _SearchHelpStrip(selectedMode: queryMode, onPick: useQuickSearch),
+      if (api.user?['role'] != 'booth') ...[
+        _ContactTypeFilterChips(
+          selected: contactTypeFilter,
+          onChanged: _setContactTypeFilter,
+        ),
+        const SizedBox(height: 8),
+      ],
+      if (api.user?['role'] != 'booth')
+  _SmartSearchPanel(
         selectedLabels: selectedOptionLabels,
         onPick: openSmartFilter,
         onClear: clearSmartFilter,
@@ -1344,12 +1517,12 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
         onClearAll: clearFilters,
       ),
       if (api.user?['role'] == 'booth')
-        _SearchFilter(
-          controller: sectionName,
-          label: 'अनुभाग चुनें',
+        _DatabaseFilterPicker(
+          label: 'अपने गाँव का अनुभाग',
           icon: Icons.segment_rounded,
-          onChanged: (_) => filtersChanged(),
-          onPick: () => openSmartFilter('section', 'अनुभाग'),
+          value: _filterValue('section', sectionName),
+          onTap: () => openSmartFilter('section', 'अपने गाँव का अनुभाग'),
+          onClear: _clearSectionFilter,
         ),
       _RecentFilterStrip(
         items: recentFilters,
@@ -1418,6 +1591,17 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
                   icon: Icons.location_on_outlined,
                   onChanged: (_) => filtersChanged()),
               _SearchFilter(
+                  controller: pinCode,
+                  label: 'PIN कोड',
+                  icon: Icons.pin_drop_outlined,
+                  onChanged: (_) => filtersChanged(),
+                  onPick: () => openSmartFilter('pinCode', 'PIN कोड')),              _SearchFilter(
+                  controller: voterSerial,
+                  label: 'मतदाता क्रम संख्या',
+                  icon: Icons.format_list_numbered_rounded,
+                  enabled: partVillageValue.trim().isNotEmpty,
+                  onChanged: (_) => filtersChanged()),
+              _SearchFilter(
                   controller: caste,
                   label: 'जाति',
                   icon: Icons.groups_2_outlined,
@@ -1436,18 +1620,31 @@ class _VoterManagementPageState extends State<VoterManagementPage> {
                   icon: Icons.work_outline,
                   onChanged: (_) => filtersChanged(),
                   onPick: () => openSmartFilter('occupation', 'Vyavsay')),
-              _FilterDropdown(
-                label: 'समर्थन स्तर',
-                value: support,
+                            _FilterDropdown(
+                label: 'सर्वे स्थिति',
+                value: profileCompletionStatus,
                 items: const {
                   '': 'सभी',
-                  'supporter': 'समर्थक',
-                  'neutral': 'तटस्थ',
-                  'opposite': 'विरोधी',
-                  'undecided': 'अनिर्णीत',
+                  'pending': 'जानकारी बाकी',
+                  'complete': 'जानकारी पूर्ण',
                 },
                 onChanged: (value) => setState(() {
-                  support = value;
+                  profileCompletionStatus = value;
+                  refreshVoters();
+                }),
+              ),              _FilterDropdown(
+                label: 'पार्टी',
+                value: partyPreferenceFilter,
+                items: const {
+                  '': 'सभी',
+                  'congress': '✋ Congress',
+                  'bjp': '🪷 BJP',
+                  'nota': 'NOTA',
+                  'other': '◆ अन्य पार्टी',
+                  'undecided': 'पार्टी तय नहीं',
+                },
+                onChanged: (value) => setState(() {
+                  partyPreferenceFilter = value;
                   currentPage = 1;
                   refreshVoters();
                 }),
@@ -1717,8 +1914,6 @@ class _ContactTypeFilterChips extends StatelessWidget {
       child: Row(children: [
         chip(value: '', label: 'All', icon: Icons.people_alt_rounded),
         const SizedBox(width: 8),
-        chip(value: 'voter', label: 'Matdata', icon: Icons.badge_rounded),
-        const SizedBox(width: 8),
         chip(
           value: 'personal',
           label: 'Personal',
@@ -1798,8 +1993,7 @@ class _LocationFilterCard extends StatelessWidget {
     required this.onPickPartVillage,
     required this.onPickSection,
     required this.onClear,
-    this.compact = false,
-  });
+  }) : compact = false;
 
   final String assembly;
   final String partVillage;
@@ -2142,6 +2336,8 @@ IconData _searchModeIcon(String mode) => switch (mode) {
       'epic' => Icons.badge_outlined,
       'house' => Icons.home_rounded,
       'mobile' => Icons.phone_rounded,
+      'pin' => Icons.pin_drop_outlined,
+      'village' => Icons.holiday_village_outlined,
       _ => Icons.search_rounded,
     };
 
@@ -2152,6 +2348,7 @@ class _EasyVoterSearchCard extends StatelessWidget {
     required this.listening,
     required this.selectedMode,
     required this.selectedModeLabel,
+    required this.showOptions,
     required this.onChanged,
     required this.onSubmitted,
     required this.onClear,
@@ -2164,6 +2361,7 @@ class _EasyVoterSearchCard extends StatelessWidget {
   final bool listening;
   final String selectedMode;
   final String selectedModeLabel;
+  final bool showOptions;
   final ValueChanged<String> onChanged;
   final ValueChanged<String> onSubmitted;
   final VoidCallback onClear;
@@ -2172,19 +2370,7 @@ class _EasyVoterSearchCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(22),
-          border: Border.all(color: border),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x0f071b4b),
-              blurRadius: 18,
-              offset: Offset(0, 8),
-            ),
-          ],
-        ),
+        color: Colors.transparent,
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           _EasyVoterSearchField(
             controller: controller,
@@ -2206,12 +2392,14 @@ class _EasyVoterSearchCard extends StatelessWidget {
                     fontSize: 12,
                     fontWeight: FontWeight.w800)),
           ],
-          const SizedBox(height: 11),
-          _SearchHelpStrip(
-            compact: true,
-            selectedMode: selectedMode,
-            onPick: onQuickPick,
-          ),
+          if (showOptions) ...[
+            const SizedBox(height: 11),
+            _SearchHelpStrip(
+              compact: true,
+              selectedMode: selectedMode,
+              onPick: onQuickPick,
+            ),
+          ],
         ]),
       );
 }
@@ -2319,6 +2507,10 @@ class _SearchHelpStrip extends StatelessWidget {
             selected: selectedMode == 'house', onTap: onPick),
         _SearchHintChip(Icons.phone_rounded, 'मोबाइल',
             selected: selectedMode == 'mobile', onTap: onPick),
+        _SearchHintChip(Icons.holiday_village_outlined, 'गाँव',
+            selected: selectedMode == 'village', onTap: onPick),
+        _SearchHintChip(Icons.pin_drop_outlined, 'PIN',
+            selected: selectedMode == 'pin', onTap: onPick),
       ];
 
   @override
@@ -2383,6 +2575,185 @@ class _SearchHintChip extends StatelessWidget {
           ]),
         ),
       );
+}
+
+class _BoothWorkStrip extends StatelessWidget {
+  const _BoothWorkStrip({
+    required this.incompleteSelected,
+    required this.reviewSelected,
+    required this.onAll,
+    required this.onIncomplete,
+    required this.onReview,
+  });
+
+  final bool incompleteSelected;
+  final bool reviewSelected;
+  final VoidCallback onAll;
+  final VoidCallback onIncomplete;
+  final VoidCallback onReview;
+
+  @override
+  Widget build(BuildContext context) => Row(children: [
+        Expanded(
+          child: _BoothTaskButton(
+            label: 'सभी',
+            icon: Icons.people_alt_outlined,
+            selected: !incompleteSelected && !reviewSelected,
+            onTap: onAll,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _BoothTaskButton(
+            label: 'जानकारी बाकी',
+            icon: Icons.assignment_late_outlined,
+            selected: incompleteSelected,
+            onTap: onIncomplete,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _BoothTaskButton(
+            label: 'Review',
+            icon: Icons.fact_check_outlined,
+            selected: reviewSelected,
+            onTap: onReview,
+          ),
+        ),
+      ]);
+}
+
+class _BoothTaskButton extends StatelessWidget {
+  const _BoothTaskButton({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          height: 58,
+          padding: const EdgeInsets.symmetric(horizontal: 6),
+          decoration: BoxDecoration(
+            color: selected ? blue : Colors.white,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: selected ? blue : border),
+          ),
+          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Icon(icon, size: 19, color: selected ? Colors.white : blue),
+            const SizedBox(height: 4),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(label,
+                  maxLines: 1,
+                  style: TextStyle(
+                      color: selected ? Colors.white : navy,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w900)),
+            ),
+          ]),
+        ),
+      );
+}
+class _PhoneCombinedFilterStrip extends StatelessWidget {
+  const _PhoneCombinedFilterStrip({
+    required this.contactType,
+    required this.showPersonal,
+    required this.partyPreference,
+    required this.reviewSelected,
+    required this.onAll,
+    required this.onAllDoubleTap,
+    required this.onParty,
+    required this.onReview,
+  });
+
+  final String contactType;
+  final bool showPersonal;
+  final String partyPreference;
+  final bool reviewSelected;
+  final VoidCallback onAll;
+  final VoidCallback onAllDoubleTap;
+  final ValueChanged<String> onParty;
+  final VoidCallback onReview;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget chip({
+      required String label,
+      required Widget avatar,
+      required Color color,
+      required bool selected,
+      required VoidCallback onTap,
+      VoidCallback? onDoubleTap,
+    }) =>
+        Padding(
+          padding: const EdgeInsets.only(right: 8),
+          child: GestureDetector(
+            onDoubleTap: onDoubleTap,
+            child: ChoiceChip(
+              selected: selected,
+              onSelected: (_) => onTap(),
+              avatar: avatar,
+              label: Text(label),
+              labelStyle: TextStyle(
+                color: selected ? Colors.white : navy,
+                fontWeight: FontWeight.w800,
+              ),
+              selectedColor: color,
+              backgroundColor: Colors.white,
+              side: BorderSide(color: selected ? color : border),
+              showCheckmark: false,
+            ),
+          ),
+        );
+
+    Widget partyChip(String value, String label, Color color) => chip(
+          label: label,
+          avatar: PartyPreferenceChip(value: value, size: 24),
+          color: color,
+          selected: partyPreference == value,
+          onTap: () => onParty(value),
+        );
+
+    final allSelected = contactType.isEmpty &&
+        partyPreference.isEmpty &&
+        !reviewSelected;
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(children: [
+        chip(
+          label: 'All',
+          avatar: Icon(Icons.people_alt_rounded,
+              size: 17, color: allSelected ? Colors.white : blue),
+          color: blue,
+          selected: allSelected,
+          onTap: onAll,
+          onDoubleTap: showPersonal ? onAllDoubleTap : null,
+        ),
+        partyChip('congress', 'Congress', green),
+        partyChip('bjp', 'BJP', orange),
+        partyChip('nota', 'NOTA', muted),
+        partyChip('other', 'Any Party', purple),
+        chip(
+          label: 'Review',
+          avatar: Icon(Icons.fact_check_rounded,
+              size: 17, color: reviewSelected ? Colors.white : purple),
+          color: purple,
+          selected: reviewSelected,
+          onTap: onReview,
+        ),
+      ]),
+    );
+  }
 }
 
 class _PhoneCategoryStrip extends StatelessWidget {
@@ -2521,6 +2892,10 @@ class _PhoneContactList extends StatelessWidget {
     final contacts = result.items
         .map((item) => Map<String, dynamic>.from(item as Map))
         .toList();
+    String initialOf(Map<String, dynamic> voter) {
+      final name = '${voter['name'] ?? ''}'.trim();
+      return name.isEmpty ? '#' : name.characters.first;
+    }
     final pageIds = contacts.map((voter) => '${voter['_id']}').toList();
     final allSelected =
         pageIds.isNotEmpty && pageIds.every(selectedIds.contains);
@@ -2564,14 +2939,29 @@ class _PhoneContactList extends StatelessWidget {
             ),
           ]),
         ),
-      ...contacts.map((voter) => _PhoneContactTile(
-            voter: voter,
-            selected: selectedIds.contains('${voter['_id']}'),
-            selectionMode: selectedIds.isNotEmpty,
-            onSelected: (selected) =>
-                onSelectionChanged('${voter['_id']}', selected),
-            onChanged: onChanged,
-          )),
+      for (var index = 0; index < contacts.length; index++) ...[
+        if (index == 0 ||
+            initialOf(contacts[index]) != initialOf(contacts[index - 1]))
+          Padding(
+            padding: EdgeInsets.only(top: index == 0 ? 8 : 18, bottom: 6),
+            child: Text(
+              initialOf(contacts[index]),
+              style: const TextStyle(
+                color: muted,
+                fontSize: 13,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+        _PhoneContactTile(
+          voter: contacts[index],
+          selected: selectedIds.contains('${contacts[index]['_id']}'),
+          selectionMode: selectedIds.isNotEmpty,
+          onSelected: (selected) =>
+              onSelectionChanged('${contacts[index]['_id']}', selected),
+          onChanged: onChanged,
+        ),
+      ],
       if (result.pages > 1)
         Padding(
           padding: const EdgeInsets.only(top: 12),
@@ -2679,12 +3069,38 @@ class _PhoneContactTile extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(color: muted, fontSize: 11)),
                     ],
-                    const SizedBox(height: 6),
-                    SupportChip(
-                        value: '${voter['supportLevel'] ?? 'undecided'}'),
+                    if (!['', 'undecided'].contains(
+                        '${voter['partyPreference'] ?? 'undecided'}')) ...[
+                      const SizedBox(height: 6),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: PartyPreferenceChip(
+                          value: '${voter['partyPreference'] ?? 'undecided'}',
+                        ),
+                      ),
+                    ],
                   ]),
             ),
-            IconButton(
+                        if (api.user?['role'] == 'admin')
+              IconButton(
+                tooltip: voter['isFavorite'] == true
+                    ? 'Favorites से हटाएं'
+                    : 'Favorites में जोड़ें',
+                onPressed: () async {
+                  final updated = await api.put('/api/members/${voter['_id']}', {
+                    'isFavorite': voter['isFavorite'] != true,
+                  });
+                  voter['isFavorite'] = updated['isFavorite'] == true;
+                  await OfflineVoterCache.merge([updated]);
+                  onChanged();
+                },
+                icon: Icon(
+                  voter['isFavorite'] == true
+                      ? Icons.star_rounded
+                      : Icons.star_border_rounded,
+                  color: voter['isFavorite'] == true ? orange : muted,
+                ),
+              ),IconButton(
               tooltip: 'कॉल करें',
               onPressed:
                   mobile.isEmpty ? null : () => callNumber(context, mobile),
@@ -2960,6 +3376,59 @@ class _DatabaseFilterPicker extends StatelessWidget {
   }
 }
 
+String _sectionMergeKey(String value) => value
+    .toLowerCase()
+    .replaceAll(RegExp(r'[ऀ-ःऺ-्॑-ॗॢॣ]'), '')
+    .replaceAll(RegExp(r'[^a-z0-9ऀ-ॿ]'), '');
+
+int _sectionNameDistance(String left, String right) {
+  final a = left.runes.toList();
+  final b = right.runes.toList();
+  var previous = List<int>.generate(b.length + 1, (index) => index);
+  for (var row = 1; row <= a.length; row++) {
+    final current = <int>[row];
+    for (var column = 1; column <= b.length; column++) {
+      current.add([
+        current[column - 1] + 1,
+        previous[column] + 1,
+        previous[column - 1] + (a[row - 1] == b[column - 1] ? 0 : 1),
+      ].reduce((left, right) => left < right ? left : right));
+    }
+    previous = current;
+  }
+  return previous[b.length];
+}
+
+bool _matchingSectionNames(String leftValue, String rightValue) {
+  final left = _sectionMergeKey(leftValue);
+  final right = _sectionMergeKey(rightValue);
+  if (left.length < 3 || right.length < 3) return false;
+  final numberPattern = RegExp(r'd+');
+  final leftNumbers = numberPattern
+      .allMatches(leftValue)
+      .map((match) => match.group(0))
+      .toList();
+  final rightNumbers = numberPattern
+      .allMatches(rightValue)
+      .map((match) => match.group(0))
+      .toList();
+  if (leftNumbers.isNotEmpty &&
+      rightNumbers.isNotEmpty &&
+      leftNumbers.join('|') != rightNumbers.join('|')) {
+    return false;
+  }
+  if (left == right) return true;
+  final longest = left.length > right.length ? left.length : right.length;
+  final shortest = left.length < right.length ? left.length : right.length;
+  if ((left.contains(right) || right.contains(left)) &&
+      shortest / longest >= .72) {
+    return true;
+  }
+  final allowedDistance = (longest * .18).floor();
+  return _sectionNameDistance(left, right) <
+      (allowedDistance < 1 ? 2 : allowedDistance + 1);
+}
+
 class _FilterOption {
   const _FilterOption({
     required this.label,
@@ -2999,11 +3468,136 @@ class _FilterOptionDialog extends StatefulWidget {
 
 class _FilterOptionDialogState extends State<_FilterOptionDialog> {
   final search = TextEditingController();
+  final selectedForMerge = <String>{};
+  bool mergeMode = false;
+  bool merging = false;
 
   @override
   void dispose() {
     search.dispose();
     super.dispose();
+  }
+
+  Future<void> mergeSelectedSections(List<_FilterOption> options) async {
+    if (selectedForMerge.length != 2 || merging) return;
+    final selected = options
+        .where((option) => selectedForMerge.contains(option.label))
+        .toList();
+    if (selected.length != 2) return;
+    if (!_matchingSectionNames(selected[0].label, selected[1].label)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('केवल मिलते-जुलते अनुभाग नाम merge किए जा सकते हैं।'),
+        ),
+      );
+      return;
+    }
+    final targetLabel = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        title: const Text('कौन-सा अनुभाग नाम रखना है?'),
+        children: [
+          for (final option in selected)
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(dialogContext, option.label),
+              child: ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.check_circle_rounded, color: green),
+                title: Text(option.label,
+                    style: const TextStyle(
+                        color: navy, fontWeight: FontWeight.w900)),
+                subtitle: Text('${option.count} मतदाता'),
+              ),
+            ),
+          const Divider(height: 1),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('रद्द करें'),
+          ),
+        ],
+      ),
+    );
+    if (targetLabel == null || !mounted) return;
+    final sourceOption =
+        selected.firstWhere((option) => option.label != targetLabel);
+    const allowed = {
+      'assemblyNumber',
+      'assemblyName',
+      'gramPanchayat',
+      'village',
+      'partNumber',
+      'sectionNumber',
+      'sectionName'
+    };
+    final source = <String, String>{};
+    for (final entry in widget.currentFilters.entries) {
+      final value = entry.value?.trim() ?? '';
+      if (allowed.contains(entry.key) && value.isNotEmpty) {
+        source[entry.key] = value;
+      }
+    }
+    source
+      ..remove('sectionName')
+      ..addAll(sourceOption.filters);
+    setState(() => merging = true);
+    try {
+      final preview = await api.post('/api/members/bulk-location-correction', {
+        'dryRun': true,
+        'mergeMatchingOnly': true,
+        'source': source,
+        'updates': {'sectionName': targetLabel},
+      });
+      if (!mounted) return;
+      final count = (preview['matched'] as num?)?.toInt() ?? 0;
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Merge confirm करें?'),
+          content: Text(
+            '${sourceOption.label} के $count voters को $targetLabel में merge किया जाएगा।',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('रद्द करें'),
+            ),
+            FilledButton.icon(
+              onPressed:
+                  count == 0 ? null : () => Navigator.pop(dialogContext, true),
+              icon: const Icon(Icons.merge_rounded),
+              label: const Text('Merge करें'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+      final result = await api.post('/api/members/bulk-location-correction', {
+        'dryRun': false,
+        'mergeMatchingOnly': true,
+        'source': source,
+        'updates': {'sectionName': targetLabel},
+      });
+      if (!mounted) return;
+      final updated = result['updated'] ?? 0;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('$updated voters merge हो गए।'),
+          backgroundColor: green,
+        ),
+      );
+      setState(() {
+        selectedForMerge.clear();
+        mergeMode = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text(error.toString().replaceFirst('Exception: ', ''))),
+      );
+    } finally {
+      if (mounted) setState(() => merging = false);
+    }
   }
 
   Future<void> mergeSectionOption(_FilterOption option) async {
@@ -3043,7 +3637,7 @@ class _FilterOptionDialogState extends State<_FilterOptionDialog> {
     final next = await showDialog<String>(
       context: context,
       builder: (dialogContext) => SimpleDialog(
-        title: Text('“' + option.label + '” को किसमें merge करें?'),
+        title: Text('“${option.label}” को किसमें merge करें?'),
         children: [
           for (final target in targets)
             SimpleDialogOption(
@@ -3054,7 +3648,7 @@ class _FilterOptionDialogState extends State<_FilterOptionDialog> {
                 title: Text(target.label,
                     style: const TextStyle(
                         color: navy, fontWeight: FontWeight.w900)),
-                subtitle: Text(target.count.toString() + ' मतदाता'),
+                subtitle: Text('${target.count} मतदाता'),
               ),
             ),
           const Divider(height: 1),
@@ -3065,8 +3659,9 @@ class _FilterOptionDialogState extends State<_FilterOptionDialog> {
         ],
       ),
     );
-    if (next == null || next.isEmpty || next == option.label || !mounted)
+    if (next == null || next.isEmpty || next == option.label || !mounted) {
       return;
+    }
     const allowed = {
       'assemblyNumber',
       'assemblyName',
@@ -3141,6 +3736,17 @@ class _FilterOptionDialogState extends State<_FilterOptionDialog> {
                 style:
                     const TextStyle(color: navy, fontWeight: FontWeight.w900)),
           ),
+          if (widget.field == 'section' && api.user?['role'] == 'admin')
+            TextButton.icon(
+              onPressed: merging
+                  ? null
+                  : () => setState(() {
+                        mergeMode = !mergeMode;
+                        selectedForMerge.clear();
+                      }),
+              icon: Icon(mergeMode ? Icons.close_rounded : Icons.merge_rounded),
+              label: Text(mergeMode ? 'बंद करें' : 'Merge'),
+            ),
           IconButton(
             onPressed: () => Navigator.pop(context),
             icon: const Icon(Icons.close_rounded),
@@ -3200,40 +3806,114 @@ class _FilterOptionDialogState extends State<_FilterOptionDialog> {
                           'थोड़ा अलग शब्द type करें या manual filter use करें',
                     );
                   }
-                  return ListView.separated(
-                    itemCount: options.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
-                    itemBuilder: (_, index) {
-                      final option = options[index];
-                      return ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: softBlue,
-                          child: Text('${index + 1}',
-                              style: const TextStyle(
-                                  color: blue,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w900)),
-                        ),
-                        title: Text(option.label,
-                            style: const TextStyle(
-                                color: navy, fontWeight: FontWeight.w900)),
-                        subtitle: Text('${option.count} मतदाता'),
-                        trailing:
-                            Row(mainAxisSize: MainAxisSize.min, children: [
-                          if (widget.field == 'section' &&
-                              api.user?['role'] == 'admin')
-                            IconButton(
-                              tooltip: 'Duplicate अनुभाग merge करें',
-                              onPressed: () => mergeSectionOption(option),
-                              icon:
-                                  const Icon(Icons.merge_rounded, color: green),
-                            ),
-                          const Icon(Icons.chevron_right_rounded),
-                        ]),
-                        onTap: () => Navigator.pop(context, option),
+                  final selectedOptions = options
+                      .where(
+                          (option) => selectedForMerge.contains(option.label))
+                      .toList();
+                  final namesMatch = selectedOptions.length == 2 &&
+                      _matchingSectionNames(
+                        selectedOptions[0].label,
+                        selectedOptions[1].label,
                       );
-                    },
-                  );
+                  return Column(children: [
+                    if (mergeMode)
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: softBlue,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: border),
+                        ),
+                        child: Row(children: [
+                          Expanded(
+                            child: Text(
+                              selectedOptions.length == 2 && !namesMatch
+                                  ? 'नाम match नहीं करते'
+                                  : '${selectedForMerge.length}/2 अनुभाग चुने गए',
+                              style: TextStyle(
+                                color:
+                                    selectedOptions.length == 2 && !namesMatch
+                                        ? Colors.red
+                                        : navy,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                          if (merging)
+                            const SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          else
+                            FilledButton.icon(
+                              onPressed: namesMatch
+                                  ? () => mergeSelectedSections(options)
+                                  : null,
+                              icon: const Icon(Icons.merge_rounded, size: 18),
+                              label: const Text('Merge करें'),
+                            ),
+                        ]),
+                      ),
+                    Expanded(
+                      child: ListView.separated(
+                        itemCount: options.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        itemBuilder: (_, index) {
+                          final option = options[index];
+                          final selected =
+                              selectedForMerge.contains(option.label);
+                          void selectForMerge() {
+                            if (selected) {
+                              setState(
+                                  () => selectedForMerge.remove(option.label));
+                            } else if (selectedForMerge.length < 2) {
+                              setState(
+                                  () => selectedForMerge.add(option.label));
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content:
+                                      Text('Merge के लिए केवल 2 अनुभाग चुनें।'),
+                                ),
+                              );
+                            }
+                          }
+
+                          return ListTile(
+                            leading: mergeMode
+                                ? Checkbox(
+                                    value: selected,
+                                    onChanged: merging
+                                        ? null
+                                        : (_) => selectForMerge(),
+                                  )
+                                : CircleAvatar(
+                                    backgroundColor: softBlue,
+                                    child: Text('${index + 1}',
+                                        style: const TextStyle(
+                                            color: blue,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w900)),
+                                  ),
+                            title: Text(option.label,
+                                style: const TextStyle(
+                                    color: navy, fontWeight: FontWeight.w900)),
+                            subtitle: Text('${option.count} मतदाता'),
+                            trailing: mergeMode
+                                ? null
+                                : const Icon(Icons.chevron_right_rounded),
+                            onTap: merging
+                                ? null
+                                : mergeMode
+                                    ? selectForMerge
+                                    : () => Navigator.pop(context, option),
+                          );
+                        },
+                      ),
+                    ),
+                  ]);
                 },
               ),
             ),
@@ -3248,18 +3928,21 @@ class _SearchFilter extends StatelessWidget {
       required this.label,
       required this.icon,
       required this.onChanged,
-      this.onPick});
+      this.onPick,
+      this.enabled = true});
   final TextEditingController controller;
   final String label;
   final IconData icon;
   final ValueChanged<String> onChanged;
   final VoidCallback? onPick;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) => SizedBox(
         width: 220,
         child: TextField(
           controller: controller,
+          enabled: enabled,
           onChanged: onChanged,
           decoration: InputDecoration(
             labelText: label,
@@ -4419,6 +5102,12 @@ class VoterTable extends StatelessWidget {
     final pageIds = items.map((item) => '${item['_id']}').toList();
     final allPageSelected =
         pageIds.isNotEmpty && pageIds.every(selectedIds.contains);
+    void openProfile(Map<String, dynamic> voter) => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => VoterDetailPage(voter: voter, onChanged: refresh),
+          ),
+        );
     return SectionCard(
       title: 'मतदाता सूची ($start-$end / $total)',
       subtitle: selectedIds.isEmpty
@@ -4503,26 +5192,36 @@ class VoterTable extends StatelessWidget {
                               '${m['_id']}', selected ?? false),
                           cells: [
                             DataCell(
-                                _VoterPhoto(photo: m['photo'], radius: 20)),
-                            DataCell(Text(m['name'] ?? '-')),
-                            DataCell(Text(m['guardianName'] ?? '-')),
+                              _VoterPhoto(photo: m['photo'], radius: 20),
+                              onTap: () => openProfile(m),
+                            ),
+                            DataCell(Text(m['name'] ?? '-'),
+                                onTap: () => openProfile(m)),
+                            DataCell(Text(m['guardianName'] ?? '-'),
+                                onTap: () => openProfile(m)),
                             DataCell(
                                 Row(mainAxisSize: MainAxisSize.min, children: [
-                              Text('${m['mobile'] ?? '-'}'),
-                              IconButton(
-                                tooltip: 'कॉल करें',
-                                onPressed: () =>
-                                    callNumber(context, '${m['mobile'] ?? ''}'),
-                                icon:
-                                    const Icon(Icons.call, color: Colors.green),
-                              ),
-                            ])),
-                            DataCell(Text('${m['voterId'] ?? '-'}')),
-                            DataCell(Text('${m['houseNumber'] ?? '-'}')),
-                            DataCell(Text('${m['village'] ?? '-'}')),
-                            DataCell(Chip(
-                                label: Text(
-                                    '${m['supportLevel'] ?? 'undecided'}'))),
+                                  Text('${m['mobile'] ?? '-'}'),
+                                  IconButton(
+                                    tooltip: 'कॉल करें',
+                                    onPressed: () => callNumber(
+                                        context, '${m['mobile'] ?? ''}'),
+                                    icon: const Icon(Icons.call,
+                                        color: Colors.green),
+                                  ),
+                                ]),
+                                onTap: () => openProfile(m)),
+                            DataCell(Text('${m['voterId'] ?? '-'}'),
+                                onTap: () => openProfile(m)),
+                            DataCell(Text('${m['houseNumber'] ?? '-'}'),
+                                onTap: () => openProfile(m)),
+                            DataCell(Text('${m['village'] ?? '-'}'),
+                                onTap: () => openProfile(m)),
+                            DataCell(
+                                Chip(
+                                    label: Text(
+                                        '${m['supportLevel'] ?? 'undecided'}')),
+                                onTap: () => openProfile(m)),
                             DataCell(Row(children: [
                               IconButton(
                                   tooltip: 'देखें',
@@ -4761,6 +5460,10 @@ class _VoterRow extends StatelessWidget {
                         const SizedBox(height: 6),
                         Wrap(spacing: 6, runSpacing: 6, children: [
                           _InfoPill(Icons.home_rounded, 'घर $house'),
+                          if (api.user?['role'] == 'admin' &&
+                              member['verificationStatus'] == 'needs_review')
+                            const _InfoPill(Icons.fact_check_outlined,
+                                '\u091c\u093e\u0901\u091a \u0906\u0935\u0936\u094d\u092f\u0915'),
                           if (place.isNotEmpty)
                             _InfoPill(Icons.location_on_rounded, place),
                           if (mobile.isNotEmpty)
@@ -4798,9 +5501,33 @@ class _VoterRow extends StatelessWidget {
               ]),
               const SizedBox(height: 10),
               Row(children: [
-                SupportChip(value: '${member['supportLevel'] ?? 'undecided'}'),
+                PartyPreferenceChip(
+                  value: '${member['partyPreference'] ?? 'undecided'}',
+                ),
                 const Spacer(),
-                IconButton.filledTonal(
+                                if (api.user?['role'] == 'admin')
+                  IconButton.filledTonal(
+                    tooltip: member['isFavorite'] == true
+                        ? 'Favorites से हटाएं'
+                        : 'Favorites में जोड़ें',
+                    onPressed: () async {
+                      final updated = await api.put(
+                          '/api/members/${member['_id']}', {
+                        'isFavorite': member['isFavorite'] != true,
+                      });
+                      member['isFavorite'] = updated['isFavorite'] == true;
+                      await OfflineVoterCache.merge([updated]);
+                      refresh();
+                    },
+                    icon: Icon(
+                      member['isFavorite'] == true
+                          ? Icons.star_rounded
+                          : Icons.star_border_rounded,
+                      color: member['isFavorite'] == true ? orange : muted,
+                      size: 19,
+                    ),
+                  ),
+                if (api.user?['role'] == 'admin') const SizedBox(width: 6),IconButton.filledTonal(
                   tooltip: 'कॉल करें',
                   onPressed:
                       mobile.isEmpty ? null : () => callNumber(context, mobile),
@@ -4884,14 +5611,52 @@ class _VoterPhoto extends StatelessWidget {
   }
 }
 
-class VoterDetailPage extends StatelessWidget {
+class VoterDetailPage extends StatefulWidget {
   const VoterDetailPage(
       {super.key, required this.voter, required this.onChanged});
   final Map<String, dynamic> voter;
   final VoidCallback onChanged;
 
   @override
+  State<VoterDetailPage> createState() => _VoterDetailPageState();
+}
+
+class _VoterDetailPageState extends State<VoterDetailPage> {
+  late Map<String, dynamic> voter;
+
+  @override
+  void initState() {
+    super.initState();
+    voter = Map<String, dynamic>.from(widget.voter);
+  }
+
+  Future<void> _refreshProfile() async {
+    widget.onChanged();
+    final id = '${voter['_id'] ?? ''}'.trim();
+    if (id.isEmpty) return;
+    try {
+      final updated = await api.get('/api/members/$id');
+      if (mounted) {
+        setState(() => voter = Map<String, dynamic>.from(updated));
+      }
+    } catch (_) {
+      // Parent list refresh still runs; retain the last available profile.
+    }
+  }
+
+  Future<void> _toggleFavorite() async {
+    final updated = await api.put('/api/members/${voter['_id']}', {
+      'isFavorite': voter['isFavorite'] != true,
+    });
+    await OfflineVoterCache.merge([updated]);
+    if (mounted) {
+      setState(() => voter = Map<String, dynamic>.from(updated));
+      widget.onChanged();
+    }
+  }
+  @override
   Widget build(BuildContext context) {
+    final isBoothManager = api.user?['role'] == 'booth';
     final mobile = '${voter['mobile'] ?? ''}'.trim();
     final place = [
       '${voter['village'] ?? ''}'.trim(),
@@ -4907,6 +5672,19 @@ class VoterDetailPage extends StatelessWidget {
             style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
         centerTitle: true,
         actions: [
+          if (api.user?['role'] == 'admin')
+            IconButton(
+              tooltip: voter['isFavorite'] == true
+                  ? 'Favorites से हटाएं'
+                  : 'Favorites में जोड़ें',
+              onPressed: _toggleFavorite,
+              icon: Icon(
+                voter['isFavorite'] == true
+                    ? Icons.star_rounded
+                    : Icons.star_border_rounded,
+                color: voter['isFavorite'] == true ? orange : null,
+              ),
+            ),
           PopupMenuButton<String>(
             onSelected: (action) {
               if (action == 'print') {
@@ -4918,15 +5696,16 @@ class VoterDetailPage extends StatelessWidget {
                   context,
                   MaterialPageRoute(
                     builder: (_) =>
-                        VoterEditPage(voter: voter, onSaved: onChanged),
+                        VoterEditPage(voter: voter, onSaved: _refreshProfile),
                   ),
                 );
               }
             },
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'edit', child: Text('संपादित करें')),
-              PopupMenuItem(
-                  value: 'print', child: Text('प्रोफाइल प्रिंट करें')),
+            itemBuilder: (_) => [
+              const PopupMenuItem(value: 'edit', child: Text('संपादित करें')),
+              if (!isBoothManager)
+                const PopupMenuItem(
+                    value: 'print', child: Text('प्रोफाइल प्रिंट करें')),
             ],
           ),
         ],
@@ -4947,7 +5726,9 @@ class VoterDetailPage extends StatelessWidget {
           const SizedBox(height: 7),
           Center(
             child:
-                SupportChip(value: '${voter['supportLevel'] ?? 'undecided'}'),
+                PartyPreferenceChip(
+                  value: '${voter['partyPreference'] ?? 'undecided'}',
+                ),
           ),
           const SizedBox(height: 20),
           Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
@@ -4972,18 +5753,19 @@ class VoterDetailPage extends StatelessWidget {
                 context,
                 MaterialPageRoute(
                   builder: (_) =>
-                      VoterEditPage(voter: voter, onSaved: onChanged),
+                      VoterEditPage(voter: voter, onSaved: _refreshProfile),
                 ),
               ),
             ),
-            _ProfileAction(
-              icon: Icons.print_rounded,
-              label: 'Print',
-              color: purple,
-              onTap: () => printApiPdf(context,
-                  path: '/api/export/members/${voter['_id']}.pdf',
-                  jobName: 'मतदाता प्रोफाइल'),
-            ),
+            if (!isBoothManager)
+              _ProfileAction(
+                icon: Icons.print_rounded,
+                label: 'Print',
+                color: purple,
+                onTap: () => printApiPdf(context,
+                    path: '/api/export/members/${voter['_id']}.pdf',
+                    jobName: 'मतदाता प्रोफाइल'),
+              ),
           ]),
           const SizedBox(height: 22),
           _ProfileCard(children: [
@@ -5016,7 +5798,7 @@ class VoterDetailPage extends StatelessWidget {
           const SizedBox(height: 12),
           _ProfileSection(
             title: 'परिवार',
-            child: FamilyMembers(voter: voter, onChanged: onChanged),
+            child: FamilyMembers(voter: voter, onChanged: _refreshProfile),
           ),
           const SizedBox(height: 12),
           _ProfileSection(
@@ -5150,9 +5932,41 @@ class _ProfileSection extends StatelessWidget {
       );
 }
 
+String _ocrReviewLabels(dynamic raw) {
+  if (raw is! List) return '-';
+  const labels = {
+    'name_missing_or_invalid': '\u0928\u093e\u092e \u0938\u094d\u092a\u0937\u094d\u091f \u0928\u0939\u0940\u0902',
+    'voter_id_missing_or_invalid': 'EPIC \u0917\u0932\u0924 \u092f\u093e \u0917\u093e\u092f\u092c',
+    'house_number_missing_or_invalid': '\u0918\u0930 \u0938\u0902\u0916\u094d\u092f\u093e \u0917\u0932\u0924 \u092f\u093e \u0917\u093e\u092f\u092c',
+    'age_missing_or_invalid': '\u0909\u092e\u094d\u0930 \u0917\u0932\u0924 \u092f\u093e \u0917\u093e\u092f\u092c',
+    'gender_missing': '\u0932\u093f\u0902\u0917 \u0917\u093e\u092f\u092c',
+    'guardian_missing_or_invalid': '\u092a\u093f\u0924\u093e/\u092a\u0924\u093f \u0915\u093e \u0928\u093e\u092e \u0938\u094d\u092a\u0937\u094d\u091f \u0928\u0939\u0940\u0902',
+    'low_confidence': '\u0915\u092e OCR confidence',
+  };
+  return raw.map((value) => labels['$value'] ?? '$value').join(', ');
+}
+
+String _locationSnapshotText(dynamic raw) {
+  if (raw is! Map) return '-';
+  final parts = [
+    raw['tehsil'],
+    raw['gramPanchayat'],
+    raw['village'],
+  ].map((value) => '$value'.trim()).where((value) => value.isNotEmpty && value != 'null').toList();
+  final pin = '${raw['pinCode'] ?? ''}'.trim();
+  if (pin.isNotEmpty) parts.add('PIN $pin');
+  final section = '${raw['sectionName'] ?? ''}'.trim();
+  if (parts.isEmpty && section.isNotEmpty) parts.add(section);
+  return parts.isEmpty ? '-' : parts.join(' > ');
+}
 class DetailList extends StatelessWidget {
   const DetailList({super.key, required this.voter});
   final Map voter;
+
+  String _join(Iterable<dynamic> values, [String separator = ' / ']) => values
+      .map((value) => '${value ?? ''}'.trim())
+      .where((value) => value.isNotEmpty && value != '-')
+      .join(separator);
 
   @override
   Widget build(BuildContext context) => Column(children: [
@@ -5160,26 +5974,72 @@ class DetailList extends StatelessWidget {
         info('मतदाता पहचान पत्र (EPIC)', voter['voterId']),
         info('पिता / पति का नाम', voter['guardianName']),
         info('घर संख्या', voter['houseNumber']),
-        info('उम्र / लिंग',
-            '${voter['age'] ?? '-'} / ${voter['gender'] ?? '-'}'),
+        info('उम्र / लिंग', _join([voter['age'], voter['gender']])),
         info('जन्म तिथि', formatMonthDay(voter['dob'])),
         info('मोबाइल', voter['mobile']),
+        info('वैकल्पिक मोबाइल', voter['altMobile']),
         info('पता', voter['address']),
         info('गाँव', voter['village']),
         info('ग्राम पंचायत', voter['gramPanchayat']),
         info('तहसील / ब्लॉक', voter['tehsil']),
+        info('PIN', voter['pinCode']),
         info('नगर पालिका', voter['municipality']),
         info('जाति', voter['caste']),
         info('उपजाति', voter['subCaste']),
         info('व्यवसाय', voter['occupation']),
         info('शिक्षा', voter['education']),
+        info('कार्य-स्थान', _join([
+          voter['workplaceVillage'],
+          voter['workplaceCity'],
+          voter['workplaceState']
+        ], ', ')),
+        info('जीवनसाथी', voter['spouseName']),
+        info('विवाह वर्षगांठ', formatMonthDay(voter['anniversary'])),
+        info('विवाह संबंध स्थान', _join([
+          voter['marriageVillage'],
+          voter['marriageCity'],
+          voter['marriageState']
+        ], ', ')),
         info('संगठन पद', voter['organizationPost']),
         info('विधानसभा',
-            '${voter['assemblyNumber'] ?? '-'} - ${voter['assemblyName'] ?? '-'}'),
-        info('भाग / अनुभाग',
-            '${voter['partNumber'] ?? '-'} / ${voter['sectionNumber'] ?? '-'} - ${voter['sectionName'] ?? '-'}'),
-        info('वार्ड / बूथ',
-            '${voter['ward']?['number'] ?? '-'} / ${voter['booth']?['number'] ?? '-'}'),
+            _join([voter['assemblyNumber'], voter['assemblyName']], ' - ')),
+        info('भाग / अनुभाग', _join([
+          voter['partNumber'],
+          voter['sectionNumber'],
+          voter['sectionName']
+        ])),
+        info('वार्ड / बूथ', _join([
+          voter['ward']?['number'],
+          voter['booth']?['number']
+        ])),
+        info('सर्वे स्थिति', voter['profileCompletionStatus'] == 'complete'
+            ? 'जानकारी पूर्ण'
+            : 'जानकारी बाकी'),
+        if (api.user?['role'] == 'admin')
+          info('OCR validation', voter['ocrValidationPassed'] == true
+              ? 'नियमों से सत्यापित'
+              : 'पुनः जाँच आवश्यक'),
+        if (api.user?['role'] == 'admin')
+          info('OCR confidence', voter['ocrConfidence']),
+        if (api.user?['role'] == 'admin')
+          info('House confidence', voter['houseNumberConfidence']),
+        if (api.user?['role'] == 'admin')
+          info('Location confidence', voter['locationMatchConfidence']),
+        if (api.user?['role'] == 'admin')
+          info('Raw location',
+              _locationSnapshotText(voter['locationResolution']?['raw'])),
+        if (api.user?['role'] == 'admin')
+          info('Suggested location',
+              _locationSnapshotText(voter['locationResolution']?['suggested'])),
+        if (api.user?['role'] == 'admin')
+          info('Verified location',
+              _locationSnapshotText(voter['locationResolution']?['verified'])),
+        if (api.user?['role'] == 'admin')
+          info('Location status', voter['locationResolution']?['status']),
+        if (api.user?['role'] == 'admin' &&
+            voter['ocrReviewReasons'] is List &&
+            (voter['ocrReviewReasons'] as List).isNotEmpty)
+          info('Review reasons', _ocrReviewLabels(voter['ocrReviewReasons'])),
         ..._extraDetails(voter['extraDetails']),
       ]);
 
@@ -5194,11 +6054,17 @@ class DetailList extends StatelessWidget {
         .toList();
   }
 
-  Widget info(String k, dynamic v) => ListTile(
+  Widget info(String key, dynamic value) {
+    final text = '${value ?? ''}'.trim();
+    if (text.isEmpty || text == '-') return const SizedBox.shrink();
+    return ListTile(
       dense: true,
-      title: Text(k, style: const TextStyle(color: Color(0xff63708a))),
-      subtitle: Text('${v ?? '-'}',
-          style: const TextStyle(fontWeight: FontWeight.w800)));
+      contentPadding: EdgeInsets.zero,
+      title: Text(key, style: const TextStyle(color: Color(0xff63708a))),
+      subtitle: Text(text,
+          style: const TextStyle(fontWeight: FontWeight.w800)),
+    );
+  }
 }
 
 class VoterForm extends StatefulWidget {
@@ -5212,7 +6078,7 @@ class VoterForm extends StatefulWidget {
 
 class _VoterFormState extends State<VoterForm> {
   final ctrls = <String, TextEditingController>{};
-  String support = 'undecided';
+  String partyPreference = 'undecided';
   String gender = '';
   String contactType = 'voter';
   PlatformFile? selectedPhoto;
@@ -5245,7 +6111,7 @@ class _VoterFormState extends State<VoterForm> {
       ctrls[f] =
           TextEditingController(text: initialFormValue(f, widget.voter?[f]));
     }
-    support = widget.voter?['supportLevel'] ?? 'undecided';
+    partyPreference = widget.voter?['partyPreference'] ?? 'undecided';
     gender = '${widget.voter?['gender'] ?? ''}';
     contactType = '${widget.voter?['contactType'] ?? 'voter'}';
   }
@@ -5273,7 +6139,7 @@ class _VoterFormState extends State<VoterForm> {
     final body = <String, dynamic>{
       for (final e in ctrls.entries) e.key: e.value.text.trim(),
       'gender': gender,
-      'supportLevel': support,
+      'partyPreference': partyPreference,
       'contactType': contactType,
     };
     for (final dateKey in ['dob']) {
@@ -5687,16 +6553,18 @@ class _VoterFormState extends State<VoterForm> {
         formField('address', icon: Icons.location_on_outlined),
         const SizedBox(height: 12),
         DropdownButtonFormField<String>(
-          initialValue: support,
+          initialValue: partyPreference,
           decoration: const InputDecoration(
-              labelText: 'Support level', prefixIcon: Icon(Icons.how_to_vote)),
+              labelText: 'पार्टी', prefixIcon: Icon(Icons.how_to_vote)),
           items: const [
-            DropdownMenuItem(value: 'supporter', child: Text('Supporter')),
-            DropdownMenuItem(value: 'opposite', child: Text('Opposite')),
-            DropdownMenuItem(value: 'neutral', child: Text('Neutral')),
-            DropdownMenuItem(value: 'undecided', child: Text('Undecided')),
+            DropdownMenuItem(value: 'congress', child: Text('✋ Congress')),
+            DropdownMenuItem(value: 'bjp', child: Text('🪷 BJP')),
+            DropdownMenuItem(value: 'nota', child: Text('NOTA')),
+            DropdownMenuItem(value: 'other', child: Text('◆ अन्य पार्टी')),
+            DropdownMenuItem(value: 'undecided', child: Text('पार्टी तय नहीं')),
           ],
-          onChanged: (v) => setState(() => support = v ?? 'undecided'),
+          onChanged: (v) =>
+              setState(() => partyPreference = v ?? 'undecided'),
         ),
         const SizedBox(height: 12),
         ExpansionTile(

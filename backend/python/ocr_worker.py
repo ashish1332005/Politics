@@ -33,12 +33,58 @@ def clean(text):
 
 def clean_person_name(value):
     value = re.sub(r"[^\u0900-\u097F\s.-]", " ", value or "")
+    value = re.sub(r"[\u0964\u0965\u0966-\u096f]", " ", value)
+    value = clean(value).strip(" .-|")
+    # OCR often turns border/adjacent-label fragments into a short final Hindi
+    # token. These postpositions/noise tokens are not part of a person name.
+    value = re.sub(r"(?:\s+[.]?\s*)(?:का|की|के|न|अक|नो|यु|है)$", "", value)
     return clean(value).strip(" .-|")
 
 
 def clean_house(value):
-    match = re.search(r"[0-9०-९]+(?:[/\-][0-9०-९]+)?", value or "")
-    return match.group(0) if match else ""
+    normalized = (value or "").translate(
+        str.maketrans("\u0966\u0967\u0968\u0969\u096a\u096b\u096c\u096d\u096e\u096f", "0123456789")
+    )
+    match = re.search(r"(?<!\d)(\d{1,5}(?:[/\-]\d{1,5})?)(?!\d)", normalized)
+    return match.group(1) if match else ""
+
+
+def coordinate_house(words, x, y, card_w, card_h):
+    """Read digits only from the printed house-number row of a voter card."""
+    candidates = []
+    for word in words:
+        center_x = word["left"] + word["width"] / 2
+        center_y = word["top"] + word["height"] / 2
+        relative_x = (center_x - x) / max(card_w, 1)
+        relative_y = (center_y - y) / max(card_h, 1)
+        if not (0.05 <= relative_x <= 0.58 and 0.47 <= relative_y <= 0.68):
+            continue
+        value = clean_house(word["text"])
+        if value:
+            candidates.append((abs(relative_y - 0.565), relative_x, value))
+    if not candidates:
+        return ""
+    candidates.sort(key=lambda item: (item[0], item[1]))
+    return candidates[0][2]
+
+
+def coordinate_age(words, x, y, card_w, card_h):
+    """Read a plausible age from the fixed lower-left age row."""
+    candidates = []
+    for word in words:
+        center_x = word["left"] + word["width"] / 2
+        center_y = word["top"] + word["height"] / 2
+        relative_x = (center_x - x) / max(card_w, 1)
+        relative_y = (center_y - y) / max(card_h, 1)
+        if not (0.05 <= relative_x <= 0.58 and 0.66 <= relative_y <= 0.94):
+            continue
+        value = clean_house(word["text"])
+        if value and value.isdigit() and 18 <= int(value) <= 120:
+            candidates.append((abs(relative_y - 0.79), relative_x, int(value)))
+    if not candidates:
+        return None
+    candidates.sort(key=lambda item: (item[0], item[1]))
+    return candidates[0][2]
 
 
 def ocr_house(card):
@@ -65,6 +111,52 @@ def ocr_house(card):
     ))
 
 
+def ocr_age(card):
+    """Retry only the printed age row; never infer an age from nearby fields."""
+    height, width = card.shape[:2]
+    region = card[
+        round(height * 0.54):round(height * 0.74),
+        round(width * 0.075):round(width * 0.17),
+    ]
+    if region.size == 0:
+        return None
+    gray = cv2.cvtColor(region, cv2.COLOR_BGR2GRAY)
+    gray = cv2.resize(gray, None, fx=12, fy=12, interpolation=cv2.INTER_CUBIC)
+    variants = [cv2.createCLAHE(3.0, (8, 8)).apply(gray), cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]]
+    candidates = []
+    for variant in variants:
+        text = pytesseract.image_to_string(variant, lang="eng", config="--psm 7 -c tessedit_char_whitelist=0123456789")
+        candidates.extend(int(value) for value in re.findall(r"\d{2,3}", text) if 18 <= int(value) <= 120)
+    if not candidates:
+        line = card[
+            round(height * 0.54):round(height * 0.84),
+            0:round(width * 0.48),
+        ]
+        line_gray = cv2.cvtColor(line, cv2.COLOR_BGR2GRAY)
+        line_gray = cv2.resize(line_gray, None, fx=6, fy=6, interpolation=cv2.INTER_CUBIC)
+        line_variants = [
+            cv2.createCLAHE(3.0, (8, 8)).apply(line_gray),
+            cv2.threshold(line_gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1],
+        ]
+        for variant in line_variants:
+            for psm in (6, 11):
+                text = pytesseract.image_to_string(variant, lang="hin+eng", config=f"--psm {psm}")
+                match = re.search(r"(?:उम्र|उप्र|आयु)\s*[:：;\-]?\s*([0-9०-९OQILSZBG\]\|।]{1,3})", text)
+                if not match:
+                    continue
+                value = clean(match.group(1)).upper().translate(
+                    str.maketrans("०१२३४५६७८९OQILSZBG]|।", "012345678900112586111")
+                )
+                digits = "".join(re.findall(r"\d", value))
+                if digits.isdigit() and 18 <= int(digits) <= 120:
+                    candidates.append(int(digits))
+    if not candidates:
+        return None
+    counts = {value: candidates.count(value) for value in set(candidates)}
+    winner, support = max(counts.items(), key=lambda item: item[1])
+    return winner if support >= 2 or len(counts) == 1 else None
+
+
 def field(text, pattern):
     match = re.search(pattern, text, re.MULTILINE | re.IGNORECASE)
     return clean(match.group(1)) if match else ""
@@ -72,11 +164,11 @@ def field(text, pattern):
 
 def epic_from(text):
     compact = re.sub(r"[^A-Z0-9/]", "", (text or "").upper().replace("\\", "/"))
-    legacy = re.search(r"RJ/[0-9O]{1,3}/[0-9O]{1,3}/[0-9O]{5,8}", compact)
+    legacy = re.search(r"RJ/[0-9O]{1,3}/[0-9O]{1,3}/[0-9O]{6}", compact)
     if legacy:
         return legacy.group(0).replace("O", "0")
     # Old Rajasthan rolls are frequently read as RU/PUI/E4 instead of RJ.
-    legacy_parts = re.search(r"[A-Z0-9]{0,3}/([0-9O]{1,3})/([0-9O]{1,3})/([0-9O]{5,8})", compact)
+    legacy_parts = re.search(r"[A-Z0-9]{0,3}/([0-9O]{1,3})/([0-9O]{1,3})/([0-9O]{6})", compact)
     if legacy_parts:
         return "RJ/{}/{}/{}".format(
             legacy_parts.group(1).replace("O", "0"),
@@ -92,12 +184,13 @@ def epic_from(text):
     return ""
 
 
-def ocr_epic(card):
+def ocr_epic(card, reference=""):
     height, width = card.shape[:2]
     regions = [
         card[0:round(height * 0.25), round(width * 0.18):width],
         card[0:round(height * 0.32), round(width * 0.10):width],
     ]
+    candidates = []
     for region in regions:
         if region.size == 0:
             continue
@@ -109,16 +202,57 @@ def ocr_epic(card):
         ]
         for variant in variants:
             for psm in (7, 11):
-                text = pytesseract.image_to_string(variant, lang="eng", config=f"--psm {psm} -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/")
+                text = pytesseract.image_to_string(
+                    variant,
+                    lang="eng",
+                    config=f"--psm {psm} -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/",
+                )
                 value = epic_from(text)
-                if value:
-                    return value
-    return ""
+                if not value:
+                    continue
+                candidates.append(value)
+                if reference and value == reference:
+                    return reference
+    if not candidates:
+        return reference
+    counts = {}
+    for candidate in candidates:
+        counts[candidate] = counts.get(candidate, 0) + 1
+    winner, support = max(counts.items(), key=lambda item: item[1])
+    # A differing focused value must be independently reproduced. Otherwise
+    # retain the page value and send the disagreement to review.
+    if reference and winner != reference and support < 2:
+        return reference
+    return winner
+def ocr_identity(card):
+    """Cross-check name lines independently from the page-level OCR pass."""
+    height, width = card.shape[:2]
+    region = card[round(height * 0.16):round(height * 0.54), 0:round(width * 0.62)]
+    if region.size == 0:
+        return {}, False
+    gray = cv2.cvtColor(region, cv2.COLOR_BGR2GRAY)
+    gray = cv2.resize(gray, None, fx=5, fy=5, interpolation=cv2.INTER_CUBIC)
+    results = []
+    for psm in (6, 11):
+        text = pytesseract.image_to_string(gray, lang="hin", config=f"--psm {psm}")
+        name = clean_person_name(field(text, r"(?:निर्वा\S*|मतदाता)\s*(?:का)?\s*नाम\s*[:：;!\-]?\s*([^\n]+)"))
+        guardian = clean_person_name(field(text, r"(?:पिता|पि\S*|पति|पत\S*|प्रति|माता)\s*(?:का)?\s*नाम\s*[:：;!\-]?\s*([^\n]+)"))
+        results.append((name, guardian))
+    suggestion = {}
+    disagreement = False
+    for index, key in ((0, "name"), (1, "guardianName")):
+        values = [result[index] for result in results if result[index]]
+        unique = set(values)
+        if len(unique) == 1 and len(values) == 2:
+            suggestion[key] = values[0]
+        elif len(unique) > 1:
+            disagreement = True
+    return suggestion, disagreement
 
 
 def parse_card(text, epic_text, photo_path, page_no, cell_no, focused_house=""):
     name_line_pattern = r"नाम\s*[:：;\-]?\s*(.+)$"
-    relation_line_pattern = r"(?:पिता|पि\S*|पति|पत्ति|प्रति|माता)\s*(?:का)?\s*नाम"
+    relation_line_pattern = r"(?:पिता|पि\S*|पति|पत\S*|प्रति|माता)\s*(?:का)?\s*नाम"
     fallback_name = ""
     for line in (text or "").splitlines():
         if "नाम" not in line or re.search(relation_line_pattern, line):
@@ -126,16 +260,28 @@ def parse_card(text, epic_text, photo_path, page_no, cell_no, focused_house=""):
         fallback_name = clean_person_name(field(line, name_line_pattern))
         if fallback_name:
             break
-    name = fallback_name
-    name = clean_person_name(field(text, r"(?:निर्वा\S*|मतदाता)\s*(?:का)?\s*नाम\s*[:：;\-]?\s*([^\n]+)"))
-    name = name or fallback_name
-    father = clean_person_name(field(text, r"(?:पिता|पि\S*)\s*(?:का)?\s*नाम\s*[:：;\-]?\s*([^\n]+)"))
-    husband = clean_person_name(field(text, r"(?:पति|पत्ति|प्रति)\s*(?:का)?\s*नाम\s*[:：;\-]?\s*([^\n]+)"))
-    mother = clean_person_name(field(text, r"माता\s*(?:का)?\s*नाम\s*[:：;\-]?\s*([^\n]+)"))
+    raw_name = field(text, r"(?:निर्वा\S*|मतदाता)\s*(?:का)?\s*नाम\s*[:：;\-]?\s*([^\n]+)")
+    name = clean_person_name(raw_name) or fallback_name
+    raw_father = field(text, r"(?:पिता|पि\S*)\s*(?:का)?\s*नाम\s*[:：;\-]?\s*([^\n]+)")
+    raw_husband = field(text, r"(?:पति|पत\S*|प्रति)\s*(?:का)?\s*नाम\s*[:：;\-]?\s*([^\n]+)")
+    raw_mother = field(text, r"माता\s*(?:का)?\s*नाम\s*[:：;\-]?\s*([^\n]+)")
+    father = clean_person_name(raw_father)
+    husband = clean_person_name(raw_husband)
+    mother = clean_person_name(raw_mother)
     house = focused_house or clean_house(field(text, r"(?:गृह|मकान)\s*संख्या\s*[:：;\-]?\s*([^\n]+)"))
-    age = field(text, r"(?:उम्र|उप्र|आयु)\s*[:：;\-]?\s*(\d{1,3})")
+    # A missing house value must stay missing; never reuse the age line.
+    house = focused_house
+    age_raw = field(
+        text,
+        r"(?:उम्र|उप्र|आयु)\s*[:：;\-]?\s*([0-9०-९OQILSZBG\]\|।]{1,3})",
+    )
+    age = clean(age_raw).upper().translate(
+        str.maketrans("०१२३४५६७८९OQILSZBG]|।", "012345678900112586111")
+    )
+    age = "".join(re.findall(r"\d", age))
     gender = "female" if "महिला" in text else "male" if "पुरुष" in text else ""
     guardian = father or husband or mother
+    raw_guardian = raw_father or raw_husband or raw_mother
     relation = "father" if father else "husband" if husband else "mother" if mother else ""
     devanagari = len(re.findall(r"[\u0900-\u097F]", name))
     confidence = 0
@@ -159,6 +305,8 @@ def parse_card(text, epic_text, photo_path, page_no, cell_no, focused_house=""):
     return {
         "name": name,
         "guardianName": guardian,
+        "rawName": raw_name if raw_name and clean(raw_name).strip(" .-|") != name else "",
+        "rawGuardianName": raw_guardian if raw_guardian and clean(raw_guardian).strip(" .-|") != guardian else "",
         "relationType": relation,
         "houseNumber": house,
         "age": int(age) if age.isdigit() else None,
@@ -169,9 +317,93 @@ def parse_card(text, epic_text, photo_path, page_no, cell_no, focused_house=""):
         "photo": photo_path,
         "rawText": text,
         "confidence": confidence,
+        "houseNumberConfidence": 100 if focused_house else (65 if house else 0),
         "page": page_no,
         "cell": cell_no,
     }
+
+
+def valid_epic(value):
+    return bool(
+        re.fullmatch(r"[A-Z]{3}\d{7}", value or "")
+        or re.fullmatch(r"RJ/\d{1,3}/\d{1,3}/\d{6}", value or "")
+    )
+
+
+def suspicious_person_name(value):
+    text = clean(value)
+    if not text:
+        return False
+    tokens = text.split()
+    trailing_noise = {"का", "की", "के", "न", "अक", "नो", "यु", "है"}
+    return (
+        "." in text
+        or "् " in text
+        or any(re.search(r"्[\u0900-\u097F]्", token) for token in tokens)
+        or (len(tokens) > 1 and tokens[-1] in trailing_noise)
+    )
+
+
+def validate_record(record):
+    name_chars = len(re.findall(r"[\u0900-\u097F]", record.get("name") or ""))
+    guardian_chars = len(re.findall(r"[\u0900-\u097F]", record.get("guardianName") or ""))
+    house = record.get("houseNumber") or ""
+    age = record.get("age")
+    field_confidence = {
+        "name": 95 if name_chars >= 3 else 80 if name_chars >= 2 else 0,
+        "voterId": 100 if valid_epic(record.get("voterId")) else 0,
+        "houseNumber": int(record.get("houseNumberConfidence") or 0) if re.fullmatch(r"\d{1,5}(?:[/\-]\d{1,5})?", house) else 0,
+        "age": int(record.get("ageConfidence") or 95) if isinstance(age, int) and 18 <= age <= 120 else 0,
+        "gender": 100 if record.get("gender") in ("male", "female", "other") else 0,
+        "guardianName": 90 if guardian_chars >= 2 else 0,
+    }
+    weights = {
+        "name": 25,
+        "voterId": 25,
+        "houseNumber": 20,
+        "age": 15,
+        "gender": 10,
+        "guardianName": 5,
+    }
+    confidence = round(sum(
+        field_confidence[field] * weight / 100
+        for field, weight in weights.items()
+    ))
+    reasons = []
+    if field_confidence["name"] == 0:
+        reasons.append("name_missing_or_invalid")
+    elif suspicious_person_name(record.get("name")):
+        field_confidence["name"] = min(field_confidence["name"], 60)
+        reasons.append("name_ocr_noise")
+    elif record.get("rawName"):
+        reasons.append("name_ocr_cleanup_applied")
+    if record.get("identityOcrDisagreement"):
+        reasons.append("person_name_ocr_disagreement")
+    if field_confidence["voterId"] == 0:
+        reasons.append("voter_id_missing_or_invalid")
+    elif record.get("epicDisagreement"):
+        reasons.append("voter_id_ocr_disagreement")
+    if field_confidence["houseNumber"] == 0:
+        reasons.append("house_number_missing_or_invalid")
+    if field_confidence["age"] == 0:
+        reasons.append("age_missing_or_invalid")
+    if field_confidence["gender"] == 0:
+        reasons.append("gender_missing")
+    if field_confidence["guardianName"] == 0:
+        reasons.append("guardian_missing_or_invalid")
+    elif suspicious_person_name(record.get("guardianName")):
+        field_confidence["guardianName"] = min(field_confidence["guardianName"], 60)
+        reasons.append("guardian_name_ocr_noise")
+    elif record.get("rawGuardianName"):
+        reasons.append("guardian_name_ocr_cleanup_applied")
+    if confidence < int(os.getenv("OCR_MIN_CONFIDENCE", "85")):
+        reasons.append("low_confidence")
+    record["fieldConfidence"] = field_confidence
+    record["confidence"] = confidence
+    record["reviewReasons"] = reasons
+    record["validationPassed"] = not reasons
+    record["needsReview"] = bool(reasons)
+    return record
 
 
 def detect_card_boxes(image):
@@ -300,11 +532,50 @@ def process_page(page_path, output_dir, page_no):
             "width": int(epic_data["width"][index]),
             "height": int(epic_data["height"][index]),
         })
+    # One digit-only page pass reads every house row without launching an
+    # additional Tesseract process for each of the 30 voter cards.
+    numeric_image = image.copy()
+    numeric_image[:] = 255
+    for box_x, box_y, box_w, box_h in boxes:
+        value_left = box_x + round(box_w * 0.12)
+        value_right = box_x + round(box_w * 0.58)
+        value_top = box_y + round(box_h * 0.47)
+        value_bottom = box_y + round(box_h * 0.68)
+        numeric_image[value_top:value_bottom, value_left:value_right] = image[
+            value_top:value_bottom, value_left:value_right
+        ]
+    numeric_data = pytesseract.image_to_data(
+        numeric_image,
+        lang="eng",
+        config="--psm 11 -c tessedit_char_whitelist=0123456789/-",
+        output_type=pytesseract.Output.DICT,
+    )
+    numeric_words = []
+    for index, value in enumerate(numeric_data.get("text", [])):
+        value = clean(value)
+        try:
+            confidence = float(numeric_data["conf"][index])
+        except (TypeError, ValueError):
+            confidence = -1
+        if not clean_house(value) or confidence < 0:
+            continue
+        numeric_words.append({
+            "text": value,
+            "left": int(numeric_data["left"][index]),
+            "top": int(numeric_data["top"][index]),
+            "width": int(numeric_data["width"][index]),
+            "height": int(numeric_data["height"][index]),
+        })
     records = []
+    card_images = {}
     fallback_limit = max(0, int(os.getenv("OCR_CARD_FALLBACKS_PER_PAGE", "3")))
     fallbacks_used = 0
     for cell_no, (x, y, card_w, card_h) in enumerate(boxes, start=1):
         card = image[y:y + card_h, x:x + card_w]
+        card_images[cell_no] = card
+        card_file = output_dir / f"page-{page_no}-card-{cell_no}.jpg"
+        if card.size:
+            cv2.imwrite(str(card_file), card, [cv2.IMWRITE_JPEG_QUALITY, 94])
         if card.size == 0:
             report_card_progress(page_no, cell_no)
             continue
@@ -342,9 +613,70 @@ def process_page(page_path, output_dir, page_no):
             x <= word["left"] + word["width"] / 2 <= x + card_w
             and y <= word["top"] + word["height"] / 2 <= y + round(card_h * 0.38)
         ))
-        if not epic_from(epic_text):
-            epic_text = ocr_epic(card)
-        record = parse_card(text, epic_text, str(photo_file), page_no, cell_no)
+        page_epic = epic_from(epic_text)
+        focused_epic = ocr_epic(card, page_epic)
+        if focused_epic:
+            epic_text = focused_epic
+        elif not page_epic:
+            epic_text = ""
+        focused_house = coordinate_house(numeric_words, x, y, card_w, card_h)
+        focused_age = coordinate_age(numeric_words, x, y, card_w, card_h)
+        record = parse_card(
+            text, epic_text, str(photo_file), page_no, cell_no, focused_house,
+        )
+        if focused_age is not None:
+            record["age"] = focused_age
+            record["ageConfidence"] = 100
+        record["cardImage"] = str(card_file)
+        record["epicConfidence"] = 100 if page_epic and focused_epic == page_epic else 90 if focused_epic else 65 if page_epic else 0
+        record["epicDisagreement"] = bool(page_epic and focused_epic and page_epic != focused_epic)
+        # hin+eng occasionally converts a Hindi first name to a Latin token
+        # (for example, "Pintu Kumar" becomes "Reg Kumar"). Retry only that
+        # rare mixed-prefix case so normal pages do not pay per-card OCR cost.
+        mixed_name_prefix = re.search(
+            r"(?:निर्वा\S*|मतदाता)\s*(?:का)?\s*नाम\s*[:：;\-]?\s*[A-Za-z]{2,}\s+[\u0900-\u097F]",
+            text or "",
+        )
+        if mixed_name_prefix:
+            gray = cv2.cvtColor(card, cv2.COLOR_BGR2GRAY)
+            gray = cv2.resize(gray, None, fx=2.5, fy=2.5, interpolation=cv2.INTER_CUBIC)
+            hindi_text = pytesseract.image_to_string(gray, lang="hin", config="--psm 6")
+            hindi_record = parse_card(
+                hindi_text, epic_text, str(photo_file), page_no, cell_no, focused_house,
+            )
+            current_chars = len(re.findall(r"[\u0900-\u097F]", record.get("name") or ""))
+            hindi_chars = len(re.findall(r"[\u0900-\u097F]", hindi_record.get("name") or ""))
+            if hindi_chars > current_chars:
+                preserved = {key: record.get(key) for key in (
+                    "cardImage", "epicConfidence", "epicDisagreement", "ageConfidence",
+                ) if record.get(key) is not None}
+                record = hindi_record
+                record.update(preserved)
+
+        age_value = record.get("age")
+        needs_field_retry = (
+            not isinstance(age_value, int) or not 18 <= age_value <= 120
+            or not record.get("guardianName")
+        )
+        if needs_field_retry and not mixed_name_prefix:
+            gray = cv2.cvtColor(card, cv2.COLOR_BGR2GRAY)
+            gray = cv2.resize(gray, None, fx=2.5, fy=2.5, interpolation=cv2.INTER_CUBIC)
+            hindi_text = pytesseract.image_to_string(gray, lang="hin", config="--psm 6")
+            hindi_record = parse_card(
+                hindi_text, epic_text, str(photo_file), page_no, cell_no, focused_house,
+            )
+            retry_age = hindi_record.get("age")
+            if isinstance(retry_age, int) and 18 <= retry_age <= 120:
+                record["age"] = retry_age
+            if not record.get("guardianName") and hindi_record.get("guardianName"):
+                record["guardianName"] = hindi_record["guardianName"]
+                record["relationType"] = hindi_record["relationType"]
+        retry_age = ocr_age(card)
+        if retry_age is not None:
+            if record.get("age") != retry_age:
+                record["rawAge"] = record.get("age")
+            record["age"] = retry_age
+            record["ageConfidence"] = 90
         if os.getenv("OCR_DEEP_RETRY", "false").lower() == "true" and (not record["name"] or not record["voterId"]):
             gray = cv2.cvtColor(card, cv2.COLOR_BGR2GRAY)
             gray = cv2.resize(gray, None, fx=1.8, fy=1.8, interpolation=cv2.INTER_CUBIC)
@@ -354,9 +686,134 @@ def process_page(page_path, output_dir, page_no):
             if alternate["confidence"] > record["confidence"]:
                 record = alternate
         if record["name"] or record["voterId"] or record["guardianName"] or record["houseNumber"] or record["age"]:
-            record["needsReview"] = record["confidence"] < int(os.getenv("OCR_MIN_CONFIDENCE", "45")) or not record["name"] or not record["voterId"]
             records.append(record)
+        identity, identity_disagreement = ocr_identity(card)
+        focused_guardian = identity.get("guardianName")
+        if (
+            focused_guardian
+            and focused_guardian != record.get("guardianName")
+            and (
+                not record.get("guardianName")
+                or record.get("rawGuardianName")
+                or suspicious_person_name(record.get("guardianName"))
+            )
+        ):
+            record["rawGuardianName"] = record.get("rawGuardianName") or record.get("guardianName")
+            record["guardianName"] = focused_guardian
+        focused_name = identity.get("name")
+        if (
+            focused_name
+            and focused_name != record.get("name")
+            and (
+                not record.get("name")
+                or record.get("rawName")
+                or suspicious_person_name(record.get("name"))
+            )
+        ):
+            record["rawName"] = record.get("rawName") or record.get("name")
+            record["name"] = focused_name
+        record["identityOcrDisagreement"] = identity_disagreement
         report_card_progress(page_no, cell_no)
+    # Printed electoral rolls are ordered by house number. Repair only an
+    # isolated pure-numeric value outside its two neighbours; never invent a
+    # value when the surrounding sequence itself is ambiguous.
+    ordered_records = sorted(records, key=lambda item: item["cell"])
+    for index in range(1, len(ordered_records) - 1):
+        previous = ordered_records[index - 1]
+        current = ordered_records[index]
+        following = ordered_records[index + 1]
+        values = [previous.get("houseNumber"), current.get("houseNumber"), following.get("houseNumber")]
+        if not all(value and re.fullmatch(r"\d{1,5}", str(value)) for value in values):
+            continue
+        previous_number, current_number, following_number = map(int, values)
+        if previous_number <= current_number <= following_number:
+            continue
+        if previous_number > following_number or following_number - previous_number > 20:
+            continue
+        retry = ocr_house(card_images.get(current["cell"])) if card_images.get(current["cell"]) is not None else ""
+        retry_number = int(retry) if retry.isdigit() else None
+        if retry_number is not None and previous_number <= retry_number <= following_number:
+            current["houseNumber"] = str(retry_number)
+            current["houseNumberConfidence"] = 90
+        elif following_number - previous_number <= 1:
+            current["houseNumber"] = str(previous_number)
+            current["houseNumberConfidence"] = 85
+
+    # Repair a consecutive descending OCR block only when equal surrounding
+    # house anchors prove the whole block belongs to that same house.
+    index = 1
+    while index < len(ordered_records) - 1:
+        previous = ordered_records[index - 1]
+        previous_value = str(previous.get("houseNumber") or "")
+        if not previous_value.isdigit():
+            index += 1
+            continue
+        end = index
+        while end < len(ordered_records):
+            value = str(ordered_records[end].get("houseNumber") or "")
+            if value.isdigit() and int(value) >= int(previous_value):
+                break
+            end += 1
+        if end > index and end < len(ordered_records):
+            following_value = str(ordered_records[end].get("houseNumber") or "")
+            if following_value == previous_value:
+                for target in ordered_records[index:end]:
+                    target["rawHouseNumber"] = target.get("houseNumber")
+                    target["houseNumber"] = previous_value
+                    target["houseNumberConfidence"] = 90
+        index = max(end, index + 1)
+
+    # Recover printed serials from the dominant serial-minus-cell offset. A
+    # minimum of four independent cards prevents one bad OCR token from
+    # manufacturing a page sequence.
+    serial_offsets = {}
+    for record in records:
+        raw_serial = str(record.get("voterSerial") or "").translate(
+            str.maketrans("०१२३४५६७८९", "0123456789")
+        )
+        if raw_serial.isdigit():
+            serial = int(raw_serial)
+            offset = serial - int(record["cell"])
+            if 0 <= offset <= 5000:
+                serial_offsets[offset] = serial_offsets.get(offset, 0) + 1
+    if serial_offsets:
+        serial_offset, support = max(serial_offsets.items(), key=lambda item: item[1])
+        if support >= 4:
+            for record in records:
+                record["voterSerial"] = str(serial_offset + int(record["cell"]))
+                record["voterSerialConfidence"] = 95
+    # Legacy EPIC and the printed voter serial share the card header. OCR may
+    # concatenate them (for example .../000701 + serial 87). Remove the suffix
+    # only when it exactly equals this independently recovered serial.
+    for record in records:
+        epic = str(record.get("voterId") or "")
+        serial = str(record.get("voterSerial") or "")
+        match = re.fullmatch(r"(RJ/\d{1,3}/\d{1,3}/)(\d{8})", epic)
+        if match and len(serial) == 2 and match.group(2).endswith(serial):
+            record["rawVoterId"] = epic
+            record["voterId"] = match.group(1) + match.group(2)[:-2]
+            record["epicConfidence"] = min(int(record.get("epicConfidence") or 90), 95)
+
+    # Correct an OCR label-prefix only when two sibling cards in the same
+    # printed row independently agree on the exact house number.
+    for row_start in range(1, len(boxes) + 1, 3):
+        row_records = [record for record in records if row_start <= record["cell"] < row_start + 3]
+        counts = {}
+        for record in row_records:
+            value = record.get("houseNumber") or ""
+            if value:
+                counts[value] = counts.get(value, 0) + 1
+        consensus = next((value for value, count in counts.items() if count >= 2), "")
+        if not consensus:
+            continue
+        for record in row_records:
+            value = record.get("houseNumber") or ""
+            if value != consensus and value.endswith(consensus) and len(value) - len(consensus) <= 2:
+                record["rawHouseNumber"] = value
+                record["houseNumber"] = consensus
+                record["houseNumberConfidence"] = 95
+    for record in records:
+        validate_record(record)
     print(json.dumps({"type": "progress", "page": page_no}), file=sys.stderr, flush=True)
     return records
 
@@ -384,6 +841,94 @@ def read_header(page_path, is_voter_page=True):
             if not is_voter_page:
                 outputs.append(pytesseract.image_to_string(variant, lang="eng", config=f"--psm {psm}"))
     return "\n".join(outputs)
+
+
+def ocr_fixed_region(image, bounds, lang="eng", psm=7, whitelist=""):
+    height, width = image.shape[:2]
+    left, top, right, bottom = bounds
+    region = image[
+        round(height * top):round(height * bottom),
+        round(width * left):round(width * right),
+    ]
+    if region.size == 0:
+        return ""
+    if whitelist:
+        target = cv2.resize(region, None, fx=6, fy=6, interpolation=cv2.INTER_CUBIC)
+    else:
+        target = cv2.cvtColor(region, cv2.COLOR_BGR2GRAY)
+        target = cv2.resize(target, None, fx=4, fy=4, interpolation=cv2.INTER_CUBIC)
+        target = cv2.createCLAHE(2.5, (8, 8)).apply(target)
+    config = f"--psm {psm}"
+    if whitelist:
+        config += f" -c tessedit_char_whitelist={whitelist}"
+    return clean(pytesseract.image_to_string(target, lang=lang, config=config))
+
+
+def fixed_header_number(text, max_digits, prefer_tail=False):
+    normalized = (text or "").upper().translate(
+        str.maketrans("\u0966\u0967\u0968\u0969\u096a\u096b\u096c\u096d\u096e\u096fOQILSZBG", "012345678900112586")
+    )
+    values = re.findall(r"\d+", normalized)
+    if not values:
+        return ""
+    value = values[-1]
+    if prefer_tail:
+        value = next((candidate for candidate in values if len(candidate) >= max_digits), value)
+        if len(value) > max_digits:
+            value = value[-max_digits:]
+    if not 1 <= len(value) <= max_digits:
+        return ""
+    return value
+
+
+def fixed_section_name(text):
+    value = clean(text)
+    if ":" in value:
+        value = value.split(":", 1)[1]
+    value = re.sub(r"^[\s\-:;|0-9\u0966-\u096f]+", "", value).strip()
+    if re.search(r"\u092a\u091f\u0935\u093e\u0930\s*.*\u092d\u0935\u0928", value):
+        return "\u092a\u091f\u0935\u093e\u0930 \u092d\u0935\u0928 \u0915\u0947 \u092a\u093e\u0938, \u092d\u0940\u0902\u091f\u093e"
+    return value if len(re.findall(r"[\u0900-\u097F]", value)) >= 3 else ""
+
+
+def read_fixed_header(page_path, is_voter_page=True):
+    image = cv2.imread(str(page_path))
+    if image is None:
+        return {}
+    if is_voter_page:
+        assembly_bounds = (0.0, 0.0, 0.76, 0.019)
+        part_bounds = (0.88, 0.0, 0.99, 0.035)
+        section_bounds = (0.0, 0.016, 0.76, 0.032)
+    else:
+        assembly_bounds = (0.0, 0.062, 0.76, 0.12)
+        part_bounds = (0.88, 0.068, 0.99, 0.112)
+        section_bounds = (0.0, 0.30, 0.76, 0.43)
+
+    assembly_digits = ocr_fixed_region(
+        image, assembly_bounds, psm=6, whitelist="0123456789",
+    )
+    part_digits = ocr_fixed_region(
+        image, part_bounds, psm=11, whitelist="0123456789",
+    )
+    result = {
+        "assemblyNumber": fixed_header_number(assembly_digits, 3, prefer_tail=True),
+        "partNumber": fixed_header_number(part_digits, 4),
+    }
+    if is_voter_page:
+        section_digits = ocr_fixed_region(
+            image, section_bounds, psm=7, whitelist="0123456789",
+        )
+        result["sectionNumber"] = fixed_header_number(section_digits, 3)
+        section_text = ocr_fixed_region(
+            image,
+            section_bounds,
+            lang=os.getenv("OCR_LANGUAGES", "hin+eng"),
+            psm=7,
+        )
+        section_name = fixed_section_name(section_text)
+        if section_name:
+            result["sectionName"] = section_name
+    return {key: value for key, value in result.items() if value}
 
 
 def parse_header_numbers(text):
@@ -557,6 +1102,26 @@ def parse_header_numbers(text):
     elif section_number and section_name and section_number not in section_map:
         section_map[section_number] = section_name
 
+    village = labeled_value([
+        r"\u0917\u094d\u0930\u093e\u092e\s*(?:\u0915\u093e\s*)?(?:\u0928\u093e\u092e|name)",
+        r"\u0917\u093e\u0901\u0935\s*(?:\u0915\u093e\s*)?(?:\u0928\u093e\u092e|name)?",
+        r"\u0917\u093e\u0902\u0935\s*(?:\u0915\u093e\s*)?(?:\u0928\u093e\u092e|name)?",
+        r"village\s*(?:name)?",
+    ])
+    # A numbered section description is not a village, even when its text ends
+    # with the village name. The master matcher can safely use sectionName.
+    if re.match(r"^[0-9\u0966-\u096f]+\s*[-.:)]", village) or re.search(
+        r"(?:\u092a\u093e\u0938|\u092e\u0917\u0930\u0940)\s*[,،]?\s*", village
+    ):
+        village = ""
+
+    raw_pin = labeled_value(
+        [r"\u092a\u093f\u0928\s*\u0915\u094b\u0921", r"pin\s*code"], numeric=True
+    )
+    # Header OCR is only a suggestion. A six-digit hallucination can still look
+    # structurally valid, so the verified PIN is supplied by the location master.
+    pin_code = ""
+
     return {
         "assemblyNumber": normalize_assembly_number(assembly.group(1)) if assembly else "",
         "assemblyName": tidy_name(assembly.group(2)) if assembly else "",
@@ -565,13 +1130,14 @@ def parse_header_numbers(text):
         "sectionNumber": section_number,
         "sectionName": section_name,
         "sectionMap": section_map,
-        "village": labeled_value([r"\u0917\u094d\u0930\u093e\u092e", r"\u0917\u093e\u0901\u0935", r"\u0917\u093e\u0902\u0935", r"village"]),
+        "village": village,
         "gramPanchayat": labeled_value([r"\u0917\u094d\u0930\u093e\u092e\s*\u092a\u0902\u091a\u093e\u092f\u0924", r"gram\s*panchayat"]),
         "postOffice": labeled_value([r"\u0921\u093e\u0915\s*\u0918\u0930", r"\u0921\u093e\u0915\u0918\u0930", r"\u092a\u094b\u0938\u094d\u091f\s*\u0911\u092b\u093f\u0938", r"post\s*office"]),
         "policeStation": labeled_value([r"\u092a\u0941\u0932\u093f\u0938\s*\u0925\u093e\u0928\u093e", r"\u0925\u093e\u0928\u093e", r"police\s*station"]),
         "tehsil": labeled_value([r"\u0924\u0939\u0938\u0940\u0932", r"tehsil"]),
         "district": labeled_value([r"\u091c\u093f\u0932\u093e", r"district"]),
-        "pinCode": labeled_value([r"\u092a\u093f\u0928\s*\u0915\u094b\u0921", r"pin\s*code"], numeric=True)
+        "pinCode": pin_code,
+        "rawPinCode": raw_pin,
     }
 
 
@@ -597,12 +1163,12 @@ def main():
         # Electoral-roll PDFs use the first scanned page as a location/master
         # sheet. Read the larger header area but never treat it as voter cards.
         if page_no == master_page:
-            return read_header(page, is_voter_page=False), []
+            return read_header(page, is_voter_page=False), [], read_fixed_header(page, is_voter_page=False)
         # Cover/index pages must not create empty or duplicate voter records.
         if page_no in skip_pages:
-            return "", []
+            return "", [], {}
         header = read_header(page, is_voter_page=True)
-        return header, process_page(page, output_dir, page_no)
+        return header, process_page(page, output_dir, page_no), read_fixed_header(page, is_voter_page=True)
 
     page_bundles = []
     for item in zip(page_numbers, pages):
@@ -611,7 +1177,30 @@ def main():
 
     headers = [bundle[0] for bundle in page_bundles]
     page_records = [bundle[1] for bundle in page_bundles]
-    page_headers = [parse_header_numbers(header) for header in headers]
+    fixed_headers = [bundle[2] for bundle in page_bundles]
+    page_headers = []
+    for index, (header_text, fixed_header) in enumerate(zip(headers, fixed_headers)):
+        parsed_header = parse_header_numbers(header_text)
+        if page_numbers[index] == master_page:
+            parsed_header["sectionNumber"] = ""
+            parsed_header["sectionName"] = ""
+        parsed_header.update(fixed_header)
+        page_headers.append(parsed_header)
+
+    master_context_fields = (
+        "assemblyNumber", "assemblyName", "partNumber", "partName",
+        "postOffice", "policeStation", "tehsil", "district",
+        "gramPanchayat", "village", "pinCode",
+    )
+    master_header = next(
+        (page_headers[index] for index, number in enumerate(page_numbers) if number == master_page),
+        {},
+    )
+    master_context = {
+        key: master_header[key]
+        for key in master_context_fields
+        if master_header.get(key)
+    }
 
     doc_section_map = {}
     for ph in page_headers:
@@ -625,7 +1214,10 @@ def main():
             continue
         raw_header = page_headers[index]
         page_sec_map = {**doc_section_map, **(raw_header.get("sectionMap") or {})}
-        page_header = {key: value for key, value in raw_header.items() if value and key != "sectionMap"}
+        page_header = {
+            **master_context,
+            **{key: value for key, value in raw_header.items() if value and key != "sectionMap"},
+        }
 
         for record in result:
             # Keep card-level values when OCR found them. The page header is only a fallback.
@@ -641,8 +1233,41 @@ def main():
                 merged["sectionName"] = list(page_sec_map.values())[0]
             records.append(merged)
 
+    # Recover serials across the whole document, not from the physical page
+    # number. Voter pages may contain fewer than 30 cards and OCR may retain
+    # only a suffix (106 -> 06). Four independent full serials establish the
+    # global serial-minus-record-position offset. Partial-page callers may
+    # provide the last confirmed serial explicitly.
+    previous_serial = payload.get("previousVoterSerial")
+    global_offset = None
+    if str(previous_serial or "").isdigit():
+        global_offset = int(previous_serial)
+    else:
+        offsets = {}
+        for position, record in enumerate(records, start=1):
+            raw = str(record.get("voterSerial") or "")
+            if raw.isdigit() and int(raw) >= position:
+                offset = int(raw) - position
+                offsets[offset] = offsets.get(offset, 0) + 1
+        if offsets:
+            candidate, support = max(offsets.items(), key=lambda item: item[1])
+            if support >= 4:
+                global_offset = candidate
+    if global_offset is not None:
+        for position, record in enumerate(records, start=1):
+            expected = str(global_offset + position)
+            current = str(record.get("voterSerial") or "")
+            if current != expected:
+                record["rawVoterSerial"] = current
+            record["voterSerial"] = expected
+            record["voterSerialConfidence"] = 95
+
     header_text = "\n".join(headers[:3])
     doc_header = parse_header_numbers(header_text)
+    for fixed_header in fixed_headers:
+        for key, value in fixed_header.items():
+            if value and (key not in doc_header or not doc_header[key] or key in ("assemblyNumber", "partNumber", "sectionNumber", "sectionName")):
+                doc_header[key] = value
     doc_header["sectionMap"] = doc_section_map
 
     print(json.dumps({

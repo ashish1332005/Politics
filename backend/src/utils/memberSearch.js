@@ -1,4 +1,4 @@
-const SEARCH_VERSION = 7;
+const SEARCH_VERSION = 8;
 const SEARCH_SOURCE_FIELDS = [
   'name',
   'surname',
@@ -193,6 +193,8 @@ const fieldSearchData = (member) => ({
     ...deletionKeys(member?.mobile, { digitsOnly: true }),
     ...deletionKeys(member?.altMobile, { digitsOnly: true }),
   ])],
+  searchVillageKeys: deletionKeys(member?.village),
+  searchPinKeys: deletionKeys(member?.pinCode, { digitsOnly: true, includePhonetic: false }),
 });
 
 const buildMemberSearchData = (member) => {
@@ -299,6 +301,8 @@ const FIELD_SEARCH_FIELDS = {
   epic: ['voterId'],
   house: ['houseNumber'],
   mobile: ['mobile', 'altMobile'],
+  village: ['village'],
+  pin: ['pinCode'],
 };
 
 const FIELD_SEARCH_KEY_FIELDS = {
@@ -307,11 +311,17 @@ const FIELD_SEARCH_KEY_FIELDS = {
   epic: 'searchEpicKeys',
   house: 'searchHouseKeys',
   mobile: 'searchMobileKeys',
+  village: 'searchVillageKeys',
+  pin: 'searchPinKeys',
 };
 
 const fieldRegexConditions = (mode, token) => {
   const fields = FIELD_SEARCH_FIELDS[mode];
   if (!fields) return null;
+  if (mode === 'pin') {
+    const pin = compactDigits(token);
+    return pin ? [{ pinCode: new RegExp('^' + escapeRegex(pin) + '$', 'i') }] : [];
+  }
   if (mode === 'house') {
     const house = normalizeSearchValue(token);
     return house ? [{ houseNumber: new RegExp('^' + escapeRegex(house) + '$', 'i') }] : [];
@@ -335,11 +345,11 @@ const fieldRegexConditions = (mode, token) => {
 const buildStrictFieldSearchConditions = (query, mode) => {
   const cleanMode = String(mode || '').trim();
   if (!FIELD_SEARCH_FIELDS[cleanMode]) return buildSearchConditions(query);
-  const tokens = ['epic', 'house', 'mobile'].includes(cleanMode)
+  const tokens = ['epic', 'house', 'mobile', 'pin'].includes(cleanMode)
     ? [String(query || '').trim()].filter(Boolean)
     : searchTokens(query);
   return tokens.map((token) => {
-    const digitsOnly = cleanMode === 'mobile';
+    const digitsOnly = cleanMode === 'mobile' || cleanMode === 'pin';
     const value = cleanMode === 'epic' ? canonicalEpic(token) : token;
     const normalized = digitsOnly ? compactDigits(value) : normalizeSearchValue(value);
     const compact = digitsOnly ? normalized : compactIdentifier(value).toLowerCase();
@@ -370,11 +380,11 @@ const buildStrictFieldSearchConditions = (query, mode) => {
 const buildFieldSearchConditions = (query, mode) => {
   const cleanMode = String(mode || '').trim();
   if (!FIELD_SEARCH_FIELDS[cleanMode]) return buildSearchConditions(query);
-  const tokens = ['epic', 'house', 'mobile'].includes(cleanMode)
+  const tokens = ['epic', 'house', 'mobile', 'pin'].includes(cleanMode)
     ? [String(query || '').trim()].filter(Boolean)
     : searchTokens(query);
   return tokens.map((token) => {
-    const digitsOnly = cleanMode === 'mobile';
+    const digitsOnly = cleanMode === 'mobile' || cleanMode === 'pin';
     const fuzzyKeys = deletionKeys(
       cleanMode === 'epic' ? canonicalEpic(token) : token,
       { digitsOnly, includePhonetic: cleanMode !== 'epic' },

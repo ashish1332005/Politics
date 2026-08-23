@@ -32,6 +32,7 @@ class Api {
   String? token;
   Map<String, dynamic>? user;
   final ValueNotifier<int> dataVersion = ValueNotifier<int>(0);
+  final ValueNotifier<int> authVersion = ValueNotifier<int>(0);
 
   static const _tokenKey = 'auth_token_v1';
   static const _userKey = 'auth_user_v1';
@@ -72,6 +73,14 @@ class Api {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_tokenKey);
     await prefs.remove(_userKey);
+  }
+
+  Future<Never> _expireSession() async {
+    await _clearSession();
+    authVersion.value++;
+    throw const NetworkRequestException(
+      'आपका सत्र समाप्त हो गया है। कृपया दोबारा लॉगिन करें।',
+    );
   }
 
   Map<String, String> get headers => {
@@ -152,6 +161,7 @@ class Api {
 
   Future<dynamic> _send(Future<http.Response> future) async {
     final res = await future;
+    if (res.statusCode == 401) return _expireSession();
     if (res.statusCode == 502 ||
         res.statusCode == 503 ||
         res.statusCode == 504) {
@@ -172,8 +182,9 @@ class Api {
           0, compactPreview.length > 80 ? 80 : compactPreview.length);
       if (res.body.trimLeft().startsWith('<!DOCTYPE html') ||
           res.body.trimLeft().startsWith('<html')) {
-        throw Exception(
-            'सर्वर ने गलत उत्तर भेजा है। सेवा कुछ समय के लिए बंद या दोबारा शुरू हो रही हो सकती है। API: $baseUrl। विवरण: $preview');
+        throw const NetworkRequestException(
+          'सर्वर अभी शुरू या reconnect हो रहा है। ऐप अपने आप दोबारा जांच करेगा।',
+        );
       }
       throw Exception(
           'सर्वर से सही उत्तर नहीं मिला। $baseUrl पर सेवा की स्थिति जांचें। विवरण: $preview');
@@ -285,6 +296,7 @@ class Api {
     }
     final uri = Uri.parse('$baseUrl$path').replace(queryParameters: clean);
     final res = await _withNetworkRetry(() => http.get(uri, headers: headers));
+    if (res.statusCode == 401) return _expireSession();
     if (res.statusCode >= 400) {
       final contentType = res.headers['content-type'] ?? '';
       if (contentType.contains('application/json') ||
@@ -443,10 +455,31 @@ class Api {
       throw Exception(
           'PDF could not be read completely. Please select it again.');
     }
-    return post('/api/import/members/pdf/chunks/$uploadId/complete', {
-      'filename': filename,
-      'uploadId': uploadId,
-    });
+    try {
+      return await post('/api/import/members/pdf/chunks/$uploadId/complete', {
+        'filename': filename,
+        'uploadId': uploadId,
+      });
+    } catch (error) {
+      if (!isTemporaryFailure(error)) rethrow;
+      await Future.delayed(const Duration(seconds: 2));
+      try {
+        final progress = await get('/api/import/status/$uploadId');
+        if (progress['status'] == 'uploading') {
+          return await post(
+            '/api/import/members/pdf/chunks/$uploadId/complete',
+            {'filename': filename, 'uploadId': uploadId},
+          );
+        }
+      } catch (statusError) {
+        if (!isTemporaryFailure(statusError)) rethrow;
+      }
+      return {
+        'processing': true,
+        'uploadId': uploadId,
+        'message': 'Upload received; checking server processing status.',
+      };
+    }
   }
 
   http.MultipartFile _trackMultipartProgress(

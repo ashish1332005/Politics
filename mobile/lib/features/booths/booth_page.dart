@@ -7,6 +7,8 @@ import '../../core/theme.dart';
 import '../../layout/app_layout.dart';
 import '../../widgets/common.dart';
 import '../../widgets/mobile_components.dart';
+import '../../widgets/voter_phonebook.dart';
+import '../voters/voter_management_page.dart';
 
 class BoothPage extends StatefulWidget {
   const BoothPage({super.key});
@@ -48,6 +50,7 @@ class _BoothPageState extends State<BoothPage> {
                 .map((item) => Map<String, dynamic>.from(item))
                 .where((user) =>
                     user['role'] == 'booth' &&
+                    user['active'] != false &&
                     boothIds.contains(_assignedBoothId(user)))
                 .toList();
             final query = search.text.toLowerCase().trim();
@@ -63,27 +66,72 @@ class _BoothPageState extends State<BoothPage> {
                 managers.where((user) => user['active'] != false).length;
             final voterCount = managers.fold<int>(
                 0, (sum, user) => sum + _boothStat(user, 'boothVoterCount'));
+            final compact = MediaQuery.sizeOf(context).width < 600;
             return AppPage(children: [
-              PremiumFeatureHero(
-                title: 'बूथ प्रबंधन',
-                subtitle:
-                    'बूथ की जानकारी, ward mapping और address एक जगह संभालें।',
-                icon: Icons.how_to_vote_rounded,
-                badges: const ['Ward linked', 'Organized', 'Secure'],
-                action: FilledButton.icon(
-                  onPressed: () => _openForm(),
-                  icon: const Icon(Icons.add_rounded),
-                  label: const Text('नया बूथ'),
+              if (compact)
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: softBlue,
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: const Color(0xffcfe0fb)),
+                  ),
+                  child: Row(children: [
+                    const CircleAvatar(
+                      radius: 24,
+                      backgroundColor: blue,
+                      foregroundColor: Colors.white,
+                      child: Icon(Icons.how_to_vote_rounded),
+                    ),
+                    const SizedBox(width: 11),
+                    const Expanded(
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('बूथ प्रबंधन',
+                                style: TextStyle(
+                                    color: navy,
+                                    fontSize: 19,
+                                    fontWeight: FontWeight.w900)),
+                            Text('बूथ, manager और voter mapping',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(color: muted, fontSize: 12)),
+                          ]),
+                    ),
+                    IconButton.filled(
+                      tooltip: 'नया बूथ',
+                      onPressed: () => _openForm(),
+                      icon: const Icon(Icons.add_rounded),
+                    ),
+                  ]),
+                )
+              else
+                PremiumFeatureHero(
+                  title: 'बूथ प्रबंधन',
+                  subtitle:
+                      'बूथ की जानकारी, ward mapping और address एक जगह संभालें।',
+                  icon: Icons.how_to_vote_rounded,
+                  badges: const ['Ward linked', 'Organized', 'Secure'],
+                  action: FilledButton.icon(
+                    onPressed: () => _openForm(),
+                    icon: const Icon(Icons.add_rounded),
+                    label: const Text('नया बूथ'),
+                  ),
                 ),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(children: [
+                  _BoothMetric('कुल बूथ', booths.length,
+                      Icons.how_to_vote_rounded, blue),
+                  const SizedBox(width: 8),
+                  _BoothMetric('Active manager', activeManagers,
+                      Icons.verified_user_rounded, green),
+                  const SizedBox(width: 8),
+                  _BoothMetric('Mapped voters', voterCount,
+                      Icons.groups_rounded, purple),
+                ]),
               ),
-              Wrap(spacing: 10, runSpacing: 10, children: [
-                _BoothMetric(
-                    'कुल बूथ', booths.length, Icons.how_to_vote_rounded, blue),
-                _BoothMetric('Active manager', activeManagers,
-                    Icons.verified_user_rounded, green),
-                _BoothMetric(
-                    'Mapped voters', voterCount, Icons.groups_rounded, purple),
-              ]),
               const SizedBox(height: 4),
               TextField(
                 controller: search,
@@ -336,7 +384,7 @@ class _BoothPageState extends State<BoothPage> {
                 itemBuilder: (_, index) {
                   final voter = voters[index];
                   return ListTile(
-                    leading: CircleAvatar(child: Text('${index + 1}')),
+                    leading: VoterAvatar(voter: voter, size: 48),
                     title: Text('${voter['name'] ?? '-'}',
                         style: const TextStyle(fontWeight: FontWeight.w800)),
                     subtitle: Text([
@@ -346,6 +394,15 @@ class _BoothPageState extends State<BoothPage> {
                         'EPIC: ${voter['voterId']}',
                     ].join(' · ')),
                     trailing: Text('${voter['houseNumber'] ?? ''}'),
+                    onTap: () => Navigator.push(
+                      dialogContext,
+                      MaterialPageRoute(
+                        builder: (_) => VoterDetailPage(
+                          voter: voter,
+                          onChanged: () {},
+                        ),
+                      ),
+                    ),
                   );
                 },
               );
@@ -393,9 +450,10 @@ class _BoothPageState extends State<BoothPage> {
             .showSnackBar(const SnackBar(content: Text('Booth deleted')));
       }
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text(error.toString().replaceFirst('Exception: ', ''))));
+      }
     }
   }
 
@@ -687,8 +745,8 @@ class _BoothMetric extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        width: 210,
-        padding: const EdgeInsets.all(14),
+        width: 160,
+        padding: const EdgeInsets.all(11),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(18),

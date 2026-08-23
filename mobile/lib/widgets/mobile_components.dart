@@ -720,6 +720,52 @@ class _DonutPainter extends CustomPainter {
       oldDelegate.values != values;
 }
 
+class PartyPreferenceChip extends StatelessWidget {
+  const PartyPreferenceChip({super.key, required this.value, this.size = 30});
+
+  final String value;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = switch (value) {
+      'congress' => 'Congress',
+      'bjp' => 'BJP',
+      'nota' => 'NOTA',
+      'other' => 'अन्य पार्टी',
+      _ => 'पार्टी तय नहीं',
+    };
+    final asset = switch (value) {
+      'congress' => 'assets/party/congress.png',
+      'bjp' => 'assets/party/bjp.png',
+      'nota' => 'assets/party/nota.png',
+      _ => null,
+    };
+    final mark = asset == null
+        ? Icon(
+            value == 'other'
+                ? Icons.how_to_vote_outlined
+                : Icons.help_outline_rounded,
+            size: size,
+            color: value == 'other' ? purple : muted,
+          )
+        : Image.asset(
+            asset,
+            width: size,
+            height: size,
+            fit: BoxFit.contain,
+            filterQuality: FilterQuality.medium,
+          );
+    return Tooltip(
+      message: label,
+      child: Semantics(
+        label: label,
+        image: true,
+        child: SizedBox(width: size, height: size, child: mark),
+      ),
+    );
+  }
+}
 class SupportChip extends StatelessWidget {
   const SupportChip({super.key, required this.value});
   final String value;
@@ -727,18 +773,43 @@ class SupportChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final config = switch (value) {
-      'supporter' => ('कांग्रेस समर्थक', green, const Color(0xffeaf8f0)),
-      'opposite' => ('विपक्ष समर्थक', orange, const Color(0xfffff3e7)),
-      'neutral' => ('तटस्थ', purple, const Color(0xfff1ecff)),
-      _ => ('अनिर्णीत', rose, const Color(0xffffedf1)),
+      'supporter' => (
+          Icons.star_rounded,
+          green,
+          const Color(0xffeaf8f0),
+          'समर्थक'
+        ),
+      'opposite' => (
+          Icons.circle_rounded,
+          rose,
+          const Color(0xffffedf1),
+          'विरोधी'
+        ),
+      'neutral' => (
+          Icons.square_rounded,
+          orange,
+          const Color(0xfffff3e7),
+          'तटस्थ'
+        ),
+      _ => (
+          Icons.change_history_rounded,
+          rose,
+          const Color(0xffffedf1),
+          'अनिर्णीत'
+        ),
     };
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-          color: config.$3, borderRadius: BorderRadius.circular(20)),
-      child: Text(config.$1,
-          style: TextStyle(
-              color: config.$2, fontSize: 11, fontWeight: FontWeight.w800)),
+    return Semantics(
+      label: config.$4,
+      child: Container(
+        width: 32,
+        height: 32,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: config.$3,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(config.$1, color: config.$2, size: 20),
+      ),
     );
   }
 }

@@ -45,6 +45,9 @@ exports.dashboard = async (req, res, next) => {
       missingMobile, missingHouseNumber, createdToday, updatedToday,
       villageDistribution,
       assembly: assemblies[0] || null,
+      assignedBooth: req.currentUser.role === 'booth'
+        ? req.currentUser.assignedBooth || null
+        : null,
     });
   } catch (e) { next(e); }
 };

@@ -8,8 +8,6 @@ const familyScope = (user, filter = {}) => {
   return filter;
 };
 
-const AUTO_FAMILY_MAX_MEMBERS = Math.max(2, Number(process.env.AUTO_FAMILY_MAX_MEMBERS || 15));
-
 const normalizeHouseNumber = (value) => String(value || '')
   .trim()
   .replace(/[०-९]/g, (digit) => String('०१२३४५६७८९'.indexOf(digit)))
@@ -25,19 +23,6 @@ const familyGroupingKey = (member) => {
   return `${member.booth || ''}:${section}:${houseNumber}`;
 };
 
-const legacyAutoFilter = (scope) => ({
-  ...scope,
-  $or: [
-    { source: 'auto' },
-    {
-      source: { $exists: false },
-      politicalStatus: 'undecided',
-      $and: [
-        { $or: [{ remarks: '' }, { remarks: null }, { remarks: { $exists: false } }] },
-      ],
-    },
-  ],
-});
 exports.list = async (req, res, next) => {
   try {
     const { q, booth, ward, houseNumber, sectionName } = req.query;
@@ -144,17 +129,10 @@ exports.rebuildFromMembers = async (req, res, next) => {
   try {
     const memberFilter = applyMemberScope(req.currentUser, {});
     const familyFilter = familyScope(req.currentUser, {});
-    const [members, manualFamilies] = await Promise.all([
-      Member.find(memberFilter),
-      Family.find({ ...familyFilter, source: 'manual' }).select('members').lean(),
-    ]);
-    const manuallyAssigned = new Set(
-      manualFamilies.flatMap((family) => (family.members || []).map(String)),
-    );
+    const members = await Member.find(memberFilter);
     const groups = new Map();
     let skippedMissingHouse = 0;
     for (const member of members) {
-      if (manuallyAssigned.has(String(member._id))) continue;
       const key = familyGroupingKey(member);
       if (!key) {
         skippedMissingHouse += 1;
@@ -165,14 +143,7 @@ exports.rebuildFromMembers = async (req, res, next) => {
     }
 
     const generated = [];
-    let reviewGroups = 0;
-    let reviewMembers = 0;
     for (const [groupingKey, group] of groups) {
-      if (group.length > AUTO_FAMILY_MAX_MEMBERS) {
-        reviewGroups += 1;
-        reviewMembers += group.length;
-        continue;
-      }
       const head = [...group].sort((a, b) => (Number(b.age) || 0) - (Number(a.age) || 0))[0];
       generated.push({
         source: 'auto',
@@ -193,21 +164,17 @@ exports.rebuildFromMembers = async (req, res, next) => {
 
     const session = await Family.startSession();
     await session.withTransaction(async () => {
-      await Family.deleteMany(legacyAutoFilter(familyFilter), { session });
+      await Family.deleteMany(familyFilter, { session });
       if (generated.length) await Family.insertMany(generated, { session });
     });
     await session.endSession();
 
     res.json({
-      families: generated.length + manualFamilies.length,
+      families: generated.length,
       autoFamilies: generated.length,
-      manualFamilies: manualFamilies.length,
-      assignedMembers: generated.reduce((sum, family) => sum + family.members.length, 0)
-        + manuallyAssigned.size,
+      removedFamilies: true,
+      assignedMembers: generated.reduce((sum, family) => sum + family.members.length, 0),
       skippedMissingHouse,
-      reviewGroups,
-      reviewMembers,
-      maxAutoFamilySize: AUTO_FAMILY_MAX_MEMBERS,
     });
   } catch (e) { next(e); }
 };

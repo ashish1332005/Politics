@@ -50,11 +50,13 @@ class MobileHeader extends StatelessWidget {
     this.title = 'मतदाता फ़ोन बुक',
     this.onSearch,
     this.onLogout,
+    this.showNotifications = true,
   });
 
   final String title;
   final VoidCallback? onSearch;
   final VoidCallback? onLogout;
+  final bool showNotifications;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -138,64 +140,65 @@ class MobileHeader extends StatelessWidget {
                       icon: const Icon(Icons.search_rounded, color: navy),
                     ),
                   ),
-                action(
-                  child: FutureBuilder<Map<String, dynamic>>(
-                    future: api.get('/api/notifications/today'),
-                    builder: (context, snapshot) {
-                      final count = snapshot.data?['count'] ?? 0;
-                      return Stack(clipBehavior: Clip.none, children: [
-                        IconButton.filledTonal(
-                          key: const ValueKey('header-notifications'),
-                          tooltip: 'आज की सूचनाएँ',
-                          visualDensity: VisualDensity.compact,
-                          style: IconButton.styleFrom(
-                            backgroundColor: softBlue,
-                          ),
-                          onPressed: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const CelebrationsPage(),
+                if (showNotifications)
+                  action(
+                    child: FutureBuilder<Map<String, dynamic>>(
+                      future: api.get('/api/notifications/today'),
+                      builder: (context, snapshot) {
+                        final count = snapshot.data?['count'] ?? 0;
+                        return Stack(clipBehavior: Clip.none, children: [
+                          IconButton.filledTonal(
+                            key: const ValueKey('header-notifications'),
+                            tooltip: 'आज की सूचनाएँ',
+                            visualDensity: VisualDensity.compact,
+                            style: IconButton.styleFrom(
+                              backgroundColor: softBlue,
                             ),
-                          ),
-                          icon: const Icon(
-                            Icons.notifications_none_rounded,
-                            color: navy,
-                            size: 22,
-                          ),
-                        ),
-                        if (count > 0)
-                          Positioned(
-                            right: 0,
-                            top: -2,
-                            child: Container(
-                              constraints: const BoxConstraints(minWidth: 18),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 4,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: rose,
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
-                                  color: Colors.white,
-                                  width: 1.5,
-                                ),
-                              ),
-                              child: Text(
-                                count > 99 ? '99+' : '$count',
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 8,
-                                  fontWeight: FontWeight.w900,
-                                ),
+                            onPressed: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const CelebrationsPage(),
                               ),
                             ),
+                            icon: const Icon(
+                              Icons.notifications_none_rounded,
+                              color: navy,
+                              size: 22,
+                            ),
                           ),
-                      ]);
-                    },
+                          if (count > 0)
+                            Positioned(
+                              right: 0,
+                              top: -2,
+                              child: Container(
+                                constraints: const BoxConstraints(minWidth: 18),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 4,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: rose,
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: Colors.white,
+                                    width: 1.5,
+                                  ),
+                                ),
+                                child: Text(
+                                  count > 99 ? '99+' : '$count',
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 8,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ]);
+                      },
+                    ),
                   ),
-                ),
                 if (onLogout != null)
                   action(
                     child: PopupMenuButton<String>(

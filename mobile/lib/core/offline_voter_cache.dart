@@ -178,12 +178,19 @@ class OfflineVoterCache {
         final text = _normalize(scopedText.join(' '));
         if (!queryTokens.every(text.contains)) return false;
       }
+      if (query['favorite'] == 'true' && item['isFavorite'] != true) {
+        return false;
+      }
       for (final key in [
         'supportLevel',
+        'partyPreference',
         'gender',
         'verificationStatus',
+        'profileCompletionStatus',
         'assemblyNumber',
         'partNumber',
+        'voterSerial',
+        'pinCode',
         'sectionNumber',
         'sectionName',
         'location',
@@ -200,6 +207,10 @@ class OfflineVoterCache {
         final expected = query[key];
         if (expected != null && expected.isNotEmpty) {
           final actual = '${item[key] ?? ''}'.toLowerCase();
+          if (key == 'pinCode' || key == 'voterSerial') {
+            if (_normalize(actual) != _normalize(expected)) return false;
+            continue;
+          }
           if (!actual.contains(expected.toLowerCase())) return false;
         }
       }

@@ -418,6 +418,14 @@ class _PhoneQuickAction extends StatelessWidget {
       );
 }
 
+String _assignedBoothLabel(Map<String, dynamic> booth) {
+  final name = '${booth['name'] ?? ''}'.trim();
+  final number = '${booth['number'] ?? ''}'.trim();
+  if (name.isNotEmpty && name != '-') return 'भाग: $name';
+  if (number.isNotEmpty) return 'भाग: $number';
+  return 'निर्धारित भाग';
+}
+
 class _MetricData {
   const _MetricData(
       this.label, this.value, this.icon, this.color, this.caption);
@@ -437,7 +445,9 @@ class _BoothManagerHome extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final user = api.user ?? const <String, dynamic>{};
-    final booth = Map<String, dynamic>.from(user['assignedBooth'] ?? {});
+    // Prefer fresh API data so a renamed booth is visible without logging in again.
+    final booth = Map<String, dynamic>.from(
+        data['assignedBooth'] ?? user['assignedBooth'] ?? {});
     final total = _number(data['members']);
     final families = _number(data['families']);
     final today = _number(data['createdToday']);
@@ -484,8 +494,7 @@ class _BoothManagerHome extends StatelessWidget {
                               color: Colors.white,
                               fontSize: 18,
                               fontWeight: FontWeight.w900)),
-                      Text(
-                          'बूथ ${booth['number'] ?? '-'} · ${booth['name'] ?? 'निर्धारित बूथ'}',
+                      Text(_assignedBoothLabel(booth),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
@@ -544,8 +553,8 @@ class _BoothManagerHome extends StatelessWidget {
         _ActionGrid(actions: [
           _ActionData(Icons.search_rounded, 'मतदाता खोजें',
               'नाम, EPIC, मोबाइल या घर से खोजें', blue, () => onNavigate(1)),
-          _ActionData(Icons.person_add_alt_1_rounded, 'मतदाता जोड़ें',
-              'अपने बूथ में नया मतदाता जोड़ें', green, () => onNavigate(1)),
+          _ActionData(Icons.assignment_turned_in_outlined, 'जानकारी पूरी करें',
+              'बाकी voter survey जानकारी भरें', green, () => onNavigate(1)),
           _ActionData(Icons.print_rounded, 'सूची प्रिंट करें',
               'चुने हुए मतदाताओं की जानकारी प्रिंट करें', orange, () {
             Navigator.push(

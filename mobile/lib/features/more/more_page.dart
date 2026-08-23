@@ -5,10 +5,12 @@ import '../../core/theme.dart';
 import '../../layout/app_layout.dart';
 import '../../widgets/mobile_components.dart';
 import '../activity/activity_page.dart';
+import '../areas/area_directory_page.dart';
+import '../areas/master_data_import_page.dart';
 import '../booths/booth_page.dart';
 import '../messages/bulk_message_page.dart';
 import '../reminders/reminder_dashboard_page.dart';
-import '../uploads/import_review_page.dart';
+import '../uploads/admin_review_hub_page.dart';
 import '../reports/reports_page.dart';
 import '../reports/political_dashboard_page.dart';
 import '../reports/configurable_print_page.dart';
@@ -24,14 +26,32 @@ class MorePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final importOptions = <_Option>[
-      _Option('PDF / Excel अपलोड', 'मतदाता सूची से एक साथ रिकॉर्ड जोड़ें',
+      _Option(
+          'गाँव एवं पंचायत मास्टर',
+          'गाँव, पंचायत, PIN, जनसंख्या, वार्ड और मतदाता देखें',
+          Icons.holiday_village_outlined,
+          green,
+          const AreaDirectoryPage()),
+      if (role == 'admin')
+        _Option(
+            'लोकेशन मास्टर आयात',
+            'पंचायत, गाँव, जनसंख्या, वार्ड और पिन कोड master में जोड़ें',
+            Icons.storage_rounded,
+            blue,
+            const MasterDataImportPage()),
+      if (role == 'admin')
+  _Option('PDF / Excel अपलोड', 'मतदाता सूची से एक साथ रिकॉर्ड जोड़ें',
           Icons.cloud_upload_rounded, orange, const UploadPage()),
       if (role == 'admin')
         _Option('Excel का विस्तृत आयात', 'कॉलम मिलाएं और रिकॉर्ड पहले जांचें',
             Icons.rule_folder_rounded, green, const SmartExcelImportPage()),
       if (role == 'admin')
-        _Option('EPIC समीक्षा सूची', 'अधूरे या दोहराए गए EPIC रिकॉर्ड ठीक करें',
-            Icons.fact_check_rounded, purple, const ImportReviewPage()),
+        _Option(
+            'Admin Review',
+            'OCR, location और अधूरी survey जानकारी की pending queues देखें',
+            Icons.fact_check_rounded,
+            orange,
+            const AdminReviewHubPage()),
     ];
     final workOptions = <_Option>[
       _Option('विस्तृत प्रिंट', 'चुने हुए मतदाता और जानकारी प्रिंट करें',
@@ -260,7 +280,11 @@ class _StandalonePage extends StatelessWidget {
   final String title;
   final Widget child;
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context) {
+    if (child is AreaDirectoryPage || child is MasterDataImportPage) {
+      return child;
+    }
+    return Scaffold(
         appBar: AppBar(
           toolbarHeight: 64,
           title: Text(title),
@@ -300,6 +324,7 @@ class _StandalonePage extends StatelessWidget {
         ),
         body: child,
       );
+  }
 }
 
 class _Option {

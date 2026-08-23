@@ -16,6 +16,7 @@ const { normalizeEpic, isValidEpic } = require('../utils/epic');
 const { convertKrutiDevToUnicode } = require('../utils/legacyHindi');
 const { uploadFilePath } = require('../utils/uploadPath');
 const { persistLocalImage } = require('../utils/persistentMedia');
+const { findBestLocationMatch } = require('../utils/locationMerge');
 const importProgress = new Map();
 const progressWrites = new Map();
 
@@ -415,6 +416,14 @@ const getOrCreateArea = async ({ name, type, parent = null, assemblyNumber = '',
     ? { parent, type, $or: [{ assemblyNumber: cleanAssemblyNumber }, { name: cleanName }] }
     : identityQuery;
   let area = await Area.findOne(query);
+  if (!area && type !== 'assembly') {
+    const candidates = await Area.find({ parent, type, active: true }).lean();
+    const fuzzy = findBestLocationMatch(cleanName, candidates, {
+      minScore: type === 'village' ? 0.84 : 0.88,
+      ambiguityMargin: 0.06,
+    });
+    if (fuzzy) area = await Area.findById(fuzzy.candidate._id);
+  }
   if (area) {
     area.active = true;
     if (cleanAssemblyNumber && !area.assemblyNumber) area.assemblyNumber = cleanAssemblyNumber;
@@ -472,63 +481,119 @@ const ensureAreaHierarchy = async (data, userId) => {
   return parent;
 };
 
-const areaMatchKey = (value) => cleanValue(value)
-  .toLowerCase()
-  .replace(/[ािीुूृेैोौंँः]/g, '')
-  .replace(/[^\u0900-\u097fa-z0-9]/g, '');
 const pdfAreaHierarchyCache = new Map();
-const enrichPdfAreaHierarchy = async (data, assemblyArea) => {
+const enrichPdfAreaHierarchy = async (data, hierarchyStart) => {
   const locationText = cleanValue([
+    data.village,
     data.sectionName,
     data.address,
     data.location,
-  ].filter(Boolean).join(' ')).toLowerCase();
-  if (!locationText || !assemblyArea) return assemblyArea;
-  const cacheKey = `${String(assemblyArea)}|${locationText}`;
+  ].filter(Boolean).join(' '));
+  if (!data.locationResolution) {
+    data.locationResolution = {
+      raw: {
+        tehsil: cleanValue(data.tehsil),
+        gramPanchayat: cleanValue(data.gramPanchayat),
+        village: cleanValue(data.village),
+        pinCode: cleanValue(data.pinCode),
+        sectionName: cleanValue(data.sectionName),
+      },
+      suggested: {},
+      status: 'unmatched',
+      confidence: 0,
+      matchedAlias: '',
+    };
+  }
+  if (!locationText || !hierarchyStart) return hierarchyStart;
+  const cacheKey = `${String(hierarchyStart)}|${cleanValue(data.gramPanchayat)}|${cleanValue(data.pinCode)}|${locationText}`;
   if (pdfAreaHierarchyCache.has(cacheKey)) {
     const cached = pdfAreaHierarchyCache.get(cacheKey);
     Object.assign(data, cached.fields);
+    data.locationResolution.suggested = {
+      tehsil: cached.fields.tehsil,
+      gramPanchayat: cached.fields.gramPanchayat,
+      village: cached.fields.village,
+      pinCode: cached.fields.pinCode,
+    };
+    data.locationResolution.status = 'suggested';
+    data.locationResolution.confidence = cached.fields.locationMatchConfidence;
+    data.locationResolution.matchedAlias = cached.fields.locationMatchedAlias;
+    data.locationResolution.reviewNote = cached.fields.locationReviewNote || '';
     return cached.area;
   }
 
-  const tehsils = await Area.find({
-    parent: assemblyArea,
-    type: 'tehsil',
-    active: true,
-  }).lean();
-  for (const tehsil of tehsils) {
-    const gramPanchayats = await Area.find({
-      parent: tehsil._id,
-      type: 'gram_panchayat',
-      active: true,
-    }).lean();
-    for (const gramPanchayat of gramPanchayats) {
-      const villages = await Area.find({
-        parent: gramPanchayat._id,
-        type: 'village',
-        active: true,
-      }).lean();
-      const locationKey = areaMatchKey(locationText);
-      const village = villages.find((entry) => {
-        const exactName = cleanValue(entry.name).toLowerCase();
-        const matchKey = areaMatchKey(entry.name);
-        return locationText.includes(exactName)
-          || (matchKey.length >= 2 && locationKey.includes(matchKey));
-      });
-      if (!village) continue;
-      data.tehsil = tehsil.name;
-      data.gramPanchayat = gramPanchayat.name;
-      data.village = village.name;
-      const fields = {
-        tehsil: data.tehsil,
-        gramPanchayat: data.gramPanchayat,
-        village: data.village,
-      };
-      pdfAreaHierarchyCache.set(cacheKey, { area: village._id, fields });
-      return village._id;
-    }
+  const start = await Area.findById(hierarchyStart).lean();
+  if (!start) return hierarchyStart;
+  let tehsils = [];
+  if (start.type === 'tehsil') tehsils = [start];
+  else if (start.type === 'assembly') {
+    tehsils = await Area.find({ parent: start._id, type: 'tehsil', active: true }).lean();
+  } else {
+    const tehsil = start.type === 'gram_panchayat'
+      ? await Area.findById(start.parent).lean()
+      : null;
+    if (tehsil?.type === 'tehsil') tehsils = [tehsil];
   }
-  return assemblyArea;
+  if (!tehsils.length) return hierarchyStart;
+
+  let tehsil = tehsils.length === 1 ? tehsils[0] : null;
+  if (data.tehsil) {
+    tehsil = findBestLocationMatch(data.tehsil, tehsils, { minScore: 0.86 })?.candidate || tehsil;
+  }
+  if (!tehsil) return hierarchyStart;
+
+  const gramPanchayats = await Area.find({ parent: tehsil._id, type: 'gram_panchayat', active: true }).lean();
+  let gramPanchayat = null;
+  if (data.gramPanchayat) {
+    gramPanchayat = findBestLocationMatch(data.gramPanchayat, gramPanchayats)?.candidate || null;
+  }
+
+  const villageQuery = { type: 'village', active: true };
+  if (gramPanchayat) villageQuery.parent = gramPanchayat._id;
+  else villageQuery.parent = { $in: gramPanchayats.map((item) => item._id) };
+  const villages = await Area.find(villageQuery).lean();
+  const villageInput = cleanValue(data.village) || locationText;
+  const villageMatch = findBestLocationMatch(villageInput, villages, {
+    minScore: cleanValue(data.village) ? 0.82 : 0.88,
+    ambiguityMargin: 0.06,
+  });
+  if (!villageMatch) return hierarchyStart;
+  const village = villageMatch.candidate;
+  if (!gramPanchayat) {
+    gramPanchayat = gramPanchayats.find((item) => String(item._id) === String(village.parent));
+  }
+  if (!gramPanchayat) return hierarchyStart;
+
+  const rawPinCode = cleanValue(data.pinCode);
+  const masterPinCode = cleanValue(village.pinCode || gramPanchayat.pinCode);
+  data.tehsil = tehsil.name;
+  data.gramPanchayat = gramPanchayat.name;
+  data.village = village.name;
+  if (masterPinCode) data.pinCode = masterPinCode;
+  data.locationMatchConfidence = Math.round(villageMatch.score * 100);
+  data.locationResolution.suggested = {
+    tehsil: data.tehsil,
+    gramPanchayat: data.gramPanchayat,
+    village: data.village,
+    pinCode: data.pinCode,
+  };
+  data.locationResolution.status = 'suggested';
+  data.locationResolution.confidence = data.locationMatchConfidence;
+  data.locationResolution.matchedAlias = villageMatch.matchedValue || village.name;
+  if (rawPinCode && masterPinCode && rawPinCode !== masterPinCode) {
+    data.locationResolution.reviewNote = `PDF PIN ${rawPinCode}; master PIN ${masterPinCode}`;
+  }
+  const fields = {
+    tehsil: data.tehsil,
+    gramPanchayat: data.gramPanchayat,
+    village: data.village,
+    pinCode: data.pinCode,
+    locationMatchConfidence: data.locationMatchConfidence,
+    locationMatchedAlias: data.locationResolution.matchedAlias,
+    locationReviewNote: data.locationResolution.reviewNote || '',
+  };
+  pdfAreaHierarchyCache.set(cacheKey, { area: village._id, fields });
+  return village._id;
 };
 const assertReadablePdf = (filePath) => {
   const buffer = fs.readFileSync(filePath);
@@ -911,10 +976,19 @@ const parsePdfMembers = async (filePath, importFileName, onOcrProgress) => {
         address: [sectionName || header.assemblyName, cleanValue(record.houseNumber)].filter(Boolean).join(', '),
         location: sectionName || header.assemblyName || '',
         photo: record.photo,
+        cardImage: record.cardImage || '',
         rawText: record.rawText || record.text,
         ocrConfidence: record.confidence,
+        houseNumberConfidence: record.houseNumberConfidence,
+        locationMatchConfidence: record.locationMatchConfidence,
+        locationResolution: record.locationResolution,
+        ocrNeedsReview: Boolean(record.needsReview),
+        ocrReviewReasons: Array.isArray(record.reviewReasons) ? record.reviewReasons : [],
+        ocrValidationPassed: Boolean(record.validationPassed),
+        ocrFieldConfidence: record.fieldConfidence || {},
       };
-    });    const merged = new Map();
+    });
+    const merged = new Map();
     [...textLayer.members, ...ocrMembers].forEach((member, index) => {
       const epic = normalizeEpic(member.voterId);
       merged.set(epic || `review-${index}`, { ...member, voterId: epic || member.voterId });
@@ -952,8 +1026,17 @@ const parsePdfMembers = async (filePath, importFileName, onOcrProgress) => {
           address: [header.sectionName || header.assemblyName, cleanValue(record.houseNumber)].filter(Boolean).join(', '),
           location: header.sectionName || header.assemblyName || '',
           photo: record.photo,
+          cardImage: record.cardImage || '',
+        cardImage: record.cardImage || '',
           rawText: record.rawText || record.text,
           ocrConfidence: record.confidence,
+        houseNumberConfidence: record.houseNumberConfidence,
+        locationMatchConfidence: record.locationMatchConfidence,
+        locationResolution: record.locationResolution,
+        ocrNeedsReview: Boolean(record.needsReview),
+        ocrReviewReasons: Array.isArray(record.reviewReasons) ? record.reviewReasons : [],
+        ocrValidationPassed: Boolean(record.validationPassed),
+        ocrFieldConfidence: record.fieldConfidence || {},
         }]
         : parseHindiVoterRoll(record.text || record.rawText || '', header)
           .map((member) => ({ ...member, ...header, photo: record.photo }))
@@ -1326,6 +1409,16 @@ const runPdfImport = async ({ file, body, currentUser }, uploadId) => {
       }
 
       const itemArea = await enrichPdfAreaHierarchy(item, assemblyArea);
+      const locationNeedsReview = item.locationResolution?.status !== 'verified';
+      if (locationNeedsReview) {
+        item.ocrNeedsReview = true;
+        item.ocrReviewReasons = [...new Set([
+          ...(item.ocrReviewReasons || []),
+          item.locationResolution?.status === 'suggested'
+            ? 'location_match_review_required'
+            : 'location_unmatched',
+        ])];
+      }
       const existing = await Member.findOne({ voterId: item.voterId });
       if (existing) {
         // PDF/OCR is authoritative for roll-specific fields, but it must not
@@ -1364,12 +1457,35 @@ const runPdfImport = async ({ file, body, currentUser }, uploadId) => {
         existing.area = item.village ? itemArea : (existing.area || assemblyArea);
         assignNonEmptyFields(existing, item, ['tehsil', 'gramPanchayat', 'village', 'postOffice', 'policeStation', 'district', 'pinCode']);
         if (!existing.party && party?._id) existing.party = party._id;
+        existing.ocrConfidence = item.ocrConfidence;
+        existing.houseNumberConfidence = item.houseNumberConfidence;
+        existing.locationMatchConfidence = item.locationMatchConfidence;
+        if (item.locationResolution) {
+          const currentResolution = existing.locationResolution?.toObject?.() || existing.locationResolution || {};
+          const incomingResolution = item.locationResolution;
+          existing.locationResolution = {
+            ...currentResolution,
+            raw: currentResolution.raw?.village || currentResolution.raw?.sectionName
+              ? currentResolution.raw
+              : incomingResolution.raw,
+            suggested: incomingResolution.suggested,
+            confidence: incomingResolution.confidence,
+            matchedAlias: incomingResolution.matchedAlias,
+            reviewNote: incomingResolution.reviewNote || currentResolution.reviewNote || '',
+            status: currentResolution.status === 'verified' ? 'verified' : incomingResolution.status,
+          };
+        }
+        existing.ocrReviewReasons = item.ocrReviewReasons || [];
+        existing.ocrValidationPassed = Boolean(item.ocrValidationPassed);
+        existing.ocrFieldConfidence = item.ocrFieldConfidence || {};
+        if (item.ocrNeedsReview && existing.verificationStatus !== 'duplicate') existing.verificationStatus = 'needs_review';
         existing.updatedBy = currentUser._id;
         existing.sourceDocument = {
           type: 'pdf',
           file: `/uploads/${file.filename}`,
           rawText: item.rawText || parsed.text.slice(0, 1000),
           imageExtractionStatus: extractedImages.status,
+          ocrCardImage: item.cardImage || existing.sourceDocument?.ocrCardImage || '',
         };
         await existing.save();
         created.push(existing);
@@ -1412,7 +1528,14 @@ const runPdfImport = async ({ file, body, currentUser }, uploadId) => {
         party: party?._id,
         createdBy: currentUser._id,
         updatedBy: currentUser._id,
-        verificationStatus: duplicates.length ? 'duplicate' : 'pending',
+        ocrConfidence: item.ocrConfidence,
+        houseNumberConfidence: item.houseNumberConfidence,
+        locationMatchConfidence: item.locationMatchConfidence,
+        locationResolution: item.locationResolution,
+        ocrReviewReasons: item.ocrReviewReasons || [],
+        ocrValidationPassed: Boolean(item.ocrValidationPassed),
+        ocrFieldConfidence: item.ocrFieldConfidence || {},
+        verificationStatus: duplicates.length ? 'duplicate' : item.ocrNeedsReview ? 'needs_review' : 'pending',
         duplicateWarnings: duplicates.map((d) => ({
           field: d.voterId === item.voterId ? 'voterId' : d.mobile === item.mobile ? 'mobile' : 'address',
           member: d._id,
@@ -1423,6 +1546,7 @@ const runPdfImport = async ({ file, body, currentUser }, uploadId) => {
           file: `/uploads/${file.filename}`,
           rawText: item.rawText || parsed.text.slice(0, 1000),
           imageExtractionStatus: extractedImages.status,
+          ocrCardImage: item.cardImage || '',
         },
       });
       created.push(member);

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:speech_to_text/speech_to_text.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/api_client.dart';
@@ -7,6 +8,8 @@ import '../../core/theme.dart';
 import '../../layout/app_layout.dart';
 import '../../widgets/common.dart';
 import '../../widgets/mobile_components.dart';
+import '../../widgets/voter_phonebook.dart';
+import '../voters/voter_management_page.dart';
 
 class BoothUserPage extends StatefulWidget {
   const BoothUserPage({super.key});
@@ -18,6 +21,9 @@ class BoothUserPage extends StatefulWidget {
 class _BoothUserPageState extends State<BoothUserPage> {
   final boothSearch = TextEditingController();
   final voterSearch = TextEditingController();
+  final voterSectionKey = GlobalKey();
+  final voterSpeech = SpeechToText();
+  bool voterListening = false;
   String? selectedBoothId;
   String letter = '';
   int refreshKey = 0;
@@ -27,8 +33,48 @@ class _BoothUserPageState extends State<BoothUserPage> {
   @override
   void dispose() {
     boothSearch.dispose();
+    voterSpeech.stop();
     voterSearch.dispose();
     super.dispose();
+  }
+
+  Future<void> toggleVoterVoiceSearch() async {
+    if (voterListening) {
+      await voterSpeech.stop();
+      if (mounted) setState(() => voterListening = false);
+      return;
+    }
+    final available = await voterSpeech.initialize(
+      onStatus: (status) {
+        if (mounted && (status == 'done' || status == 'notListening')) {
+          setState(() => voterListening = false);
+        }
+      },
+      onError: (_) {
+        if (mounted) setState(() => voterListening = false);
+      },
+    );
+    if (!available) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('इस डिवाइस पर voice search उपलब्ध नहीं है।')));
+      }
+      return;
+    }
+    setState(() => voterListening = true);
+    await voterSpeech.listen(
+      listenOptions: SpeechListenOptions(
+        localeId: 'hi_IN',
+        listenMode: ListenMode.search,
+        partialResults: true,
+      ),
+      onResult: (result) {
+        voterSearch.text = result.recognizedWords;
+        voterSearch.selection =
+            TextSelection.collapsed(offset: voterSearch.text.length);
+        if (mounted) setState(() {});
+      },
+    );
   }
 
   @override
@@ -45,7 +91,10 @@ class _BoothUserPageState extends State<BoothUserPage> {
                 .toList();
             final heads = usersRaw
                 .whereType<Map>()
-                .where((item) => item['role'] == 'booth')
+                .where((item) =>
+                    item['role'] == 'booth' &&
+                    item['active'] != false &&
+                    (_idOf(item['assignedBooth']) ?? '').isNotEmpty)
                 .map((item) => Map<String, dynamic>.from(item))
                 .toList();
             if (selectedBoothId == null && booths.isNotEmpty) {
@@ -103,9 +152,12 @@ class _BoothUserPageState extends State<BoothUserPage> {
                           _idOf(user['assignedBooth']) == selectedBoothId)
                       .toList(),
                   voterSearch: voterSearch,
+                  voterSectionKey: voterSectionKey,
                   letter: letter,
                   onLetter: (value) => setState(() => letter = value),
                   onVoterSearch: () => setState(() {}),
+                  voterListening: voterListening,
+                  onVoterVoiceSearch: toggleVoterVoiceSearch,
                   onRefresh: refresh,
                   onAddManager: (candidate) => _openManagerForm(
                     booths: booths,
@@ -169,6 +221,8 @@ bool _hasMappedVoters(Map<String, dynamic> booth) {
 }
 
 String _boothDisplayName(Map<String, dynamic> booth) {
+  final updatedName = (booth['name'] ?? '').toString().trim();
+  if (updatedName.isNotEmpty && updatedName != '-') return updatedName;
   final villages = _stringList(booth['villages']);
   final locations = _stringList(booth['locationNames']);
   final village = villages.isNotEmpty
@@ -178,7 +232,7 @@ String _boothDisplayName(Map<String, dynamic> booth) {
           orElse: () => locations.isEmpty ? '' : locations.last,
         );
   final part = (booth['number'] ?? '').toString().trim();
-  if (village.isNotEmpty && part.isNotEmpty) return '$village · भाग $part';
+  if (village.isNotEmpty) return village;
   if (part.isNotEmpty) return 'भाग $part';
   return village.isNotEmpty ? village : 'बूथ';
 }
@@ -197,13 +251,33 @@ class _SummaryStrip extends StatelessWidget {
   final int voters;
 
   @override
-  Widget build(BuildContext context) =>
-      Wrap(spacing: 10, runSpacing: 10, children: [
-        _TinyMetric('Booths', booths, Icons.home_work_rounded, blue),
-        _TinyMetric('Managers', heads, Icons.supervisor_account_rounded, green),
-        _TinyMetric('Active', activeHeads, Icons.verified_user_rounded, orange),
-        _TinyMetric('Mapped voters', voters, Icons.how_to_vote_rounded, navy),
-      ]);
+  Widget build(BuildContext context) => LayoutBuilder(
+        builder: (context, constraints) {
+          final items = [
+            _TinyMetric('Booths', booths, Icons.home_work_rounded, blue),
+            _TinyMetric(
+                'Managers', heads, Icons.supervisor_account_rounded, green),
+            _TinyMetric(
+                'Active', activeHeads, Icons.verified_user_rounded, orange),
+            _TinyMetric(
+                'Mapped voters', voters, Icons.how_to_vote_rounded, navy),
+          ];
+          if (constraints.maxWidth < 600) {
+            return SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: items
+                    .map((item) => Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: item,
+                        ))
+                    .toList(),
+              ),
+            );
+          }
+          return Wrap(spacing: 10, runSpacing: 10, children: items);
+        },
+      );
 }
 
 class _TinyMetric extends StatelessWidget {
@@ -216,7 +290,7 @@ class _TinyMetric extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        width: 168,
+        width: 142,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
           color: Colors.white,
@@ -318,15 +392,9 @@ class _BoothFinder extends StatelessWidget {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Row(children: [
-                    SizedBox(
-                      width: 50,
-                      child: Text('#${booth['number'] ?? '-'}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                              color: selected ? blue : navy,
-                              fontWeight: FontWeight.w900)),
-                    ),
+                    Icon(Icons.how_to_vote_rounded,
+                        color: selected ? blue : navy, size: 24),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -362,9 +430,12 @@ class _BoothWorkspace extends StatelessWidget {
     required this.booths,
     required this.heads,
     required this.voterSearch,
+    required this.voterSectionKey,
     required this.letter,
     required this.onLetter,
     required this.onVoterSearch,
+    required this.voterListening,
+    required this.onVoterVoiceSearch,
     required this.onRefresh,
     required this.onAddManager,
     required this.onManualAdd,
@@ -374,9 +445,12 @@ class _BoothWorkspace extends StatelessWidget {
   final List<Map<String, dynamic>> booths;
   final List<Map<String, dynamic>> heads;
   final TextEditingController voterSearch;
+  final GlobalKey voterSectionKey;
   final String letter;
   final ValueChanged<String> onLetter;
   final VoidCallback onVoterSearch;
+  final bool voterListening;
+  final VoidCallback onVoterVoiceSearch;
   final VoidCallback onRefresh;
   final ValueChanged<Map<String, dynamic>> onAddManager;
   final VoidCallback onManualAdd;
@@ -385,77 +459,170 @@ class _BoothWorkspace extends StatelessWidget {
   Widget build(BuildContext context) {
     if (booth == null) {
       return const _Surface(
-        title: 'Select booth',
+        title: '1. बूथ चुनें',
         child: ListTile(
           leading: Icon(Icons.info_outline_rounded),
-          title: Text('No booth selected'),
+          title: Text('बाईं सूची से बूथ चुनें'),
         ),
       );
     }
     final boothId = '${booth!['_id']}';
-    final voterSectionKey = GlobalKey();
+    final compact = MediaQuery.sizeOf(context).width < 700;
     return Column(children: [
-      _Surface(
-        title: 'Booth ${booth!['number'] ?? '-'}',
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('${booth!['name'] ?? '-'}',
-              style: const TextStyle(
-                  color: navy, fontSize: 18, fontWeight: FontWeight.w900)),
-          const SizedBox(height: 4),
-          Wrap(spacing: 8, runSpacing: 8, children: [
-            _Pill(
-                Icons.map_rounded, 'Ward ${booth!['ward']?['number'] ?? '-'}'),
-            _Pill(Icons.location_on_outlined,
-                '${booth!['area'] ?? booth!['address'] ?? 'No area'}'),
-            _Pill(Icons.supervisor_account_rounded, '${heads.length} manager'),
+      if (compact)
+        _Surface(
+          title: _boothDisplayName(booth!),
+          action: _Pill(
+              Icons.supervisor_account_rounded, '${heads.length} manager'),
+          child: Column(children: [
+            Row(children: [
+              const Icon(Icons.location_on_outlined, color: blue),
+              const SizedBox(width: 7),
+              Expanded(
+                child: Text(
+                  '${booth!['area'] ?? booth!['address'] ?? 'Bheeta'}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style:
+                      const TextStyle(color: navy, fontWeight: FontWeight.w800),
+                ),
+              ),
+            ]),
+            const SizedBox(height: 10),
+            Row(children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: () => Scrollable.ensureVisible(
+                    voterSectionKey.currentContext ?? context,
+                    duration: const Duration(milliseconds: 280),
+                    curve: Curves.easeOut,
+                  ),
+                  icon: const Icon(Icons.person_search_rounded, size: 18),
+                  label: const Text('Voter चुनें'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: onManualAdd,
+                  icon: const Icon(Icons.person_add_alt_1_rounded, size: 18),
+                  label: const Text('Manager जोड़ें'),
+                ),
+              ),
+            ]),
+            if (heads.isNotEmpty)
+              ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                childrenPadding: EdgeInsets.zero,
+                title: const Text('Current manager details',
+                    style: TextStyle(color: navy, fontWeight: FontWeight.w800)),
+                children: [
+                  _HeadGrid(
+                    heads: heads,
+                    booths: booths,
+                    boothId: boothId,
+                    onChanged: onRefresh,
+                  ),
+                ],
+              ),
           ]),
-          const SizedBox(height: 14),
-          _ManagerChoicePanel(
-            onManualAdd: onManualAdd,
-            onPickVoter: () => Scrollable.ensureVisible(
-              voterSectionKey.currentContext ?? context,
-              duration: const Duration(milliseconds: 280),
-              curve: Curves.easeOut,
+        )
+      else ...[
+        _Surface(
+          title: '1. चुना हुआ भाग',
+          action: const Icon(Icons.check_circle_rounded, color: green),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const CircleAvatar(
+              backgroundColor: softBlue,
+              foregroundColor: blue,
+              child: Icon(Icons.how_to_vote_rounded),
             ),
-          ),
-          const SizedBox(height: 14),
-          _HeadGrid(
+            const SizedBox(width: 11),
+            Expanded(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('${booth!['name'] ?? '-'}',
+                        style: const TextStyle(
+                            color: navy,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900)),
+                    const SizedBox(height: 5),
+                    Wrap(spacing: 8, runSpacing: 8, children: [
+                      _Pill(Icons.map_rounded,
+                          'Ward ${booth!['ward']?['number'] ?? '-'}'),
+                      _Pill(Icons.location_on_outlined,
+                          '${booth!['area'] ?? booth!['address'] ?? 'No area'}'),
+                    ]),
+                  ]),
+            ),
+          ]),
+        ),
+        const SizedBox(height: 12),
+        _Surface(
+          title: 'Current manager',
+          action: _Pill(
+              Icons.supervisor_account_rounded, '${heads.length} manager'),
+          child: _HeadGrid(
             heads: heads,
             booths: booths,
             boothId: boothId,
             onChanged: onRefresh,
           ),
-        ]),
-      ),
+        ),
+        const SizedBox(height: 12),
+        _ManagerChoicePanel(
+          onManualAdd: onManualAdd,
+          onPickVoter: () => Scrollable.ensureVisible(
+            voterSectionKey.currentContext ?? context,
+            duration: const Duration(milliseconds: 280),
+            curve: Curves.easeOut,
+          ),
+        ),
+      ],
       const SizedBox(height: 12),
       _Surface(
-        title: '2. Voter se manager chune',
-        action: SizedBox(
-          width: 250,
-          child: TextField(
-            controller: voterSearch,
-            onChanged: (_) => onVoterSearch(),
-            decoration: InputDecoration(
-              isDense: true,
-              prefixIcon: const Icon(Icons.search_rounded),
-              hintText: 'Name, mobile, EPIC search...',
-              suffixIcon: voterSearch.text.isEmpty
-                  ? null
-                  : IconButton(
+        title: '2. मतदाता खोजें और चुनें',
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          SizedBox(
+            key: voterSectionKey,
+            width: double.infinity,
+            child: TextField(
+              controller: voterSearch,
+              onChanged: (_) => onVoterSearch(),
+              textInputAction: TextInputAction.search,
+              decoration: InputDecoration(
+                isDense: true,
+                prefixIcon: const Icon(Icons.search_rounded),
+                hintText: 'नाम, मोबाइल या EPIC से खोजें…',
+                suffixIcon: Row(mainAxisSize: MainAxisSize.min, children: [
+                  if (voterSearch.text.isNotEmpty)
+                    IconButton(
+                      tooltip: 'खोज साफ करें',
                       onPressed: () {
                         voterSearch.clear();
                         onVoterSearch();
                       },
                       icon: const Icon(Icons.close_rounded),
                     ),
+                  IconButton(
+                    tooltip: voterListening ? 'सुनना बंद करें' : 'बोलकर खोजें',
+                    onPressed: onVoterVoiceSearch,
+                    icon: Icon(
+                      voterListening
+                          ? Icons.mic_rounded
+                          : Icons.mic_none_rounded,
+                      color: voterListening ? Colors.red : blue,
+                    ),
+                  ),
+                ]),
+              ),
             ),
           ),
-        ),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text(
-              'Selected booth ke voter me se kisi voter ko manager banane ke liye Make manager dabayein.',
-              style: TextStyle(
-                  color: muted, fontSize: 12, fontWeight: FontWeight.w700)),
+          if (voterListening) ...[
+            const SizedBox(height: 7),
+            const Text('सुन रहा है…', style: TextStyle(color: blue)),
+          ],
           const SizedBox(height: 10),
           _AlphabetBar(selected: letter, onSelected: onLetter),
           const SizedBox(height: 10),
@@ -463,6 +630,7 @@ class _BoothWorkspace extends StatelessWidget {
             boothId: boothId,
             query: voterSearch.text.trim(),
             letter: letter,
+            managers: heads,
             onMakeManager: onAddManager,
           ),
         ]),
@@ -479,112 +647,37 @@ class _ManagerChoicePanel extends StatelessWidget {
   final VoidCallback onPickVoter;
 
   @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: const Color(0xfff7fbff),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: blue.withValues(alpha: .14)),
-        ),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('1. Manager add karne ka tarika chune',
-              style: TextStyle(color: navy, fontWeight: FontWeight.w900)),
-          const SizedBox(height: 4),
-          const Text(
-              'Admin confuse na ho - manager do tareeke se ban sakta hai.',
-              style: TextStyle(color: muted, fontSize: 12)),
-          const SizedBox(height: 10),
-          LayoutBuilder(builder: (context, box) {
-            final wide = box.maxWidth > 560;
-            final cards = [
-              _ManagerCreateCard(
-                icon: Icons.person_add_alt_1_rounded,
-                title: 'Manual manager add karein',
-                subtitle:
-                    'Kisi bhi person ka name, mobile, email aur password daal kar manager banayein.',
-                action: 'Manual add',
-                color: blue,
-                onTap: onManualAdd,
-              ),
-              _ManagerCreateCard(
-                icon: Icons.how_to_vote_rounded,
-                title: 'Booth voter se chune',
-                subtitle:
-                    'Is booth ke voter me se person chune - name/mobile auto fill hoga.',
-                action: 'Neeche voter list dekhein',
-                color: green,
-                onTap: onPickVoter,
-              ),
-            ];
-            if (!wide) {
-              return Column(
-                  children: [cards[0], const SizedBox(height: 10), cards[1]]);
-            }
-            return Row(children: [
-              Expanded(child: cards[0]),
-              const SizedBox(width: 10),
-              Expanded(child: cards[1])
-            ]);
-          }),
-        ]),
-      );
-}
-
-class _ManagerCreateCard extends StatelessWidget {
-  const _ManagerCreateCard({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.action,
-    required this.color,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final String action;
-  final Color color;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) => InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(18),
-        child: Container(
-          padding: const EdgeInsets.all(13),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: color.withValues(alpha: .24)),
-          ),
-          child: Row(children: [
-            CircleAvatar(
-              backgroundColor: color.withValues(alpha: .12),
-              child: Icon(icon, color: color),
-            ),
+  Widget build(BuildContext context) => _Surface(
+        title: 'Manager कैसे जोड़ना है?',
+        child: LayoutBuilder(builder: (context, constraints) {
+          final compact = constraints.maxWidth < 520;
+          final voterButton = FilledButton.icon(
+            key: const ValueKey('choose-voter-manager'),
+            onPressed: onPickVoter,
+            icon: const Icon(Icons.person_search_rounded),
+            label: const Text('Voter से Manager चुनें'),
+          );
+          final manualButton = OutlinedButton.icon(
+            key: const ValueKey('add-manual-manager'),
+            onPressed: onManualAdd,
+            icon: const Icon(Icons.person_add_alt_1_rounded),
+            label: const Text('Manual Manager जोड़ें'),
+          );
+          if (compact) {
+            return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  voterButton,
+                  const SizedBox(height: 9),
+                  manualButton,
+                ]);
+          }
+          return Row(children: [
+            Expanded(child: voterButton),
             const SizedBox(width: 10),
-            Expanded(
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                  Text(title,
-                      style: const TextStyle(
-                          color: navy, fontWeight: FontWeight.w900)),
-                  const SizedBox(height: 3),
-                  Text(subtitle,
-                      style: const TextStyle(
-                          color: muted, fontSize: 11, height: 1.25)),
-                  const SizedBox(height: 8),
-                  Text(action,
-                      style: TextStyle(
-                          color: color,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w900)),
-                ])),
-            Icon(Icons.chevron_right_rounded, color: color),
-          ]),
-        ),
+            Expanded(child: manualButton),
+          ]);
+        }),
       );
 }
 
@@ -896,13 +989,30 @@ class _BoothVoterList extends StatelessWidget {
     required this.boothId,
     required this.query,
     required this.letter,
+    required this.managers,
     required this.onMakeManager,
   });
 
   final String boothId;
   final String query;
   final String letter;
+  final List<Map<String, dynamic>> managers;
   final ValueChanged<Map<String, dynamic>> onMakeManager;
+
+  Map<String, dynamic>? existingManager(Map<String, dynamic> voter) {
+    final candidateEmail = _candidateEmail(voter).toLowerCase();
+    final mobile = '${voter['mobile'] ?? ''}'.replaceAll(RegExp(r'\D'), '');
+    for (final manager in managers) {
+      final managerEmail = '${manager['email'] ?? ''}'.trim().toLowerCase();
+      final managerMobile =
+          '${manager['phone'] ?? ''}'.replaceAll(RegExp(r'\D'), '');
+      if (candidateEmail.isNotEmpty && managerEmail == candidateEmail) {
+        return manager;
+      }
+      if (mobile.length >= 10 && managerMobile == mobile) return manager;
+    }
+    return null;
+  }
 
   @override
   Widget build(BuildContext context) => FutureBlock<Map<String, dynamic>>(
@@ -924,73 +1034,106 @@ class _BoothVoterList extends StatelessWidget {
           );
           final total = _number(data['total']);
           if (voters.isEmpty) {
-            return const ListTile(
-              leading: Icon(Icons.search_off_rounded),
-              title: Text('No voters found'),
+            return const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: Column(children: [
+                Icon(Icons.person_search_rounded, size: 44, color: muted),
+                SizedBox(height: 7),
+                Text('कोई मतदाता नहीं मिला',
+                    style: TextStyle(color: navy, fontWeight: FontWeight.w900)),
+                Text('नाम, मोबाइल या EPIC जाँचकर दोबारा खोजें।',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: muted, fontSize: 12)),
+              ]),
             );
           }
           return Column(children: [
             Align(
               alignment: Alignment.centerLeft,
-              child: Text('Showing ${voters.length} of $total',
+              child: Text('$total मतदाता · ${voters.length} दिख रहे हैं',
                   style: const TextStyle(color: muted, fontSize: 12)),
             ),
             const SizedBox(height: 6),
-            ...voters.map((voter) => _VoterManagerRow(
-                  voter: voter,
-                  onMakeManager: () => onMakeManager(voter),
-                )),
+            ...voters.map((voter) {
+              final manager = existingManager(voter);
+              return _VoterManagerRow(
+                voter: voter,
+                existingManager: manager,
+                onOpenProfile: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => VoterDetailPage(
+                      voter: voter,
+                      onChanged: () {},
+                    ),
+                  ),
+                ),
+                onMakeManager: () => onMakeManager(voter),
+              );
+            }),
           ]);
         },
       );
 }
 
 class _VoterManagerRow extends StatelessWidget {
-  const _VoterManagerRow({required this.voter, required this.onMakeManager});
+  const _VoterManagerRow({
+    required this.voter,
+    required this.existingManager,
+    required this.onOpenProfile,
+    required this.onMakeManager,
+  });
 
   final Map<String, dynamic> voter;
+  final Map<String, dynamic>? existingManager;
+  final VoidCallback onOpenProfile;
   final VoidCallback onMakeManager;
 
   @override
   Widget build(BuildContext context) => Container(
         margin: const EdgeInsets.only(bottom: 6),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
         decoration: BoxDecoration(
-          color: Colors.white,
-          border: Border.all(color: border),
-          borderRadius: BorderRadius.circular(8),
+          color:
+              existingManager == null ? Colors.white : const Color(0xfffffbeb),
+          border: Border.all(
+              color: existingManager == null
+                  ? border
+                  : orange.withValues(alpha: .45)),
+          borderRadius: BorderRadius.circular(12),
         ),
-        child: Row(children: [
-          CircleAvatar(
-            radius: 17,
-            backgroundColor: const Color(0xffedf4ff),
-            child: Text(_initials('${voter['name'] ?? ''}'),
-                style:
-                    const TextStyle(color: blue, fontWeight: FontWeight.w900)),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child:
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('${voter['name'] ?? '-'} ${voter['surname'] ?? ''}'.trim(),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                      color: navy, fontWeight: FontWeight.w900)),
-              Text(
-                  'EPIC ${voter['voterId'] ?? '-'}  ${voter['mobile'] ?? '-'}  House ${voter['houseNumber'] ?? '-'}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: muted, fontSize: 12)),
-            ]),
-          ),
-          const SizedBox(width: 8),
-          OutlinedButton.icon(
-            onPressed: onMakeManager,
-            icon: const Icon(Icons.admin_panel_settings_outlined, size: 18),
-            label: const Text('Make manager'),
-          ),
-        ]),
+        child: VoterPhoneTile(
+          voter: voter,
+          onTap: onOpenProfile,
+          trailing: existingManager == null
+              ? Column(mainAxisSize: MainAxisSize.min, children: [
+                  IconButton(
+                    tooltip: 'प्रोफाइल देखें',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: onOpenProfile,
+                    icon: const Icon(Icons.person_outline_rounded, color: blue),
+                  ),
+                  SizedBox(
+                    height: 30,
+                    child: FilledButton(
+                      onPressed: onMakeManager,
+                      style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 9),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      child: const Text('चुनें'),
+                    ),
+                  ),
+                ])
+              : const Tooltip(
+                  message: 'यह व्यक्ति पहले से manager है',
+                  child: Chip(
+                    avatar: Icon(Icons.warning_amber_rounded,
+                        color: orange, size: 17),
+                    label: Text('पहले से Manager'),
+                  ),
+                ),
+        ),
       );
 }
 
@@ -1280,6 +1423,10 @@ class _BoothUserFormState extends State<BoothUserForm> {
           _candidatePreview(),
         ],
         const SizedBox(height: 18),
+        _formSectionTitle(widget.candidate == null
+            ? 'Manager login details'
+            : '3. Login details'),
+        const SizedBox(height: 9),
         _managerField(name, 'नाम *', Icons.person_outline_rounded),
         const SizedBox(height: 12),
         _managerField(phone, 'मोबाइल नंबर', Icons.phone_outlined,
@@ -1325,7 +1472,7 @@ class _BoothUserFormState extends State<BoothUserForm> {
                 child: FilledButton.icon(
                   onPressed: saving ? null : save,
                   icon: const Icon(Icons.save_rounded),
-                  label: Text(saving ? 'Saving...' : 'Save'),
+                  label: Text(saving ? 'Saving...' : 'Confirm'),
                 ),
               )
             ],
@@ -1344,7 +1491,7 @@ class _BoothUserFormState extends State<BoothUserForm> {
         FilledButton.icon(
             onPressed: saving ? null : save,
             icon: const Icon(Icons.save_outlined),
-            label: Text(saving ? 'Saving...' : 'Save manager')),
+            label: Text(saving ? 'Saving...' : 'Confirm & create manager')),
       ],
     );
   }
@@ -1393,27 +1540,17 @@ class _BoothUserFormState extends State<BoothUserForm> {
       decoration: BoxDecoration(
         color: const Color(0xfff7fbff),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: blue.withValues(alpha: .18)),
+        border: Border.all(color: blue.withValues(alpha: .22)),
       ),
-      child: Row(children: [
-        const CircleAvatar(
-          backgroundColor: softBlue,
-          child: Icon(Icons.person_search_rounded, color: blue),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('Create from voter',
-                style: TextStyle(color: blue, fontWeight: FontWeight.w900)),
-            Text(
-              '${candidate['name'] ?? '-'}  EPIC ${candidate['voterId'] ?? '-'}  ${candidate['mobile'] ?? ' '}',
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: navy, fontWeight: FontWeight.w800),
-            ),
-          ]),
-        ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Row(children: [
+          Icon(Icons.check_circle_rounded, color: green, size: 19),
+          SizedBox(width: 7),
+          Text('3. Selected voter',
+              style: TextStyle(color: navy, fontWeight: FontWeight.w900)),
+        ]),
+        const SizedBox(height: 7),
+        VoterPhoneTile(voter: candidate),
       ]),
     );
   }
@@ -1537,7 +1674,7 @@ class _BoothUserFormState extends State<BoothUserForm> {
           borderRadius: BorderRadius.circular(18),
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('Task access control',
+          const Text('4. Permissions confirm करें',
               style: TextStyle(color: navy, fontWeight: FontWeight.w900)),
           const SizedBox(height: 4),
           const Text('Admin yahan decide kare ki manager ko kya access milega.',
@@ -1677,6 +1814,9 @@ class _BoothUserFormState extends State<BoothUserForm> {
         ),
       );
 
+  Widget _formSectionTitle(String value) => Text(value,
+      style: const TextStyle(
+          color: navy, fontSize: 15, fontWeight: FontWeight.w900));
   Widget _managerField(
           TextEditingController controller, String label, IconData icon,
           {TextInputType? keyboard, bool obscure = false, Widget? suffix}) =>

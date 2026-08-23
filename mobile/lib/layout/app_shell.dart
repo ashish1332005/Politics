@@ -95,7 +95,7 @@ class _AppShellState extends State<AppShell> {
     final wide = MediaQuery.sizeOf(context).width >= 900;
     final currentItems = items;
     return Scaffold(
-      drawer: wide
+      drawer: wide || widget.role == 'booth'
           ? null
           : AppDrawer(
               role: widget.role,
@@ -111,6 +111,7 @@ class _AppShellState extends State<AppShell> {
               title: currentItems[selected].label,
               onSearch: () => select(widget.role == 'booth' ? 0 : 1),
               onLogout: widget.role == 'booth' ? logout : null,
+              showNotifications: widget.role != 'booth',
             ),
             Expanded(
               child: IndexedStack(

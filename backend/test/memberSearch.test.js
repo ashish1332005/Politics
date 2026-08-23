@@ -150,7 +150,19 @@ test('member validation automatically refreshes search data', async () => {
     booth: new mongoose.Types.ObjectId(),
   });
   await member.validate();
-  assert.equal(member.searchVersion, 7);
+  assert.equal(member.searchVersion, 8);
   assert.ok(member.searchKeys.includes('राम'));
   assert.ok(member.searchKeys.includes('लाल'));
+});
+
+test('dedicated PIN and village search remain correctly scoped', () => {
+  const target = buildMemberSearchData({ village: 'भींटा', pinCode: '311803' });
+  const villageQuery = buildFieldSearchConditions('भीटा', 'village');
+  assert.deepEqual(Object.keys(villageQuery[0].$or[0]), ['searchVillageKeys']);
+  assert.ok(target.searchVillageKeys.some((key) => villageQuery[0].$or[0].searchVillageKeys.$in.includes(key)));
+
+  const pinQuery = buildStrictFieldSearchConditions('311803', 'pin');
+  assert.ok(pinQuery[0].$or.some((item) => item.pinCode?.test('311803')));
+  assert.ok(!pinQuery[0].$or.some((item) => item.pinCode?.test('311804')));
+  assert.ok(target.searchPinKeys.length > 0);
 });

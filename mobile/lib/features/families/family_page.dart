@@ -46,14 +46,37 @@ class _FamilyPageState extends State<FamilyPage> {
           ),
           OutlinedButton.icon(
             onPressed: () async {
+              final confirmed = await showDialog<bool>(
+                context: context,
+                builder: (dialogContext) => AlertDialog(
+                  icon: const Icon(Icons.family_restroom_rounded,
+                      color: Colors.orange, size: 42),
+                  title: const Text('परिवार दोबारा बनाएँ?'),
+                  content: const Text(
+                    'पहले से saved सभी परिवार हट जाएंगे। नई voter list में एक ही बूथ, अनुभाग और घर संख्या वाले मतदाताओं का परिवार बनेगा और सबसे अधिक उम्र वाला सदस्य मुखिया होगा।',
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(dialogContext, false),
+                      child: const Text('रद्द करें'),
+                    ),
+                    FilledButton.icon(
+                      onPressed: () => Navigator.pop(dialogContext, true),
+                      icon: const Icon(Icons.refresh_rounded),
+                      label: const Text('हटाकर बनाएँ'),
+                    ),
+                  ],
+                ),
+              );
+              if (confirmed != true) return;
               final result = await api.post('/api/families/rebuild', {});
               refresh();
               if (!context.mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                 content: Text(
-                  '${result['autoFamilies'] ?? 0} परिवार बने। '
-                  '${result['skippedMissingHouse'] ?? 0} मतदाताओं की घर संख्या खाली है और '
-                  '${result['reviewMembers'] ?? 0} मतदाता review में हैं।',
+                  '${result['families'] ?? 0} नए परिवार बने। '
+                  '${result['assignedMembers'] ?? 0} मतदाता जोड़े गए और '
+                  '${result['skippedMissingHouse'] ?? 0} मतदाताओं की घर संख्या खाली है।',
                 ),
               ));
             },

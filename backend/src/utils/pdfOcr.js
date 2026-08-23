@@ -240,7 +240,7 @@ exports.ocrPdf = async (pdfPath, importFileName, pageRange = {}) => {
       const records = pythonResult.records || [];
       if (records.length) {
         const headerText = pythonResult.headerText || '';
-        const photos = records.map((record) => record.photo).filter(Boolean);
+        const photos = records.flatMap((record) => [record.photo, record.cardImage]).filter(Boolean);
         keepOnlyVoterPhotos(workDir, photos);
         return {
           text: `${headerText}\n${records.map((record) => record.rawText).join('\n')}`,
@@ -248,6 +248,7 @@ exports.ocrPdf = async (pdfPath, importFileName, pageRange = {}) => {
           voterRecords: records.map((record) => ({
             ...record,
             photo: uploadPublicPath('ocr', workId, path.basename(record.photo)),
+            cardImage: record.cardImage ? uploadPublicPath('ocr', workId, path.basename(record.cardImage)) : '',
           })),
           images: records.map((record) => uploadPublicPath('ocr', workId, path.basename(record.photo))),
           header: pythonResult.header || {},
@@ -425,15 +426,30 @@ const lowMemoryOcrPdf = async (pdfPath, importFileName, pageRange = {}) => {
     }
   }
 
-  const photos = records.map((record) => record.photo).filter(Boolean);
+  const masterContextFields = [
+    'assemblyNumber', 'assemblyName', 'partNumber', 'partName',
+    'postOffice', 'policeStation', 'tehsil', 'district',
+  ];
+  const inheritedRecords = records.map((record) => {
+    const inherited = { ...record };
+    for (const field of masterContextFields) {
+      if ((inherited[field] === undefined || inherited[field] === null || String(inherited[field]).trim() === '') && header[field]) {
+        inherited[field] = header[field];
+      }
+    }
+    return inherited;
+  });
+
+  const photos = inheritedRecords.flatMap((record) => [record.photo, record.cardImage]).filter(Boolean);
   keepOnlyVoterPhotos(workDir, photos);
   const headerText = headerTexts.join('\n');
   return {
-    text: `${headerText}\n${records.map((record) => record.rawText || '').join('\n')}`,
+    text: `${headerText}\n${inheritedRecords.map((record) => record.rawText || '').join('\n')}`,
     words: [],
-    voterRecords: records.map((record) => ({
+    voterRecords: inheritedRecords.map((record) => ({
       ...record,
       photo: uploadPublicPath('ocr', workId, path.basename(record.photo)),
+            cardImage: record.cardImage ? uploadPublicPath('ocr', workId, path.basename(record.cardImage)) : '',
     })),
     images: photos.map((photo) => uploadPublicPath('ocr', workId, path.basename(photo))),
     header,
