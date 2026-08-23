@@ -35,7 +35,7 @@ def clean_person_name(value):
     value = re.sub(r"[^\u0900-\u097F\s.-]", " ", value or "")
     value = re.sub(r"[\u0964\u0965\u0966-\u096f]", " ", value)
     value = clean(value).strip(" .-|")
-    if re.search(r"(?:पिता|पति|माता|गृह|उम्र|लिंग)\\s*(?:का)?\\s*नाम|(?:^|\\s)का\\s+नाम(?:\\s|$)", value):
+    if re.search(r"(?:पिता|पति|पत्ति|पती|माता|गृह|उम्र|लिंग)\s*(?:का)?\s*नाम|(?:^|\s)का\s+नाम(?:\s|$)", value):
         return ""
     # OCR often turns border/adjacent-label fragments into a short final Hindi
     # token. These postpositions/noise tokens are not part of a person name.
@@ -403,6 +403,7 @@ def suspicious_person_name(value):
         "." in text
         or "् " in text
         or any(re.search(r"्[\u0900-\u097F]्", token) for token in tokens)
+        or bool(re.search(r"(?:पिता|पति|पत्ति|पती|माता|गृह|उम्र|लिंग)\s*(?:का)?\s*नाम", text))
         or (len(tokens) > 1 and tokens[-1] in trailing_noise)
     )
 
@@ -942,6 +943,34 @@ def process_page(page_path, output_dir, page_no):
                     else:
                         target["houseOcrDisagreement"] = True
         index = max(end, index + 1)
+
+    # A repeated OCR prefix can turn one house into values such as 33, 333,
+    # 533, 33. Equal anchors on both sides prove that the enclosed suffix-
+    # matching values belong to the same house; without both anchors we only
+    # flag the values and never invent a correction.
+    index = 1
+    while index < len(ordered_records) - 1:
+        anchor = str(ordered_records[index - 1].get("houseNumber") or "")
+        if not anchor.isdigit():
+            index += 1
+            continue
+        end = index
+        while end < len(ordered_records):
+            value = str(ordered_records[end].get("houseNumber") or "")
+            if value == anchor:
+                break
+            if not (value.isdigit() and value.endswith(anchor) and 1 <= len(value) - len(anchor) <= 2):
+                break
+            end += 1
+        if end > index and end < len(ordered_records) and str(ordered_records[end].get("houseNumber") or "") == anchor:
+            for target in ordered_records[index:end]:
+                target["rawHouseNumber"] = target.get("rawHouseNumber") or target.get("houseNumber")
+                target["houseNumber"] = anchor
+                target["houseNumberConfidence"] = 90
+                target["houseOcrDisagreement"] = True
+            index = end + 1
+        else:
+            index += 1
 
     # Recover printed serials from the dominant serial-minus-cell offset. A
     # minimum of four independent cards prevents one bad OCR token from
