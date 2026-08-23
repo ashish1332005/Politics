@@ -614,11 +614,11 @@ def process_page(page_path, output_dir, page_no):
             and y <= word["top"] + word["height"] / 2 <= y + round(card_h * 0.38)
         ))
         page_epic = epic_from(epic_text)
-        focused_epic = ocr_epic(card, page_epic)
-        if focused_epic:
-            epic_text = focused_epic
-        elif not page_epic:
-            epic_text = ""
+        # The page-level English pass already reads every fixed EPIC region.
+        # Launch focused OCR only for a missing EPIC; repeating it for all 30
+        # cards made a small page take hundreds of Tesseract processes.
+        focused_epic = page_epic or ocr_epic(card)
+        epic_text = focused_epic or ""
         focused_house = coordinate_house(numeric_words, x, y, card_w, card_h)
         focused_age = coordinate_age(numeric_words, x, y, card_w, card_h)
         record = parse_card(
@@ -671,12 +671,14 @@ def process_page(page_path, output_dir, page_no):
             if not record.get("guardianName") and hindi_record.get("guardianName"):
                 record["guardianName"] = hindi_record["guardianName"]
                 record["relationType"] = hindi_record["relationType"]
-        retry_age = ocr_age(card)
-        if retry_age is not None:
-            if record.get("age") != retry_age:
-                record["rawAge"] = record.get("age")
-            record["age"] = retry_age
-            record["ageConfidence"] = 90
+        age_value = record.get("age")
+        if focused_age is None and (not isinstance(age_value, int) or not 18 <= age_value <= 120):
+            retry_age = ocr_age(card)
+            if retry_age is not None:
+                if record.get("age") != retry_age:
+                    record["rawAge"] = record.get("age")
+                record["age"] = retry_age
+                record["ageConfidence"] = 90
         if os.getenv("OCR_DEEP_RETRY", "false").lower() == "true" and (not record["name"] or not record["voterId"]):
             gray = cv2.cvtColor(card, cv2.COLOR_BGR2GRAY)
             gray = cv2.resize(gray, None, fx=1.8, fy=1.8, interpolation=cv2.INTER_CUBIC)
@@ -687,7 +689,15 @@ def process_page(page_path, output_dir, page_no):
                 record = alternate
         if record["name"] or record["voterId"] or record["guardianName"] or record["houseNumber"] or record["age"]:
             records.append(record)
-        identity, identity_disagreement = ocr_identity(card)
+        needs_identity_retry = (
+            not record.get("name")
+            or not record.get("guardianName")
+            or record.get("rawName")
+            or record.get("rawGuardianName")
+            or suspicious_person_name(record.get("name"))
+            or suspicious_person_name(record.get("guardianName"))
+        )
+        identity, identity_disagreement = ocr_identity(card) if needs_identity_retry else ({}, False)
         focused_guardian = identity.get("guardianName")
         if (
             focused_guardian
